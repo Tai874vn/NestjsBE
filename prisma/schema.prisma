@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model NguoiDung {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  passWord      String?
+  phone         String?
+  birthDay      String?
+  gender        String?
+  role          String   @default("user")
+  skill         String?
+  certification String?
+  googleId      String?  @unique
+  avatar        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  binhLuans     BinhLuan[]
+  thueCongViecs ThueCongViec[]
+
+  @@map("nguoi_dung")
+}
+
+model LoaiCongViec {
+  id              Int    @id @default(autoincrement())
+  tenLoaiCongViec String
+
+  chiTietLoaiCongViecs ChiTietLoaiCongViec[]
+
+  @@map("loai_cong_viec")
+}
+
+model ChiTietLoaiCongViec {
+  id             Int     @id @default(autoincrement())
+  tenChiTiet     String
+  hinhAnh        String?
+  maLoaiCongViec Int
+
+  loaiCongViec LoaiCongViec @relation(fields: [maLoaiCongViec], references: [id], onDelete: Cascade)
+  congViecs    CongViec[]
+
+  @@map("chi_tiet_loai_cong_viec")
+}
+
+model CongViec {
+  id            Int      @id @default(autoincrement())
+  tenCongViec   String
+  danhGia       Int      @default(0)
+  giaTien       Int
+  hinhAnh       String?
+  moTa          String?
+  moTaNgan      String?
+  saoCongViec   Int      @default(0)
+  maChiTietLoai Int
+  nguoiTao      Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  chiTietLoaiCongViec ChiTietLoaiCongViec @relation(fields: [maChiTietLoai], references: [id], onDelete: Cascade)
+  binhLuans           BinhLuan[]
+  thueCongViecs       ThueCongViec[]
+
+  @@map("cong_viec")
+}
+
+model BinhLuan {
+  id              Int      @id @default(autoincrement())
+  maCongViec      Int
+  maNguoiBinhLuan Int
+  ngayBinhLuan    DateTime @default(now())
+  noiDung         String
+  saoBinhLuan     Int
+
+  congViec  CongViec  @relation(fields: [maCongViec], references: [id], onDelete: Cascade)
+  nguoiDung NguoiDung @relation(fields: [maNguoiBinhLuan], references: [id], onDelete: Cascade)
+
+  @@map("binh_luan")
+}
+
+model ThueCongViec {
+  id          Int      @id @default(autoincrement())
+  maCongViec  Int
+  maNguoiThue Int
+  ngayThue    DateTime @default(now())
+  hoanThanh   Boolean  @default(false)
+
+  congViec  CongViec  @relation(fields: [maCongViec], references: [id], onDelete: Cascade)
+  nguoiDung NguoiDung @relation(fields: [maNguoiThue], references: [id], onDelete: Cascade)
+
+  @@map("thue_cong_viec")
+}
