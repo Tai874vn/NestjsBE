@@ -8,7 +8,7 @@ describe('Auth DTOs', () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'test@example.com';
-      dto.passWord = 'password123';
+      dto.password = 'password123';
       dto.phone = '1234567890';
       dto.birthDay = '1990-01-01';
       dto.gender = 'male';
@@ -22,7 +22,7 @@ describe('Auth DTOs', () => {
     it('should fail if name is missing', async () => {
       const dto = new SignUpDto();
       dto.email = 'test@example.com';
-      dto.passWord = 'password123';
+      dto.password = 'password123';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -33,7 +33,7 @@ describe('Auth DTOs', () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'invalid-email';
-      dto.passWord = 'password123';
+      dto.password = 'password123';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -44,18 +44,18 @@ describe('Auth DTOs', () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'test@example.com';
-      dto.passWord = '12345';
+      dto.password = '12345';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].property).toBe('passWord');
+      expect(errors[0].property).toBe('password');
     });
 
     it('should allow optional fields to be undefined', async () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'test@example.com';
-      dto.passWord = 'password123';
+      dto.password = 'password123';
 
       const errors = await validate(dto);
       expect(errors.length).toBe(0);

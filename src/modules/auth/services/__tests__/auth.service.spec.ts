@@ -70,7 +70,7 @@ describe('AuthService', () => {
     const signUpDto: SignUpDto = {
       name: 'Test User',
       email: 'test@example.com',
-      passWord: 'password123',
+      password: 'password123',
       phone: '1234567890',
       birthDay: '1990-01-01',
       gender: 'male',
@@ -89,7 +89,7 @@ describe('AuthService', () => {
       expect(prismaService.nguoiDung.findUnique).toHaveBeenCalledWith({
         where: { email: signUpDto.email },
       });
-      expect(bcrypt.hash).toHaveBeenCalledWith(signUpDto.passWord, 10);
+      expect(bcrypt.hash).toHaveBeenCalledWith(signUpDto.password, 10);
       expect(prismaService.nguoiDung.create).toHaveBeenCalled();
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: mockUser.id,

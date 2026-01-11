@@ -72,7 +72,10 @@ export class UsersController {
         filename: (req, file, cb) => {
           const uniqueSuffix =
             Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `avatar-${uniqueSuffix}${extname(file.originalname)}`);
+          cb(
+            null,
+            `avatar-${uniqueSuffix}${extname(file.originalname as string)}`,
+          );
         },
       }),
       fileFilter: (req, file, cb) => {
@@ -87,6 +90,7 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @Query('userId', ParseIntPipe) userId: number,
   ) {
-    return this.usersService.uploadAvatar(userId, file.filename);
+    const filename: string = file.filename as string;
+    return this.usersService.uploadAvatar(userId, filename);
   }
 }

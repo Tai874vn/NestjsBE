@@ -22,7 +22,7 @@ export class UsersService {
       throw new ConflictException('Email already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(createUserDto.passWord, 10);
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     const user = await this.prisma.nguoiDung.create({
       data: {

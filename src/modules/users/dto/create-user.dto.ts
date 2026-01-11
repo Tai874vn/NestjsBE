@@ -12,7 +12,7 @@ export class CreateUserDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(6)
-  passWord: string;
+  password: string;
 
   @IsOptional()
   @IsString()
