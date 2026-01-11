@@ -16,9 +16,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CongViecService } from '../services/cong-viec.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { Public } from '../../common/decorators/public.decorator';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
@@ -99,7 +99,8 @@ export class CongViecController {
       storage: diskStorage({
         destination: './uploads/cong-viec',
         filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `cong-viec-${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),

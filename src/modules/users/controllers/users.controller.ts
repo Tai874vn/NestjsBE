@@ -16,8 +16,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '../services/users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
@@ -70,7 +70,8 @@ export class UsersController {
       storage: diskStorage({
         destination: './uploads/avatars',
         filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `avatar-${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),
@@ -82,7 +83,10 @@ export class UsersController {
       },
     }),
   )
-  uploadAvatar(@UploadedFile() file: Express.Multer.File, @Query('userId', ParseIntPipe) userId: number) {
+  uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('userId', ParseIntPipe) userId: number,
+  ) {
     return this.usersService.uploadAvatar(userId, file.filename);
   }
 }

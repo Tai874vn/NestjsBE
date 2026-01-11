@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma.service';
+import { PrismaService } from '../../../prisma.service';
 import { CreateLoaiCongViecDto } from '../dto/create-loai-cong-viec.dto';
 import { UpdateLoaiCongViecDto } from '../dto/update-loai-cong-viec.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class LoaiCongViecService {

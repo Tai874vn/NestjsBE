@@ -25,7 +25,9 @@ import { extname } from 'path';
 @Controller('chi-tiet-loai-cong-viec')
 @UseGuards(JwtAuthGuard)
 export class ChiTietLoaiCongViecController {
-  constructor(private readonly chiTietLoaiCongViecService: ChiTietLoaiCongViecService) {}
+  constructor(
+    private readonly chiTietLoaiCongViecService: ChiTietLoaiCongViecService,
+  ) {}
 
   @Post()
   create(@Body() createDto: CreateChiTietLoaiCongViecDto) {
@@ -74,7 +76,8 @@ export class ChiTietLoaiCongViecController {
       storage: diskStorage({
         destination: './uploads/chi-tiet-loai-cong-viec',
         filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `chi-tiet-${uniqueSuffix}${extname(file.originalname)}`);
         },
       }),

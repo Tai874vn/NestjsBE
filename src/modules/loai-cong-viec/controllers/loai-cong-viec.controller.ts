@@ -13,9 +13,9 @@ import {
 import { LoaiCongViecService } from '../services/loai-cong-viec.service';
 import { CreateLoaiCongViecDto } from '../dto/create-loai-cong-viec.dto';
 import { UpdateLoaiCongViecDto } from '../dto/update-loai-cong-viec.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { Public } from '../../common/decorators/public.decorator';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @Controller('loai-cong-viec')
 @UseGuards(JwtAuthGuard)

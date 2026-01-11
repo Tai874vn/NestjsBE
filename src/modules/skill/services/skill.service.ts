@@ -20,8 +20,8 @@ export class SkillService {
     });
 
     const skills = users
-      .filter(user => user.skill)
-      .flatMap(user => {
+      .filter((user) => user.skill)
+      .flatMap((user) => {
         try {
           const parsedSkills = JSON.parse(user.skill || '[]');
           return Array.isArray(parsedSkills) ? parsedSkills : [];

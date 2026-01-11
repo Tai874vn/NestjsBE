@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma.service';
+import { PrismaService } from '../../../prisma.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class CongViecService {
@@ -49,7 +49,7 @@ export class CongViecService {
 
     const where = keyword
       ? {
-          tenCongViec: { contains: keyword, mode: 'insensitive' },
+          tenCongViec: { contains: keyword, mode: 'insensitive' as const },
         }
       : {};
 
@@ -194,13 +194,15 @@ export class CongViecService {
   }
 
   async getChiTietLoaiCongViec(maLoaiCongViec: number) {
-    const chiTietLoaiCongViecs = await this.prisma.chiTietLoaiCongViec.findMany({
-      where: { maLoaiCongViec },
-      include: {
-        loaiCongViec: true,
-        congViecs: true,
+    const chiTietLoaiCongViecs = await this.prisma.chiTietLoaiCongViec.findMany(
+      {
+        where: { maLoaiCongViec },
+        include: {
+          loaiCongViec: true,
+          congViecs: true,
+        },
       },
-    });
+    );
 
     return {
       message: 'Get job detail types successfully',
@@ -267,7 +269,7 @@ export class CongViecService {
       where: {
         tenCongViec: {
           contains: tenCongViec,
-          mode: 'insensitive',
+          mode: 'insensitive' as const,
         },
       },
       include: {

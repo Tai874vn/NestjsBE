@@ -4,10 +4,10 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../../prisma.service';
+import { PrismaService } from '../../../prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class UsersService {
@@ -30,12 +30,25 @@ export class UsersService {
         passWord: hashedPassword,
         role: createUserDto.role || 'user',
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        birthDay: true,
+        gender: true,
+        role: true,
+        skill: true,
+        certification: true,
+        avatar: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
-    const { passWord, ...result } = user;
     return {
       message: 'User created successfully',
-      content: result,
+      content: user,
     };
   }
 
@@ -146,7 +159,7 @@ export class UsersService {
       where: {
         name: {
           contains: name,
-          mode: 'insensitive',
+          mode: 'insensitive' as const,
         },
       },
       select: {

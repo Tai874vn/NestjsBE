@@ -23,12 +23,14 @@ export class ChiTietLoaiCongViecService {
   }
 
   async findAll() {
-    const chiTietLoaiCongViecs = await this.prisma.chiTietLoaiCongViec.findMany({
-      include: {
-        loaiCongViec: true,
-        congViecs: true,
+    const chiTietLoaiCongViecs = await this.prisma.chiTietLoaiCongViec.findMany(
+      {
+        include: {
+          loaiCongViec: true,
+          congViecs: true,
+        },
       },
-    });
+    );
 
     return {
       message: 'Get job detail types successfully',
@@ -42,7 +44,7 @@ export class ChiTietLoaiCongViecService {
 
     const where = keyword
       ? {
-          tenChiTiet: { contains: keyword, mode: 'insensitive' },
+          tenChiTiet: { contains: keyword, mode: 'insensitive' as const },
         }
       : {};
 
@@ -73,13 +75,14 @@ export class ChiTietLoaiCongViecService {
   }
 
   async findOne(id: number) {
-    const chiTietLoaiCongViec = await this.prisma.chiTietLoaiCongViec.findUnique({
-      where: { id },
-      include: {
-        loaiCongViec: true,
-        congViecs: true,
-      },
-    });
+    const chiTietLoaiCongViec =
+      await this.prisma.chiTietLoaiCongViec.findUnique({
+        where: { id },
+        include: {
+          loaiCongViec: true,
+          congViecs: true,
+        },
+      });
 
     if (!chiTietLoaiCongViec) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -92,9 +95,10 @@ export class ChiTietLoaiCongViecService {
   }
 
   async update(id: number, updateDto: UpdateChiTietLoaiCongViecDto) {
-    const chiTietLoaiCongViec = await this.prisma.chiTietLoaiCongViec.findUnique({
-      where: { id },
-    });
+    const chiTietLoaiCongViec =
+      await this.prisma.chiTietLoaiCongViec.findUnique({
+        where: { id },
+      });
 
     if (!chiTietLoaiCongViec) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -116,9 +120,10 @@ export class ChiTietLoaiCongViecService {
   }
 
   async remove(id: number) {
-    const chiTietLoaiCongViec = await this.prisma.chiTietLoaiCongViec.findUnique({
-      where: { id },
-    });
+    const chiTietLoaiCongViec =
+      await this.prisma.chiTietLoaiCongViec.findUnique({
+        where: { id },
+      });
 
     if (!chiTietLoaiCongViec) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -134,9 +139,10 @@ export class ChiTietLoaiCongViecService {
   }
 
   async uploadImage(id: number, filename: string) {
-    const chiTietLoaiCongViec = await this.prisma.chiTietLoaiCongViec.findUnique({
-      where: { id },
-    });
+    const chiTietLoaiCongViec =
+      await this.prisma.chiTietLoaiCongViec.findUnique({
+        where: { id },
+      });
 
     if (!chiTietLoaiCongViec) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
