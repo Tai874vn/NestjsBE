@@ -7,6 +7,7 @@ import { AuthController } from './controllers/auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { PrismaService } from '../../prisma.service';
+import type { StringValue } from 'ms';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { PrismaService } from '../../prisma.service';
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: {
-        expiresIn: process.env.JWT_EXPIRES_IN as any,
+        expiresIn: process.env.JWT_EXPIRES_IN as StringValue,
       },
     }),
   ],

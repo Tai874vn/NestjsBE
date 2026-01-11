@@ -126,6 +126,7 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/callback`);
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Get('me')
   getCurrentUser(@Req() req: express.Request) {
     if (!req.user) {
@@ -156,8 +157,10 @@ export class AuthController {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    const payload = this.authService.decodeRefreshToken(refreshToken);
+
     const tokens = await this.authService.refreshTokens(
-      decoded.sub,
+      payload.sub,
       refreshToken,
     );
 

@@ -10,6 +10,7 @@ import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
 import { ApiResponse } from '../../../types';
+import { JwtPayload } from '../../../types/jwt-payload.type';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type NguoiDungType = Prisma.NguoiDungGetPayload<{}>;
@@ -20,6 +21,19 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
+  decodeRefreshToken(token: string): JwtPayload {
+    const decoded = this.jwtService.decode(token);
+
+    if (
+      !decoded ||
+      typeof decoded !== 'object' ||
+      typeof (decoded as JwtPayload).sub !== 'number'
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return decoded as JwtPayload;
+  }
 
   async signUp(signUpDto: SignUpDto): Promise<
     ApiResponse<{
