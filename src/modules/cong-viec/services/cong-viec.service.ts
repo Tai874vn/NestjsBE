@@ -8,9 +8,27 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 export class CongViecService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createDto: CreateCongViecDto) {
+  async create(createDto: CreateCongViecDto, userId?: number) {
     const congViec = await this.prisma.congViec.create({
-      data: createDto,
+      data: {
+        tenCongViec: createDto.tenCongViec,
+        giaTien: createDto.giaTien,
+        hinhAnh: createDto.hinhAnh,
+        moTa: createDto.moTa,
+        moTaNgan: createDto.moTaNgan,
+        danhGia: createDto.danhGia ?? 0,
+        saoCongViec: createDto.saoCongViec ?? 0,
+
+        // ✅ relation instead of raw FK
+        chiTietLoaiCongViec: {
+          connect: {
+            id: createDto.maChiTietLoai,
+          },
+        },
+
+        // 🔐 should come from JWT, not body
+        nguoiTao: userId,
+      },
       include: {
         chiTietLoaiCongViec: {
           include: {
