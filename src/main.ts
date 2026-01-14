@@ -28,11 +28,5 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}/api`);
-} catch (error) {
-    console.error('❌ Failed to start NestJS application');
-    console.error(error);
-
-    // Exit the process so Docker / PM2 / systemd knows startup failed
-    process.exit(1);
-  }
+}
 bootstrap();
