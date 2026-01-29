@@ -27,7 +27,7 @@ export class UsersService {
     const user = await this.prisma.nguoiDung.create({
       data: {
         ...createUserDto,
-        passWord: hashedPassword,
+        password: hashedPassword,
         role: createUserDto.role || 'user',
       },
       select: {

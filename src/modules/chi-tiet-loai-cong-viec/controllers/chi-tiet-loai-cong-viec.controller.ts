@@ -13,20 +13,21 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ChiTietLoaiCongViecService } from '../services/chi-tiet-loai-cong-viec.service';
 import { CreateChiTietLoaiCongViecDto } from '../dto/create-chi-tiet-loai-cong-viec.dto';
 import { UpdateChiTietLoaiCongViecDto } from '../dto/update-chi-tiet-loai-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 
 @Controller('chi-tiet-loai-cong-viec')
 @UseGuards(JwtAuthGuard)
 export class ChiTietLoaiCongViecController {
   constructor(
     private readonly chiTietLoaiCongViecService: ChiTietLoaiCongViecService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Post()
@@ -73,27 +74,19 @@ export class ChiTietLoaiCongViecController {
   @Post('upload-hinh-nhom-loai-cong-viec/:MaNhomLoaiCongViec')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/chi-tiet-loai-cong-viec',
-        filename: (req, file, cb) => {
-          const uniqueSuffix =
-            Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `chi-tiet-${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
-          return cb(new Error('Only image files are allowed!'), false);
-        }
-        cb(null, true);
-      },
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
     }),
   )
-  uploadImage(
+  async uploadImage(
     @Param('MaNhomLoaiCongViec', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.chiTietLoaiCongViecService.uploadImage(id, file.filename);
+    const result = await this.cloudinaryService.uploadImage(
+      file,
+      'chi-tiet-loai-cong-viec',
+    );
+    return this.chiTietLoaiCongViecService.uploadImage(id, result.secure_url);
   }
 
   @Put('sua-nhom-chi-tiet-loai/:id')

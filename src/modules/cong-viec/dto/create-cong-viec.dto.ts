@@ -35,8 +35,4 @@ export class CreateCongViecDto {
   @IsNotEmpty()
   @IsInt()
   maChiTietLoai: number;
-
-  @IsOptional()
-  @IsInt()
-  nguoiTao?: number;
 }

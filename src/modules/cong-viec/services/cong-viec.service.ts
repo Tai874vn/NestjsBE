@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
@@ -8,7 +12,7 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 export class CongViecService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createDto: CreateCongViecDto, userId?: number) {
+  async create(createDto: CreateCongViecDto, userId: number) {
     const congViec = await this.prisma.congViec.create({
       data: {
         tenCongViec: createDto.tenCongViec,
@@ -18,16 +22,12 @@ export class CongViecService {
         moTaNgan: createDto.moTaNgan,
         danhGia: createDto.danhGia ?? 0,
         saoCongViec: createDto.saoCongViec ?? 0,
-
-        // ✅ relation instead of raw FK
         chiTietLoaiCongViec: {
-          connect: {
-            id: createDto.maChiTietLoai,
-          },
+          connect: { id: createDto.maChiTietLoai },
         },
-
-        // 🔐 should come from JWT, not body
-        nguoiTao: userId,
+        nguoiDung: {
+          connect: { id: userId },
+        },
       },
       include: {
         chiTietLoaiCongViec: {
@@ -133,13 +133,22 @@ export class CongViecService {
     };
   }
 
-  async update(id: number, updateDto: UpdateCongViecDto) {
+  async update(
+    id: number,
+    updateDto: UpdateCongViecDto,
+    userId: number,
+    userRole: string,
+  ) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
     });
 
     if (!congViec) {
       throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+
+    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only update your own jobs');
     }
 
     const updated = await this.prisma.congViec.update({
@@ -160,13 +169,17 @@ export class CongViecService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId: number, userRole: string) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
     });
 
     if (!congViec) {
       throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+
+    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only delete your own jobs');
     }
 
     await this.prisma.congViec.delete({
@@ -178,13 +191,22 @@ export class CongViecService {
     };
   }
 
-  async uploadImage(id: number, filename: string) {
+  async uploadImage(
+    id: number,
+    filename: string,
+    userId: number,
+    userRole: string,
+  ) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
     });
 
     if (!congViec) {
       throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+
+    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only upload images for your own jobs');
     }
 
     const updated = await this.prisma.congViec.update({

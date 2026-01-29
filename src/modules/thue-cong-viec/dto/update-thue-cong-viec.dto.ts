@@ -1,4 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateThueCongViecDto } from './create-thue-cong-viec.dto';
+import { IsOptional, IsBoolean } from 'class-validator';
 
-export class UpdateThueCongViecDto extends PartialType(CreateThueCongViecDto) {}
+export class UpdateThueCongViecDto {
+  @IsOptional()
+  @IsBoolean()
+  hoanThanh?: boolean;
+}

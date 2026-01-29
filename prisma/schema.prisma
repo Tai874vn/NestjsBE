@@ -10,7 +10,7 @@ model NguoiDung {
   id           Int      @id @default(autoincrement())
   name         String
   email        String   @unique
-  passWord     String?
+  password     String?  @map("passWord")
   phone        String?
   birthDay     String?
   gender       String?
@@ -25,6 +25,7 @@ model NguoiDung {
 
   binhLuans     BinhLuan[]
   thueCongViecs ThueCongViec[]
+  congViecs     CongViec[]     @relation("CongViecNguoiTao")
 
   @@map("nguoi_dung")
 }
@@ -60,11 +61,12 @@ model CongViec {
   moTaNgan      String?
   saoCongViec   Int      @default(0)
   maChiTietLoai Int
-  nguoiTao      Int?
+  nguoiTao      Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   chiTietLoaiCongViec ChiTietLoaiCongViec @relation(fields: [maChiTietLoai], references: [id], onDelete: Cascade)
+  nguoiDung           NguoiDung           @relation("CongViecNguoiTao", fields: [nguoiTao], references: [id], onDelete: Cascade)
   binhLuans           BinhLuan[]
   thueCongViecs       ThueCongViec[]
 

@@ -29,7 +29,7 @@ describe('AuthService', () => {
     id: 1,
     name: 'Test User',
     email: 'test@example.com',
-    passWord: 'hashedPassword123',
+    password: 'hashedPassword123',
     phone: '1234567890',
     birthDay: '1990-01-01',
     gender: 'male',
@@ -96,7 +96,7 @@ describe('AuthService', () => {
         email: mockUser.email,
       });
       expect(result.message).toBe('User created successfully');
-      expect(result.content.user).not.toHaveProperty('passWord');
+      expect(result.content.user).not.toHaveProperty('password');
       expect(result.content.token).toBe('test-jwt-token');
     });
 
@@ -131,10 +131,10 @@ describe('AuthService', () => {
       });
       expect(bcrypt.compare).toHaveBeenCalledWith(
         signInDto.password,
-        mockUser.passWord,
+        mockUser.password,
       );
       expect(result.message).toBe('Login successful');
-      expect(result.content.user).not.toHaveProperty('passWord');
+      expect(result.content.user).not.toHaveProperty('password');
       expect(result.content.token).toBe('test-jwt-token');
     });
 
@@ -149,7 +149,7 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if password is null', async () => {
       mockPrismaService.nguoiDung.findUnique.mockResolvedValue({
         ...mockUser,
-        passWord: null,
+        password: null,
       });
 
       await expect(service.signIn(signInDto)).rejects.toThrow(
@@ -173,7 +173,7 @@ describe('AuthService', () => {
 
       const result = service.googleLogin(mockUser);
 
-      expect(result.user).not.toHaveProperty('passWord');
+      expect(result.user).not.toHaveProperty('password');
       expect(result.token).toBe('test-jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: mockUser.id,

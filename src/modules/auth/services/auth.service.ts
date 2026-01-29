@@ -37,7 +37,7 @@ export class AuthService {
 
   async signUp(signUpDto: SignUpDto): Promise<
     ApiResponse<{
-      user: Omit<NguoiDungType, 'passWord' | 'refreshToken'>;
+      user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
     }>
@@ -60,7 +60,7 @@ export class AuthService {
       data: {
         name: signUpDto.name,
         email: signUpDto.email,
-        passWord: hashedPassword,
+        password: hashedPassword,
         phone: signUpDto.phone,
         birthDay: signUpDto.birthDay,
         gender: signUpDto.gender,
@@ -75,7 +75,7 @@ export class AuthService {
     await this.updateRefreshToken(user.id, refreshToken);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passWord, refreshToken: _, ...result } = user;
+    const { password, refreshToken: _, ...result } = user;
 
     return {
       message: 'User created successfully',
@@ -89,7 +89,7 @@ export class AuthService {
 
   async signIn(signInDto: SignInDto): Promise<
     ApiResponse<{
-      user: Omit<NguoiDungType, 'passWord' | 'refreshToken'>;
+      user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
     }>
@@ -98,13 +98,13 @@ export class AuthService {
       where: { email: signInDto.email },
     });
 
-    if (!user || !user.passWord) {
+    if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid: boolean = await bcrypt.compare(
       signInDto.password,
-      user.passWord,
+      user.password,
     );
 
     if (!isPasswordValid) {
@@ -116,7 +116,7 @@ export class AuthService {
     await this.updateRefreshToken(user.id, refreshToken);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passWord, refreshToken: _, ...result } = user;
+    const { password, refreshToken: _, ...result } = user;
 
     return {
       message: 'Login successful',
@@ -129,7 +129,7 @@ export class AuthService {
   }
 
   async googleLogin(user: NguoiDungType): Promise<{
-    user: Omit<NguoiDungType, 'passWord' | 'refreshToken'>;
+    user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
     token: string;
     refreshToken: string;
   }> {
@@ -138,7 +138,7 @@ export class AuthService {
     await this.updateRefreshToken(user.id, refreshToken);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passWord, refreshToken: _, ...result } = user;
+    const { password, refreshToken: _, ...result } = user;
 
     return {
       user: result,
@@ -149,7 +149,7 @@ export class AuthService {
 
   async getCurrentUser(
     userId: number,
-  ): Promise<ApiResponse<Omit<NguoiDungType, 'passWord' | 'refreshToken'>>> {
+  ): Promise<ApiResponse<Omit<NguoiDungType, 'password' | 'refreshToken'>>> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }

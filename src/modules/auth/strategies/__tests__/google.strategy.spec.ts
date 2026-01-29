@@ -34,7 +34,7 @@ describe('GoogleStrategy', () => {
     id: 1,
     name: 'Test User',
     email: 'test@example.com',
-    passWord: null,
+    password: null,
     phone: null,
     birthDay: null,
     gender: null,

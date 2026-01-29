@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { CreateThueCongViecDto } from '../dto/create-thue-cong-viec.dto';
 import { UpdateThueCongViecDto } from '../dto/update-thue-cong-viec.dto';
@@ -8,9 +13,26 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 export class ThueCongViecService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createDto: CreateThueCongViecDto) {
+  async create(createDto: CreateThueCongViecDto, userId: number) {
+    const congViec = await this.prisma.congViec.findUnique({
+      where: { id: createDto.maCongViec },
+    });
+
+    if (!congViec) {
+      throw new NotFoundException(
+        `Job with ID ${createDto.maCongViec} not found`,
+      );
+    }
+
+    if (congViec.nguoiTao === userId) {
+      throw new BadRequestException('You cannot hire your own job');
+    }
+
     const thueCongViec = await this.prisma.thueCongViec.create({
-      data: createDto,
+      data: {
+        maCongViec: createDto.maCongViec,
+        maNguoiThue: userId,
+      },
       include: {
         congViec: true,
         nguoiDung: {
@@ -118,13 +140,22 @@ export class ThueCongViecService {
     };
   }
 
-  async update(id: number, updateDto: UpdateThueCongViecDto) {
+  async update(
+    id: number,
+    updateDto: UpdateThueCongViecDto,
+    userId: number,
+    userRole: string,
+  ) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
     });
 
     if (!thueCongViec) {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
+    }
+
+    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only update your own hires');
     }
 
     const updated = await this.prisma.thueCongViec.update({
@@ -149,13 +180,17 @@ export class ThueCongViecService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId: number, userRole: string) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
     });
 
     if (!thueCongViec) {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
+    }
+
+    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only cancel your own hires');
     }
 
     await this.prisma.thueCongViec.delete({
@@ -167,9 +202,10 @@ export class ThueCongViecService {
     };
   }
 
-  async findHiredJobs() {
+  async findHiredJobs(userId: number) {
     const thueCongViecs = await this.prisma.thueCongViec.findMany({
       where: {
+        maNguoiThue: userId,
         hoanThanh: false,
       },
       include: {
@@ -194,13 +230,17 @@ export class ThueCongViecService {
     };
   }
 
-  async completeJob(id: number) {
+  async completeJob(id: number, userId: number, userRole: string) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
     });
 
     if (!thueCongViec) {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
+    }
+
+    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('You can only complete your own hires');
     }
 
     const updated = await this.prisma.thueCongViec.update({

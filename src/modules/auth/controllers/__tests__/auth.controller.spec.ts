@@ -112,7 +112,7 @@ describe('AuthController', () => {
   describe('googleAuthRedirect', () => {
     it('should redirect to frontend with token', () => {
       const mockRequest = {
-        user: { ...mockUser, passWord: 'hashedPassword' },
+        user: { ...mockUser, password: 'hashedPassword' },
       } as any;
 
       const mockResponse = {

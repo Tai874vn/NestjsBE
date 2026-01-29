@@ -20,7 +20,7 @@ export interface GoogleUser {
   name: string;
   avatar?: string | null;
   googleId?: string | null;
-  passWord?: string | null;
+  password?: string | null;
   role: string;
 }
 
@@ -45,7 +45,7 @@ export interface GoogleProfile {
   _json: any;
 }
 
-export interface ValidatedUser {
+export class ValidatedUser {
   id: number;
   email: string;
   role: string;

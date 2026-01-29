@@ -12,6 +12,7 @@ import { CongViecModule } from './modules/cong-viec/cong-viec.module';
 import { BinhLuanModule } from './modules/binh-luan/binh-luan.module';
 import { ThueCongViecModule } from './modules/thue-cong-viec/thue-cong-viec.module';
 import { SkillModule } from './modules/skill/skill.module';
+import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SkillModule } from './modules/skill/skill.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    CloudinaryModule,
     AuthModule,
     UsersModule,
     LoaiCongViecModule,

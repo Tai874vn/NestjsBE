@@ -13,23 +13,31 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CongViecService } from '../services/cong-viec.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { ValidatedUser } from '../../../types';
+import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 
 @Controller('cong-viec')
 @UseGuards(JwtAuthGuard)
 export class CongViecController {
-  constructor(private readonly congViecService: CongViecService) {}
+  constructor(
+    private readonly congViecService: CongViecService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   @Post()
-  create(@Body() createDto: CreateCongViecDto) {
-    return this.congViecService.create(createDto);
+  create(
+    @Body() createDto: CreateCongViecDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.congViecService.create(createDto, user.id);
   }
 
   @Public()
@@ -84,38 +92,37 @@ export class CongViecController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateCongViecDto,
+    @CurrentUser() user: ValidatedUser,
   ) {
-    return this.congViecService.update(id, updateDto);
+    return this.congViecService.update(id, updateDto, user.id, user.role);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.congViecService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.congViecService.remove(id, user.id, user.role);
   }
 
   @Post('upload-hinh-cong-viec/:MaCongViec')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/cong-viec',
-        filename: (req, file, cb) => {
-          const uniqueSuffix =
-            Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `cong-viec-${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
-          return cb(new Error('Only image files are allowed!'), false);
-        }
-        cb(null, true);
-      },
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
     }),
   )
-  uploadImage(
+  async uploadImage(
     @Param('MaCongViec', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: ValidatedUser,
   ) {
-    return this.congViecService.uploadImage(id, file.filename);
+    const result = await this.cloudinaryService.uploadImage(file, 'cong-viec');
+    return this.congViecService.uploadImage(
+      id,
+      result.secure_url,
+      user.id,
+      user.role,
+    );
   }
 }
