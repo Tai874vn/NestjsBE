@@ -9,8 +9,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
-import { ApiResponse } from '../../../types';
-import { JwtPayload } from '../../../types/jwt-payload.type';
+import { ApiResponse, JwtPayload } from '../../../types';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type NguoiDungType = Prisma.NguoiDungGetPayload<{}>;
