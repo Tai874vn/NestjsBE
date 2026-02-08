@@ -5,13 +5,21 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/redis.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   async create(createUserDto: CreateUserDto) {
     const existingUser = await this.prisma.nguoiDung.findUnique({
@@ -45,6 +53,9 @@ export class UsersService {
         updatedAt: true,
       },
     });
+
+    // Invalidate user list caches
+    await this.redisService.invalidateUserCaches();
 
     return {
       message: 'User created successfully',
@@ -126,6 +137,16 @@ export class UsersService {
   }
 
   async findOne(id: number) {
+    const cacheKey = `${CACHE_KEYS.USER}${id}`;
+
+    const cached = await this.redisService.get<{
+      message: string;
+      content: unknown;
+    }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const user = await this.prisma.nguoiDung.findUnique({
       where: { id },
       select: {
@@ -148,10 +169,13 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    return {
+    const result = {
       message: 'Get user successfully',
       content: user,
     };
+
+    await this.redisService.set(cacheKey, result, CACHE_TTL.LONG);
+    return result;
   }
 
   async searchByName(name: string) {
@@ -222,6 +246,9 @@ export class UsersService {
       },
     });
 
+    // Invalidate user caches
+    await this.redisService.invalidateUserCaches(id);
+
     return {
       message: 'User updated successfully',
       content: updatedUser,
@@ -240,6 +267,9 @@ export class UsersService {
     await this.prisma.nguoiDung.delete({
       where: { id },
     });
+
+    // Invalidate user caches
+    await this.redisService.invalidateUserCaches(id);
 
     return {
       message: 'User deleted successfully',
@@ -273,6 +303,9 @@ export class UsersService {
         updatedAt: true,
       },
     });
+
+    // Invalidate user caches
+    await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Avatar uploaded successfully',

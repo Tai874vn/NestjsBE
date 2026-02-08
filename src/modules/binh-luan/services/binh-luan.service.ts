@@ -1,11 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/redis.service';
 import { CreateBinhLuanDto } from '../dto/create-binh-luan.dto';
 import { UpdateBinhLuanDto } from '../dto/update-binh-luan.dto';
 
 @Injectable()
 export class BinhLuanService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   async create(createDto: CreateBinhLuanDto) {
     const binhLuan = await this.prisma.binhLuan.create({
@@ -21,6 +29,9 @@ export class BinhLuanService {
         },
       },
     });
+
+    // Invalidate comment caches for the job
+    await this.redisService.invalidateCommentCaches(createDto.maCongViec);
 
     return {
       message: 'Comment created successfully',
@@ -100,6 +111,9 @@ export class BinhLuanService {
       },
     });
 
+    // Invalidate comment caches
+    await this.redisService.invalidateCommentCaches(binhLuan.maCongViec);
+
     return {
       message: 'Comment updated successfully',
       content: updated,
@@ -119,31 +133,42 @@ export class BinhLuanService {
       where: { id },
     });
 
+    // Invalidate comment caches
+    await this.redisService.invalidateCommentCaches(binhLuan.maCongViec);
+
     return {
       message: 'Comment deleted successfully',
     };
   }
 
   async findByJob(maCongViec: number) {
-    const binhLuans = await this.prisma.binhLuan.findMany({
-      where: { maCongViec },
-      include: {
-        nguoiDung: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true,
-          },
-        },
-      },
-      orderBy: {
-        ngayBinhLuan: 'desc',
-      },
-    });
+    const cacheKey = `${CACHE_KEYS.COMMENT_BY_JOB}${maCongViec}`;
 
-    return {
-      message: 'Get comments by job successfully',
-      content: binhLuans,
-    };
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const binhLuans = await this.prisma.binhLuan.findMany({
+          where: { maCongViec },
+          include: {
+            nguoiDung: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
+          orderBy: {
+            ngayBinhLuan: 'desc',
+          },
+        });
+
+        return {
+          message: 'Get comments by job successfully',
+          content: binhLuans,
+        };
+      },
+      CACHE_TTL.SHORT, // 2 minutes for comments
+    );
   }
 }

@@ -7,25 +7,28 @@ datasource db {
 }
 
 model NguoiDung {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  password     String?  @map("passWord")
-  phone        String?
-  birthDay     String?
-  gender       String?
-  role         String   @default("user")
-  skill        String?
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  password      String?  @map("passWord")
+  phone         String?
+  birthDay      String?
+  gender        String?
+  role          String   @default("user")
+  skill         String?
   certification String?
-  googleId     String?  @unique
-  avatar       String?
-  refreshToken String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  googleId      String?  @unique
+  avatar        String?
+  refreshToken  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  binhLuans     BinhLuan[]
-  thueCongViecs ThueCongViec[]
-  congViecs     CongViec[]     @relation("CongViecNguoiTao")
+  binhLuans        BinhLuan[]
+  thueCongViecs    ThueCongViec[]
+  congViecs        CongViec[]         @relation("CongViecNguoiTao")
+  chatRoomsCreated ChatRoom[]         @relation("ChatRoomCreator")
+  chatRoomMembers  ChatRoomMember[]
+  chatMessages     ChatMessage[]
 
   @@map("nguoi_dung")
 }
@@ -98,4 +101,47 @@ model ThueCongViec {
   nguoiDung NguoiDung @relation(fields: [maNguoiThue], references: [id], onDelete: Cascade)
 
   @@map("thue_cong_viec")
+}
+
+// Chat Models
+model ChatRoom {
+  id          Int      @id @default(autoincrement())
+  name        String?
+  isPrivate   Boolean  @default(true)
+  creatorId   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator  NguoiDung        @relation("ChatRoomCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members  ChatRoomMember[]
+  messages ChatMessage[]
+
+  @@map("chat_room")
+}
+
+model ChatRoomMember {
+  id       Int      @id @default(autoincrement())
+  roomId   Int
+  userId   Int
+  joinedAt DateTime @default(now())
+
+  room ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user NguoiDung @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("chat_room_member")
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  roomId    Int
+  senderId  Int
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room   ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender NguoiDung @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("chat_message")
 }

@@ -4,6 +4,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { RedisModule } from './modules/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { LoaiCongViecModule } from './modules/loai-cong-viec/loai-cong-viec.module';
@@ -13,6 +14,7 @@ import { BinhLuanModule } from './modules/binh-luan/binh-luan.module';
 import { ThueCongViecModule } from './modules/thue-cong-viec/thue-cong-viec.module';
 import { SkillModule } from './modules/skill/skill.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    RedisModule,
     CloudinaryModule,
     AuthModule,
     UsersModule,
@@ -32,6 +35,7 @@ import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
     BinhLuanModule,
     ThueCongViecModule,
     SkillModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

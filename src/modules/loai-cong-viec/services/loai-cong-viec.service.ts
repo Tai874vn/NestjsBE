@@ -1,17 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/redis.service';
 import { CreateLoaiCongViecDto } from '../dto/create-loai-cong-viec.dto';
 import { UpdateLoaiCongViecDto } from '../dto/update-loai-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class LoaiCongViecService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   async create(createDto: CreateLoaiCongViecDto) {
     const loaiCongViec = await this.prisma.loaiCongViec.create({
       data: createDto,
     });
+
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches();
 
     return {
       message: 'Job type created successfully',
@@ -20,16 +31,22 @@ export class LoaiCongViecService {
   }
 
   async findAll() {
-    const loaiCongViecs = await this.prisma.loaiCongViec.findMany({
-      include: {
-        chiTietLoaiCongViecs: true,
-      },
-    });
+    return this.redisService.getOrSet(
+      CACHE_KEYS.CATEGORY_LIST,
+      async () => {
+        const loaiCongViecs = await this.prisma.loaiCongViec.findMany({
+          include: {
+            chiTietLoaiCongViecs: true,
+          },
+        });
 
-    return {
-      message: 'Get job types successfully',
-      content: loaiCongViecs,
-    };
+        return {
+          message: 'Get job types successfully',
+          content: loaiCongViecs,
+        };
+      },
+      CACHE_TTL.LONG, // 1 hour
+    );
   }
 
   async findAllWithPagination(paginationDto: PaginationDto) {
@@ -68,6 +85,16 @@ export class LoaiCongViecService {
   }
 
   async findOne(id: number) {
+    const cacheKey = `${CACHE_KEYS.CATEGORY}${id}`;
+
+    const cached = await this.redisService.get<{
+      message: string;
+      content: unknown;
+    }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const loaiCongViec = await this.prisma.loaiCongViec.findUnique({
       where: { id },
       include: {
@@ -79,10 +106,13 @@ export class LoaiCongViecService {
       throw new NotFoundException(`Job type with ID ${id} not found`);
     }
 
-    return {
+    const result = {
       message: 'Get job type successfully',
       content: loaiCongViec,
     };
+
+    await this.redisService.set(cacheKey, result, CACHE_TTL.LONG);
+    return result;
   }
 
   async update(id: number, updateDto: UpdateLoaiCongViecDto) {
@@ -102,6 +132,9 @@ export class LoaiCongViecService {
       },
     });
 
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches(id);
+
     return {
       message: 'Job type updated successfully',
       content: updated,
@@ -120,6 +153,9 @@ export class LoaiCongViecService {
     await this.prisma.loaiCongViec.delete({
       where: { id },
     });
+
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches(id);
 
     return {
       message: 'Job type deleted successfully',

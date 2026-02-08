@@ -1,12 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/redis.service';
 import { CreateChiTietLoaiCongViecDto } from '../dto/create-chi-tiet-loai-cong-viec.dto';
 import { UpdateChiTietLoaiCongViecDto } from '../dto/update-chi-tiet-loai-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class ChiTietLoaiCongViecService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   async create(createDto: CreateChiTietLoaiCongViecDto) {
     const chiTietLoaiCongViec = await this.prisma.chiTietLoaiCongViec.create({
@@ -15,6 +23,11 @@ export class ChiTietLoaiCongViecService {
         loaiCongViec: true,
       },
     });
+
+    // Invalidate category caches (affects menu and category details)
+    await this.redisService.invalidateCategoryCaches(
+      createDto.maLoaiCongViec,
+    );
 
     return {
       message: 'Job detail type created successfully',
@@ -113,6 +126,11 @@ export class ChiTietLoaiCongViecService {
       },
     });
 
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches(
+      chiTietLoaiCongViec.maLoaiCongViec,
+    );
+
     return {
       message: 'Job detail type updated successfully',
       content: updated,
@@ -133,6 +151,11 @@ export class ChiTietLoaiCongViecService {
       where: { id },
     });
 
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches(
+      chiTietLoaiCongViec.maLoaiCongViec,
+    );
+
     return {
       message: 'Job detail type deleted successfully',
     };
@@ -152,6 +175,11 @@ export class ChiTietLoaiCongViecService {
       where: { id },
       data: { hinhAnh: filename },
     });
+
+    // Invalidate category caches
+    await this.redisService.invalidateCategoryCaches(
+      chiTietLoaiCongViec.maLoaiCongViec,
+    );
 
     return {
       message: 'Image uploaded successfully',
