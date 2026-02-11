@@ -141,6 +141,13 @@ export class CongViecService {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
       include: {
+        nguoiDung: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
         chiTietLoaiCongViec: {
           include: {
             loaiCongViec: true,
@@ -352,6 +359,13 @@ export class CongViecService {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id: maCongViec },
       include: {
+        nguoiDung: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
         chiTietLoaiCongViec: {
           include: {
             loaiCongViec: true,

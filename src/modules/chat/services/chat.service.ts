@@ -60,7 +60,7 @@ export class ChatService {
   }
 
   async findPrivateRoom(userId1: number, userId2: number) {
-    const rooms = await this.prisma.chatRoom.findMany({
+    const room = await this.prisma.chatRoom.findFirst({
       where: {
         isPrivate: true,
         members: {
@@ -68,6 +68,10 @@ export class ChatService {
             userId: { in: [userId1, userId2] },
           },
         },
+        AND: [
+          { members: { some: { userId: userId1 } } },
+          { members: { some: { userId: userId2 } } },
+        ],
       },
       include: {
         members: {
@@ -89,8 +93,15 @@ export class ChatService {
       },
     });
 
-    // Find room with exactly these two members
-    return rooms.find((room) => room.members.length === 2);
+    return room;
+  }
+
+  async getUserRoomIds(userId: number): Promise<number[]> {
+    const members = await this.prisma.chatRoomMember.findMany({
+      where: { userId },
+      select: { roomId: true },
+    });
+    return members.map((m) => m.roomId);
   }
 
   async getUserRooms(userId: number): Promise<RoomResponse[]> {
@@ -121,7 +132,39 @@ export class ChatService {
       orderBy: { updatedAt: 'desc' },
     });
 
-    return rooms.map((room) => this.formatRoomResponse(room));
+    // Batch unread counts in a single query
+    const unreadCounts = await this.getBatchUnreadCounts(userId, rooms.map((r) => r.id));
+
+    return rooms.map((room) =>
+      this.formatRoomResponse(room, unreadCounts.get(room.id) ?? 0),
+    );
+  }
+
+  private async getBatchUnreadCounts(
+    userId: number,
+    roomIds: number[],
+  ): Promise<Map<number, number>> {
+    if (roomIds.length === 0) return new Map();
+
+    const members = await this.prisma.chatRoomMember.findMany({
+      where: { userId, roomId: { in: roomIds } },
+      select: { roomId: true, lastReadAt: true },
+    });
+
+    const counts = await Promise.all(
+      members.map(async (m) => {
+        const count = await this.prisma.chatMessage.count({
+          where: {
+            roomId: m.roomId,
+            createdAt: { gt: m.lastReadAt },
+            senderId: { not: userId },
+          },
+        });
+        return { roomId: m.roomId, count };
+      }),
+    );
+
+    return new Map(counts.map((c) => [c.roomId, c.count]));
   }
 
   async getRoom(roomId: number, userId: number): Promise<RoomResponse> {
@@ -157,7 +200,8 @@ export class ChatService {
       throw new ForbiddenException('You are not a member of this room');
     }
 
-    return this.formatRoomResponse(room);
+    const unreadCount = await this.getUnreadCount(roomId, userId);
+    return this.formatRoomResponse(room, unreadCount);
   }
 
   async isRoomMember(roomId: number, userId: number): Promise<boolean> {
@@ -207,7 +251,7 @@ export class ChatService {
     userId: number,
     getMessagesDto: GetMessagesDto,
   ): Promise<MessageResponse[]> {
-    const { roomId, limit = 50, offset = 0 } = getMessagesDto;
+    const { roomId, limit = 50, before } = getMessagesDto;
 
     // Verify user is a member
     const isMember = await this.isRoomMember(roomId, userId);
@@ -216,15 +260,17 @@ export class ChatService {
     }
 
     const messages = await this.prisma.chatMessage.findMany({
-      where: { roomId },
+      where: {
+        roomId,
+        ...(before ? { id: { lt: before } } : {}),
+      },
       include: {
         sender: {
           select: { id: true, name: true, avatar: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { id: 'desc' },
       take: limit,
-      skip: offset,
     });
 
     return messages.map((msg) => this.formatMessageResponse(msg)).reverse();
@@ -260,6 +306,29 @@ export class ChatService {
     });
   }
 
+  async markAsRead(roomId: number, userId: number): Promise<boolean> {
+    const result = await this.prisma.chatRoomMember.updateMany({
+      where: { roomId, userId },
+      data: { lastReadAt: new Date() },
+    });
+    return result.count > 0;
+  }
+
+  async getUnreadCount(roomId: number, userId: number): Promise<number> {
+    const member = await this.prisma.chatRoomMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+    });
+    if (!member) return 0;
+
+    return this.prisma.chatMessage.count({
+      where: {
+        roomId,
+        createdAt: { gt: member.lastReadAt },
+        senderId: { not: userId },
+      },
+    });
+  }
+
   async leaveRoom(roomId: number, userId: number): Promise<void> {
     await this.prisma.chatRoomMember.deleteMany({
       where: { roomId, userId },
@@ -277,7 +346,7 @@ export class ChatService {
     }
   }
 
-  private formatRoomResponse(room: any): RoomResponse {
+  private formatRoomResponse(room: any, unreadCount = 0): RoomResponse {
     return {
       id: room.id,
       name: room.name,
@@ -290,6 +359,8 @@ export class ChatService {
       lastMessage: room.messages?.[0]
         ? this.formatMessageResponse(room.messages[0])
         : undefined,
+      unreadCount,
+      updatedAt: room.updatedAt,
       createdAt: room.createdAt,
     };
   }

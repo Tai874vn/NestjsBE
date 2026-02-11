@@ -120,10 +120,11 @@ model ChatRoom {
 }
 
 model ChatRoomMember {
-  id       Int      @id @default(autoincrement())
-  roomId   Int
-  userId   Int
-  joinedAt DateTime @default(now())
+  id         Int       @id @default(autoincrement())
+  roomId     Int
+  userId     Int
+  joinedAt   DateTime  @default(now())
+  lastReadAt DateTime  @default(now())
 
   room ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user NguoiDung @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -136,6 +136,61 @@ export class UsersService {
     };
   }
 
+  async getPublicProfile(id: number) {
+    const cacheKey = `${CACHE_KEYS.USER}profile:${id}`;
+
+    const cached = await this.redisService.get<{
+      message: string;
+      content: unknown;
+    }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const user = await this.prisma.nguoiDung.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        skill: true,
+        certification: true,
+        createdAt: true,
+        congViecs: {
+          select: {
+            id: true,
+            tenCongViec: true,
+            hinhAnh: true,
+            giaTien: true,
+            saoCongViec: true,
+            danhGia: true,
+            moTaNgan: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        _count: {
+          select: {
+            congViecs: true,
+            binhLuans: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    const result = {
+      message: 'Get public profile successfully',
+      content: user,
+    };
+
+    await this.redisService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+    return result;
+  }
+
   async findOne(id: number) {
     const cacheKey = `${CACHE_KEYS.USER}${id}`;
 

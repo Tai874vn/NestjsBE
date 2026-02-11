@@ -14,20 +14,31 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../services/users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 
+@ApiTags('Users')
 @Controller('users')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly cloudinaryService: CloudinaryService,
   ) {}
+
+  @Public()
+  @Get('profile/:id')
+  @ApiOperation({ summary: 'Get public user profile (like LinkedIn)' })
+  getPublicProfile(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getPublicProfile(id);
+  }
 
   @Post()
   create(@Body() createUserDto: CreateUserDto) {

@@ -5,6 +5,8 @@ import { createClient } from 'redis';
 import { RedisService } from './redis.service';
 import { RedisController } from './redis.controller';
 
+export const REDIS_CLIENT = 'REDIS_CLIENT';
+
 const logger = new Logger('RedisModule');
 
 @Global()
@@ -98,7 +100,29 @@ const logger = new Logger('RedisModule');
     }),
   ],
   controllers: [RedisController],
-  providers: [RedisService],
-  exports: [CacheModule, RedisService],
+  providers: [
+    RedisService,
+    {
+      provide: REDIS_CLIENT,
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (!redisUrl) return null;
+
+        try {
+          const client = createClient({ url: redisUrl });
+          await client.connect();
+          logger.log('Redis client created for Socket.io adapter');
+          return client;
+        } catch (error) {
+          logger.warn(
+            `Failed to create Redis client for Socket.io: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+          return null;
+        }
+      },
+    },
+  ],
+  exports: [CacheModule, RedisService, REDIS_CLIENT],
 })
 export class RedisModule {}

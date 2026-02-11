@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsBoolean,
   IsArray,
+  Min,
+  Max,
   MinLength,
   MaxLength,
 } from 'class-validator';
@@ -30,6 +32,7 @@ export class CreateRoomDto {
 export class SendMessageDto {
   @ApiProperty({ description: 'Room ID' })
   @IsInt()
+  @Min(1)
   roomId: number;
 
   @ApiProperty({ description: 'Message content' })
@@ -42,6 +45,7 @@ export class SendMessageDto {
 export class JoinRoomDto {
   @ApiProperty({ description: 'Room ID to join' })
   @IsInt()
+  @Min(1)
   roomId: number;
 }
 
@@ -54,17 +58,21 @@ export class LeaveRoomDto {
 export class GetMessagesDto {
   @ApiProperty({ description: 'Room ID' })
   @IsInt()
+  @Min(1)
   roomId: number;
 
   @ApiPropertyOptional({ description: 'Number of messages to fetch', default: 50 })
   @IsOptional()
   @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 
-  @ApiPropertyOptional({ description: 'Offset for pagination', default: 0 })
+  @ApiPropertyOptional({ description: 'Load messages before this message ID (cursor)' })
   @IsOptional()
   @IsInt()
-  offset?: number;
+  @Min(1)
+  before?: number;
 }
 
 export class TypingDto {
@@ -100,7 +108,15 @@ export interface RoomResponse {
     avatar: string | null;
   }[];
   lastMessage?: MessageResponse;
+  unreadCount: number;
+  updatedAt: Date;
   createdAt: Date;
+}
+
+export class MarkAsReadDto {
+  @IsInt()
+  @Min(1)
+  roomId: number;
 }
 
 export interface OnlineStatusResponse {

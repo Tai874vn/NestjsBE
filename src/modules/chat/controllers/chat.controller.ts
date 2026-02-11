@@ -65,17 +65,20 @@ export class ChatController {
   @Get('rooms/:id/messages')
   @ApiOperation({ summary: 'Get messages from a chat room' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiQuery({ name: 'before', required: false, type: Number, description: 'Load messages before this message ID' })
   async getRoomMessages(
     @Param('id', ParseIntPipe) id: number,
     @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
+    @Query('before') before?: string,
     @CurrentUser() user?: { id: number },
   ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    const parsedBefore = before ? parseInt(before, 10) : undefined;
+
     const messages = await this.chatService.getMessages(user!.id, {
       roomId: id,
-      limit: limit ? parseInt(limit, 10) : 50,
-      offset: offset ? parseInt(offset, 10) : 0,
+      limit: Math.min(Math.max(isNaN(parsedLimit) ? 50 : parsedLimit, 1), 100),
+      before: parsedBefore && !isNaN(parsedBefore) ? parsedBefore : undefined,
     });
     return {
       message: 'Messages fetched successfully',

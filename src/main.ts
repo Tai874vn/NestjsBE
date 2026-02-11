@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,6 +25,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Set up Socket.io Redis adapter for cross-instance WebSocket support
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    const redisIoAdapter = new RedisIoAdapter(app);
+    await redisIoAdapter.connectToRedis(redisUrl);
+    app.useWebSocketAdapter(redisIoAdapter);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
