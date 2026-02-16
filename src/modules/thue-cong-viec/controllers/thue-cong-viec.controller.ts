@@ -15,7 +15,6 @@ import { CreateThueCongViecDto } from '../dto/create-thue-cong-viec.dto';
 import { UpdateThueCongViecDto } from '../dto/update-thue-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
 
@@ -32,13 +31,11 @@ export class ThueCongViecController {
     return this.thueCongViecService.create(createDto, user.id);
   }
 
-  @Public()
   @Get()
   findAll() {
     return this.thueCongViecService.findAll();
   }
 
-  @Public()
   @Get('phan-trang-tim-kiem')
   findAllWithPagination(@Query() paginationDto: PaginationDto) {
     return this.thueCongViecService.findAllWithPagination(paginationDto);
@@ -49,7 +46,6 @@ export class ThueCongViecController {
     return this.thueCongViecService.findHiredJobs(user.id);
   }
 
-  @Public()
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.thueCongViecService.findOne(id);

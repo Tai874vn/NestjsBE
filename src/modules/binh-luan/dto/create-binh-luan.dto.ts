@@ -6,10 +6,6 @@ export class CreateBinhLuanDto {
   maCongViec: number;
 
   @IsNotEmpty()
-  @IsInt()
-  maNguoiBinhLuan: number;
-
-  @IsNotEmpty()
   @IsString()
   noiDung: string;
 

@@ -23,10 +23,6 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  role?: string;
-
-  @IsOptional()
-  @IsString()
   skill?: string;
 
   @IsOptional()

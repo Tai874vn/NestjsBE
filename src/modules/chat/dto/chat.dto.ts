@@ -49,12 +49,6 @@ export class JoinRoomDto {
   roomId: number;
 }
 
-export class LeaveRoomDto {
-  @ApiProperty({ description: 'Room ID to leave' })
-  @IsInt()
-  roomId: number;
-}
-
 export class GetMessagesDto {
   @ApiProperty({ description: 'Room ID' })
   @IsInt()
@@ -117,10 +111,4 @@ export class MarkAsReadDto {
   @IsInt()
   @Min(1)
   roomId: number;
-}
-
-export interface OnlineStatusResponse {
-  userId: number;
-  isOnline: boolean;
-  lastSeen?: Date;
 }

@@ -14,6 +14,8 @@ import { CreateBinhLuanDto } from '../dto/create-binh-luan.dto';
 import { UpdateBinhLuanDto } from '../dto/update-binh-luan.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { ValidatedUser } from '../../../types';
 
 @Controller('binh-luan')
 @UseGuards(JwtAuthGuard)
@@ -21,8 +23,11 @@ export class BinhLuanController {
   constructor(private readonly binhLuanService: BinhLuanService) {}
 
   @Post()
-  create(@Body() createDto: CreateBinhLuanDto) {
-    return this.binhLuanService.create(createDto);
+  create(
+    @Body() createDto: CreateBinhLuanDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.binhLuanService.create(createDto, user.id);
   }
 
   @Public()
@@ -41,12 +46,16 @@ export class BinhLuanController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateBinhLuanDto,
+    @CurrentUser() user: ValidatedUser,
   ) {
-    return this.binhLuanService.update(id, updateDto);
+    return this.binhLuanService.update(id, updateDto, user.id, user.role);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.binhLuanService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.binhLuanService.remove(id, user.id, user.role);
   }
 }

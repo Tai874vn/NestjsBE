@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import {
   RedisService,
@@ -7,6 +7,7 @@ import {
 } from '../../redis/redis.service';
 import { CreateBinhLuanDto } from '../dto/create-binh-luan.dto';
 import { UpdateBinhLuanDto } from '../dto/update-binh-luan.dto';
+import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class BinhLuanService {
@@ -15,9 +16,12 @@ export class BinhLuanService {
     private redisService: RedisService,
   ) {}
 
-  async create(createDto: CreateBinhLuanDto) {
+  async create(createDto: CreateBinhLuanDto, userId: number) {
     const binhLuan = await this.prisma.binhLuan.create({
-      data: createDto,
+      data: {
+        ...createDto,
+        maNguoiBinhLuan: userId,
+      },
       include: {
         congViec: true,
         nguoiDung: {
@@ -87,13 +91,17 @@ export class BinhLuanService {
     };
   }
 
-  async update(id: number, updateDto: UpdateBinhLuanDto) {
+  async update(id: number, updateDto: UpdateBinhLuanDto, userId: number, userRole: string) {
     const binhLuan = await this.prisma.binhLuan.findUnique({
       where: { id },
     });
 
     if (!binhLuan) {
       throw new NotFoundException(`Comment with ID ${id} not found`);
+    }
+
+    if (binhLuan.maNguoiBinhLuan !== userId && userRole !== Role.ADMIN) {
+      throw new ForbiddenException('You can only edit your own comments');
     }
 
     const updated = await this.prisma.binhLuan.update({
@@ -120,13 +128,17 @@ export class BinhLuanService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId: number, userRole: string) {
     const binhLuan = await this.prisma.binhLuan.findUnique({
       where: { id },
     });
 
     if (!binhLuan) {
       throw new NotFoundException(`Comment with ID ${id} not found`);
+    }
+
+    if (binhLuan.maNguoiBinhLuan !== userId && userRole !== Role.ADMIN) {
+      throw new ForbiddenException('You can only delete your own comments');
     }
 
     await this.prisma.binhLuan.delete({

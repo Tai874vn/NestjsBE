@@ -10,6 +10,7 @@ import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
 import { ApiResponse, JwtPayload } from '../../../types';
+import { Role } from '../../../common/constants/roles';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type NguoiDungType = Prisma.NguoiDungGetPayload<{}>;
@@ -20,18 +21,16 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
-  decodeRefreshToken(token: string): JwtPayload {
-    const decoded = this.jwtService.decode(token);
-
-    if (
-      !decoded ||
-      typeof decoded !== 'object' ||
-      typeof (decoded as JwtPayload).sub !== 'number'
-    ) {
+  verifyRefreshToken(token: string): JwtPayload {
+    try {
+      const decoded = this.jwtService.verify(token);
+      if (typeof decoded.sub !== 'number' || decoded.type !== 'refresh') {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      return decoded as JwtPayload;
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
-
-    return decoded as JwtPayload;
   }
 
   async signUp(signUpDto: SignUpDto): Promise<
@@ -65,7 +64,7 @@ export class AuthService {
         gender: signUpDto.gender,
         skill: signUpDto.skill,
         certification: signUpDto.certification,
-        role: 'user',
+        role: Role.USER,
       },
     });
 
@@ -188,7 +187,11 @@ export class AuthService {
   }
 
   private generateRefreshToken(userId: number, email: string): string {
-    const payload: { sub: number; email: string } = { sub: userId, email };
+    const payload: { sub: number; email: string; type: string } = {
+      sub: userId,
+      email,
+      type: 'refresh',
+    };
     return this.jwtService.sign(payload, { expiresIn: '30d' });
   }
 

@@ -146,18 +146,7 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token not found');
     }
 
-    // Decode the refresh token to get user ID
-    const decoded = this.authService['jwtService'].decode(refreshToken);
-    if (
-      !decoded ||
-      typeof decoded !== 'object' ||
-      !('sub' in decoded) ||
-      typeof decoded.sub !== 'number'
-    ) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const payload = this.authService.decodeRefreshToken(refreshToken);
+    const payload = this.authService.verifyRefreshToken(refreshToken);
 
     const tokens = await this.authService.refreshTokens(
       payload.sub,
