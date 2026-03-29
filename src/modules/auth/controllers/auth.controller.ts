@@ -7,6 +7,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import * as express from 'express';
@@ -19,6 +20,28 @@ import { Public } from '../../../common/decorators/public.decorator';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  private setAuthCookies(
+    res: express.Response,
+    accessToken: string,
+    refreshToken: string,
+  ): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+  }
+
   @Public()
   @Post('signup')
   async signUp(
@@ -28,24 +51,10 @@ export class AuthController {
     const result = await this.authService.signUp(signUpDto);
 
     if (!result.content) {
-      throw new Error('Signup failed');
+      throw new InternalServerErrorException('Signup failed');
     }
 
-    // Set access token cookie
-    res.cookie('access_token', result.content.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // Set refresh token cookie
-    res.cookie('refresh_token', result.content.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    this.setAuthCookies(res, result.content.token, result.content.refreshToken);
 
     return {
       message: result.message,
@@ -62,24 +71,10 @@ export class AuthController {
     const result = await this.authService.signIn(signInDto);
 
     if (!result.content) {
-      throw new Error('Signin failed');
+      throw new InternalServerErrorException('Signin failed');
     }
 
-    // Set access token cookie
-    res.cookie('access_token', result.content.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // Set refresh token cookie
-    res.cookie('refresh_token', result.content.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    this.setAuthCookies(res, result.content.token, result.content.refreshToken);
 
     return {
       message: result.message,
@@ -102,25 +97,11 @@ export class AuthController {
     @Res() res: express.Response,
   ) {
     if (!req.user) {
-      throw new Error('User not authenticated');
+      throw new UnauthorizedException('User not authenticated');
     }
     const result = await this.authService.googleLogin(req.user);
 
-    // Set access token cookie
-    res.cookie('access_token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // Set refresh token cookie
-    res.cookie('refresh_token', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    this.setAuthCookies(res, result.token, result.refreshToken);
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback`);
@@ -153,21 +134,7 @@ export class AuthController {
       refreshToken,
     );
 
-    // Set new access token cookie
-    res.cookie('access_token', tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // Set new refresh token cookie
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
     return {
       message: 'Tokens refreshed successfully',

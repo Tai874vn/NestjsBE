@@ -67,15 +67,24 @@ describe('AuthController', () => {
         content: {
           user: mockUser,
           token: 'test-jwt-token',
+          refreshToken: 'test-refresh-token',
         },
       };
 
+      const mockResponse = {
+        cookie: jest.fn(),
+      } as any;
+
       mockAuthService.signUp.mockResolvedValue(expectedResult);
 
-      const result = await controller.signUp(signUpDto);
+      const result = await controller.signUp(signUpDto, mockResponse);
 
       expect(authService.signUp).toHaveBeenCalledWith(signUpDto);
-      expect(result).toEqual(expectedResult);
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        message: expectedResult.message,
+        content: { user: expectedResult.content.user },
+      });
     });
   });
 
@@ -91,15 +100,24 @@ describe('AuthController', () => {
         content: {
           user: mockUser,
           token: 'test-jwt-token',
+          refreshToken: 'test-refresh-token',
         },
       };
 
+      const mockResponse = {
+        cookie: jest.fn(),
+      } as any;
+
       mockAuthService.signIn.mockResolvedValue(expectedResult);
 
-      const result = await controller.signIn(signInDto);
+      const result = await controller.signIn(signInDto, mockResponse);
 
       expect(authService.signIn).toHaveBeenCalledWith(signInDto);
-      expect(result).toEqual(expectedResult);
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        message: expectedResult.message,
+        content: { user: expectedResult.content.user },
+      });
     });
   });
 
@@ -110,40 +128,44 @@ describe('AuthController', () => {
   });
 
   describe('googleAuthRedirect', () => {
-    it('should redirect to frontend with token', () => {
+    it('should redirect to frontend with cookies set', async () => {
       const mockRequest = {
         user: { ...mockUser, password: 'hashedPassword' },
       } as any;
 
       const mockResponse = {
+        cookie: jest.fn(),
         redirect: jest.fn(),
       } as any;
 
-      mockAuthService.googleLogin.mockReturnValue({
+      mockAuthService.googleLogin.mockResolvedValue({
         user: mockUser,
         token: 'test-jwt-token',
+        refreshToken: 'test-refresh-token',
       });
 
-      controller.googleAuthRedirect(mockRequest, mockResponse);
+      await controller.googleAuthRedirect(mockRequest, mockResponse);
 
       expect(authService.googleLogin).toHaveBeenCalledWith(mockRequest.user);
+      expect(mockResponse.cookie).toHaveBeenCalledTimes(2);
       expect(mockResponse.redirect).toHaveBeenCalledWith(
-        'http://localhost:5173/auth/callback?token=test-jwt-token',
+        'http://localhost:5173/auth/callback',
       );
     });
 
-    it('should throw error if user is not authenticated', () => {
+    it('should throw error if user is not authenticated', async () => {
       const mockRequest = {
         user: undefined,
       } as any;
 
       const mockResponse = {
+        cookie: jest.fn(),
         redirect: jest.fn(),
       } as any;
 
-      expect(() =>
+      await expect(
         controller.googleAuthRedirect(mockRequest, mockResponse),
-      ).toThrow('User not authenticated');
+      ).rejects.toThrow('User not authenticated');
     });
   });
 });

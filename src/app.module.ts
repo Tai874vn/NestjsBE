@@ -15,11 +15,16 @@ import { ThueCongViecModule } from './modules/thue-cong-viec/thue-cong-viec.modu
 import { SkillModule } from './modules/skill/skill.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { envValidationSchema } from './config/env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: true, // Stop validation at first error
+      },
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
