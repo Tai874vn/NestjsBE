@@ -46,7 +46,7 @@ const ONLINE_TTL = 60 * 60; // 1 hour — refreshed on every connection
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL,
     credentials: true,
   },
   namespace: '/chat',

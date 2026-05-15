@@ -103,7 +103,7 @@ export class AuthController {
 
     this.setAuthCookies(res, result.token, result.refreshToken);
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL;
     res.redirect(`${frontendUrl}/auth/callback`);
   }
 
