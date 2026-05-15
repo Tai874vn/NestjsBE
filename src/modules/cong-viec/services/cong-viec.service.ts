@@ -8,6 +8,7 @@ import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class CongViecService {
@@ -180,7 +181,7 @@ export class CongViecService {
     id: number,
     updateDto: UpdateCongViecDto,
     userId: number,
-    userRole: string,
+    userRole: Role,
   ) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
@@ -190,7 +191,7 @@ export class CongViecService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+    if (congViec.nguoiTao !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only update your own jobs');
     }
 
@@ -215,7 +216,7 @@ export class CongViecService {
     };
   }
 
-  async remove(id: number, userId: number, userRole: string) {
+  async remove(id: number, userId: number, userRole: Role) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
     });
@@ -224,7 +225,7 @@ export class CongViecService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+    if (congViec.nguoiTao !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only delete your own jobs');
     }
 
@@ -244,7 +245,7 @@ export class CongViecService {
     id: number,
     filename: string,
     userId: number,
-    userRole: string,
+    userRole: Role,
   ) {
     const congViec = await this.prisma.congViec.findUnique({
       where: { id },
@@ -254,7 +255,7 @@ export class CongViecService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    if (congViec.nguoiTao !== userId && userRole !== 'admin') {
+    if (congViec.nguoiTao !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException(
         'You can only upload images for your own jobs',
       );

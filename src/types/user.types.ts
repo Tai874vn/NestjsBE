@@ -1,4 +1,4 @@
-import { Role } from 'src/common/constants/roles';
+import { Role } from '../common/constants/roles';
 
 export interface JwtPayload {
   sub: number;

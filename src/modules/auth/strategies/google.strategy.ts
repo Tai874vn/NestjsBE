@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
-import { Prisma } from '@prisma/client';
+import { NguoiDung } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { GoogleProfile } from '../../../types';
+import { Role } from '../../../common/constants/roles';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-type NguoiDungType = Prisma.NguoiDungGetPayload<{}>;
+type NguoiDungType = NguoiDung;
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -51,7 +51,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             email: emails[0].value,
             name: displayName,
             avatar: photos?.[0]?.value,
-            role: 'user',
+            role: Role.USER,
           },
         });
       }

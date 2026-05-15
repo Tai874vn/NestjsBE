@@ -9,6 +9,7 @@ import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class UsersService {
@@ -32,7 +33,7 @@ export class UsersService {
       data: {
         ...createUserDto,
         password: hashedPassword,
-        role: createUserDto.role || 'user',
+        role: createUserDto.role || Role.USER,
       },
       select: {
         id: true,

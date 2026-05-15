@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { PrismaService } from '../../../prisma.service';
 import { JwtPayload, ValidatedUser } from '../../../types';
+import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -42,6 +43,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    return user;
+    if (!Object.values(Role).includes(user.role as Role)) {
+      throw new UnauthorizedException();
+    }
+
+    return {
+      ...user,
+      role: user.role as Role,
+    };
   }
 }

@@ -4,7 +4,9 @@ import {
   IsString,
   MinLength,
   IsOptional,
+  IsEnum,
 } from 'class-validator';
+import { Role } from '../../../common/constants/roles';
 
 export class CreateUserDto {
   @IsNotEmpty()
@@ -33,8 +35,8 @@ export class CreateUserDto {
   gender?: string;
 
   @IsOptional()
-  @IsString()
-  role?: string;
+  @IsEnum(Role)
+  role?: Role;
 
   @IsOptional()
   @IsString()

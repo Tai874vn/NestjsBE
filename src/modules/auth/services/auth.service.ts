@@ -5,15 +5,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { Prisma } from '@prisma/client';
+import { NguoiDung } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
 import { ApiResponse, JwtPayload } from '../../../types';
 import { Role } from '../../../common/constants/roles';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-type NguoiDungType = Prisma.NguoiDungGetPayload<{}>;
+type NguoiDungType = NguoiDung;
 
 @Injectable()
 export class AuthService {

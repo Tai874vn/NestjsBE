@@ -6,7 +6,7 @@ export const envValidationSchema = Joi.object({
 
   // JWT
   JWT_SECRET: Joi.string().required(),
-  JWT_EXPIRES_IN: Joi.string().default('7d'),
+  JWT_EXPIRES_IN: Joi.string().required(),
 
   // Google OAuth
   GOOGLE_CLIENT_ID: Joi.string().required(),
@@ -14,13 +14,12 @@ export const envValidationSchema = Joi.object({
   GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
 
   // Frontend
-  FRONTEND_URL: Joi.string().uri().default('http://localhost:5173'),
+  FRONTEND_URL: Joi.string().uri().required(),
 
   // Server
-  PORT: Joi.number().default(3000),
-  NODE_ENV: Joi.string()
-    .valid('development', 'production', 'test')
-    .default('development'),
+  PORT: Joi.number().required(),
+  GLOBAL_PREFIX: Joi.string().required(),
+  NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
 
   // Redis (optional)
   REDIS_URL: Joi.string().uri().optional(),

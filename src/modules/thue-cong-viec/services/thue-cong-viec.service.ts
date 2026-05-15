@@ -8,6 +8,7 @@ import { PrismaService } from '../../../prisma.service';
 import { CreateThueCongViecDto } from '../dto/create-thue-cong-viec.dto';
 import { UpdateThueCongViecDto } from '../dto/update-thue-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class ThueCongViecService {
@@ -144,7 +145,7 @@ export class ThueCongViecService {
     id: number,
     updateDto: UpdateThueCongViecDto,
     userId: number,
-    userRole: string,
+    userRole: Role,
   ) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
@@ -154,7 +155,7 @@ export class ThueCongViecService {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
     }
 
-    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+    if (thueCongViec.maNguoiThue !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only update your own hires');
     }
 
@@ -180,7 +181,7 @@ export class ThueCongViecService {
     };
   }
 
-  async remove(id: number, userId: number, userRole: string) {
+  async remove(id: number, userId: number, userRole: Role) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
     });
@@ -189,7 +190,7 @@ export class ThueCongViecService {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
     }
 
-    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+    if (thueCongViec.maNguoiThue !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only cancel your own hires');
     }
 
@@ -230,7 +231,7 @@ export class ThueCongViecService {
     };
   }
 
-  async completeJob(id: number, userId: number, userRole: string) {
+  async completeJob(id: number, userId: number, userRole: Role) {
     const thueCongViec = await this.prisma.thueCongViec.findUnique({
       where: { id },
     });
@@ -239,7 +240,7 @@ export class ThueCongViecService {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
     }
 
-    if (thueCongViec.maNguoiThue !== userId && userRole !== 'admin') {
+    if (thueCongViec.maNguoiThue !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only complete your own hires');
     }
 
