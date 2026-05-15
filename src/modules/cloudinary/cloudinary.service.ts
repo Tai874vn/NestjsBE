@@ -30,9 +30,7 @@ export class CloudinaryService {
         {
           folder: folder,
           resource_type: 'image',
-          transformation: [
-            { quality: 'auto', fetch_format: 'auto' },
-          ],
+          transformation: [{ quality: 'auto', fetch_format: 'auto' }],
         },
         (error, result) => {
           if (error) {
@@ -40,7 +38,9 @@ export class CloudinaryService {
           } else if (result) {
             resolve(result);
           } else {
-            reject(new BadRequestException('Upload failed: No result returned'));
+            reject(
+              new BadRequestException('Upload failed: No result returned'),
+            );
           }
         },
       );

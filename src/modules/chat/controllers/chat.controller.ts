@@ -65,7 +65,12 @@ export class ChatController {
   @Get('rooms/:id/messages')
   @ApiOperation({ summary: 'Get messages from a chat room' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'before', required: false, type: Number, description: 'Load messages before this message ID' })
+  @ApiQuery({
+    name: 'before',
+    required: false,
+    type: Number,
+    description: 'Load messages before this message ID',
+  })
   async getRoomMessages(
     @Param('id', ParseIntPipe) id: number,
     @Query('limit') limit?: string,

@@ -133,7 +133,10 @@ export class ChatService {
     });
 
     // Batch unread counts in a single query
-    const unreadCounts = await this.getBatchUnreadCounts(userId, rooms.map((r) => r.id));
+    const unreadCounts = await this.getBatchUnreadCounts(
+      userId,
+      rooms.map((r) => r.id),
+    );
 
     return rooms.map((room) =>
       this.formatRoomResponse(room, unreadCounts.get(room.id) ?? 0),

@@ -9,7 +9,14 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UnauthorizedException, UsePipes, ValidationPipe, Inject, Optional } from '@nestjs/common';
+import {
+  Logger,
+  UnauthorizedException,
+  UsePipes,
+  ValidationPipe,
+  Inject,
+  Optional,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
@@ -61,10 +68,12 @@ export class ChatGateway
     private configService: ConfigService,
     private prisma: PrismaService,
     private chatService: ChatService,
-    @Optional() @Inject(REDIS_CLIENT) private injectedRedisClient: ReturnType<typeof createClient> | null,
+    @Optional()
+    @Inject(REDIS_CLIENT)
+    private injectedRedisClient: ReturnType<typeof createClient> | null,
   ) {}
 
-  async afterInit(server: Server) {
+  afterInit(server: Server) {
     this.logger.log('WebSocket Gateway initialized');
 
     // Use injected Redis client for online user tracking (adapter is set up in main.ts)
@@ -76,33 +85,40 @@ export class ChatGateway
     }
 
     // Authentication middleware
-    server.use(async (socket: AuthenticatedSocket, next) => {
-      try {
-        const token = this.extractToken(socket);
-        if (!token) {
-          return next(new UnauthorizedException('No token provided'));
-        }
-
-        const payload = this.jwtService.verify(token, {
-          secret: this.configService.get<string>('JWT_SECRET'),
-        });
-
-        const user = await this.prisma.nguoiDung.findUnique({
-          where: { id: payload.sub },
-          select: { id: true, name: true, avatar: true },
-        });
-
-        if (!user) {
-          return next(new UnauthorizedException('User not found'));
-        }
-
-        socket.data.user = user;
-        next();
-      } catch (error) {
-        this.logger.error(`Authentication error: ${error.message}`);
-        next(new UnauthorizedException('Invalid token'));
-      }
+    server.use((socket: AuthenticatedSocket, next) => {
+      void this.authenticateSocket(socket, next);
     });
+  }
+
+  private async authenticateSocket(
+    socket: AuthenticatedSocket,
+    next: (err?: Error) => void,
+  ): Promise<void> {
+    try {
+      const token = this.extractToken(socket);
+      if (!token) {
+        return next(new UnauthorizedException('No token provided'));
+      }
+
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+
+      const user = await this.prisma.nguoiDung.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, name: true, avatar: true },
+      });
+
+      if (!user) {
+        return next(new UnauthorizedException('User not found'));
+      }
+
+      socket.data.user = user;
+      next();
+    } catch (error) {
+      this.logger.error(`Authentication error: ${this.getErrMsg(error)}`);
+      next(new UnauthorizedException('Invalid token'));
+    }
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -120,7 +136,7 @@ export class ChatGateway
     // Auto-join user's rooms
     const rooms = await this.chatService.getUserRooms(user.id);
     for (const room of rooms) {
-      client.join(`room:${room.id}`);
+      await client.join(`room:${room.id}`);
     }
 
     // Broadcast online status — deduplicate so each user receives it once
@@ -164,7 +180,9 @@ export class ChatGateway
           });
         }
       } catch (error) {
-        this.logger.error(`Disconnect broadcast error: ${error.message}`);
+        this.logger.error(
+          `Disconnect broadcast error: ${this.getErrMsg(error)}`,
+        );
       }
     }
   }
@@ -179,7 +197,7 @@ export class ChatGateway
       const room = await this.chatService.createRoom(user.id, data);
 
       // Join creator to the room
-      client.join(`room:${room.id}`);
+      await client.join(`room:${room.id}`);
 
       // Notify all members
       for (const member of room.members) {
@@ -187,7 +205,7 @@ export class ChatGateway
         for (const socketId of memberSockets) {
           const memberSocket = this.server.sockets.sockets.get(socketId);
           if (memberSocket) {
-            memberSocket.join(`room:${room.id}`);
+            await memberSocket.join(`room:${room.id}`);
             memberSocket.emit('room-created', room);
           }
         }
@@ -195,7 +213,7 @@ export class ChatGateway
 
       return { status: 'success', room };
     } catch (error) {
-      this.logger.error(`Create room error: ${error.message}`);
+      this.logger.error(`Create room error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to create room' };
     }
   }
@@ -209,7 +227,7 @@ export class ChatGateway
       const user = client.data.user!;
       const room = await this.chatService.getRoom(data.roomId, user.id);
 
-      client.join(`room:${data.roomId}`);
+      await client.join(`room:${data.roomId}`);
 
       // Notify room members
       this.server.to(`room:${data.roomId}`).emit('user-joined-room', {
@@ -224,7 +242,7 @@ export class ChatGateway
 
       return { status: 'success', room, messages };
     } catch (error) {
-      this.logger.error(`Join room error: ${error.message}`);
+      this.logger.error(`Join room error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to join room' };
     }
   }
@@ -237,7 +255,7 @@ export class ChatGateway
     try {
       const user = client.data.user!;
 
-      client.leave(`room:${data.roomId}`);
+      await client.leave(`room:${data.roomId}`);
       await this.chatService.leaveRoom(data.roomId, user.id);
 
       // Notify room members
@@ -248,7 +266,7 @@ export class ChatGateway
 
       return { status: 'success' };
     } catch (error) {
-      this.logger.error(`Leave room error: ${error.message}`);
+      this.logger.error(`Leave room error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to leave room' };
     }
   }
@@ -267,7 +285,7 @@ export class ChatGateway
 
       return { status: 'success', message };
     } catch (error) {
-      this.logger.error(`Send message error: ${error.message}`);
+      this.logger.error(`Send message error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to send message' };
     }
   }
@@ -287,7 +305,7 @@ export class ChatGateway
 
       return { status: 'success', messages };
     } catch (error) {
-      this.logger.error(`Get messages error: ${error.message}`);
+      this.logger.error(`Get messages error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to get messages' };
     }
   }
@@ -311,7 +329,7 @@ export class ChatGateway
 
       return { status: 'success' };
     } catch (error) {
-      this.logger.error(`Mark as read error: ${error.message}`);
+      this.logger.error(`Mark as read error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to mark as read' };
     }
   }
@@ -342,7 +360,7 @@ export class ChatGateway
       const contactIds = new Set<number>();
       for (const room of rooms) {
         for (const member of room.members) {
-          if (member.id !== user.id && await this.isUserOnline(member.id)) {
+          if (member.id !== user.id && (await this.isUserOnline(member.id))) {
             contactIds.add(member.id);
           }
         }
@@ -350,7 +368,7 @@ export class ChatGateway
 
       return { status: 'success', onlineUsers: Array.from(contactIds) };
     } catch (error) {
-      this.logger.error(`Get online users error: ${error.message}`);
+      this.logger.error(`Get online users error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to get online users' };
     }
   }
@@ -362,7 +380,7 @@ export class ChatGateway
       const rooms = await this.chatService.getUserRooms(user.id);
       return { status: 'success', rooms };
     } catch (error) {
-      this.logger.error(`Get rooms error: ${error.message}`);
+      this.logger.error(`Get rooms error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to get rooms' };
     }
   }
@@ -382,7 +400,10 @@ export class ChatGateway
     }
   }
 
-  private async removeOnlineUser(userId: number, socketId: string): Promise<number> {
+  private async removeOnlineUser(
+    userId: number,
+    socketId: string,
+  ): Promise<number> {
     if (this.redisClient) {
       const key = `${ONLINE_KEY_PREFIX}${userId}`;
       await this.redisClient.sRem(key, socketId);
@@ -423,6 +444,12 @@ export class ChatGateway
     } else {
       return this.onlineUsers.has(userId);
     }
+  }
+
+  // ─── Error helper ───
+
+  private getErrMsg(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   // ─── Token extraction ───

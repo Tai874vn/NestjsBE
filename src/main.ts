@@ -6,13 +6,10 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
   app.use(cookieParser());
-
-  app.setGlobalPrefix('api');
-
+  app.setGlobalPrefix(process.env.GLOBAL_PREFIX!);
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL,
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -26,7 +23,6 @@ async function bootstrap() {
     }),
   );
 
-  // Set up Socket.io Redis adapter for cross-instance WebSocket support
   const redisUrl = process.env.REDIS_URL;
   if (redisUrl) {
     const redisIoAdapter = new RedisIoAdapter(app);
@@ -34,8 +30,6 @@ async function bootstrap() {
     app.useWebSocketAdapter(redisIoAdapter);
   }
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}/api`);
+  await app.listen(process.env.PORT!);
 }
-bootstrap();
+void bootstrap();

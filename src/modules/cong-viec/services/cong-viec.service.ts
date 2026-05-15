@@ -4,11 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import {
-  RedisService,
-  CACHE_KEYS,
-  CACHE_TTL,
-} from '../../redis/redis.service';
+import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateCongViecDto } from '../dto/create-cong-viec.dto';
 import { UpdateCongViecDto } from '../dto/update-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
@@ -259,7 +255,9 @@ export class CongViecService {
     }
 
     if (congViec.nguoiTao !== userId && userRole !== 'admin') {
-      throw new ForbiddenException('You can only upload images for your own jobs');
+      throw new ForbiddenException(
+        'You can only upload images for your own jobs',
+      );
     }
 
     const updated = await this.prisma.congViec.update({

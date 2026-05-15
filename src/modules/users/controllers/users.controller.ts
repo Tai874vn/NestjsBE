@@ -115,7 +115,10 @@ export class UsersController {
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req, file, callback) => {
         if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(new BadRequestException('Only image files are allowed'), false);
+          return callback(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
         }
         callback(null, true);
       },

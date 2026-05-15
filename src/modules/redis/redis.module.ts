@@ -87,9 +87,7 @@ const logger = new Logger('RedisModule');
             );
           }
         } else {
-          logger.log(
-            'REDIS_URL not configured. Using in-memory cache.',
-          );
+          logger.log('REDIS_URL not configured. Using in-memory cache.');
         }
 
         // Fallback to in-memory cache

@@ -12,7 +12,9 @@ import {
 } from 'class-validator';
 
 export class CreateRoomDto {
-  @ApiPropertyOptional({ description: 'Room name (optional for private chats)' })
+  @ApiPropertyOptional({
+    description: 'Room name (optional for private chats)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -23,7 +25,10 @@ export class CreateRoomDto {
   @IsInt({ each: true })
   memberIds: number[];
 
-  @ApiPropertyOptional({ description: 'Whether the room is private', default: true })
+  @ApiPropertyOptional({
+    description: 'Whether the room is private',
+    default: true,
+  })
   @IsOptional()
   @IsBoolean()
   isPrivate?: boolean;
@@ -55,14 +60,19 @@ export class GetMessagesDto {
   @Min(1)
   roomId: number;
 
-  @ApiPropertyOptional({ description: 'Number of messages to fetch', default: 50 })
+  @ApiPropertyOptional({
+    description: 'Number of messages to fetch',
+    default: 50,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100)
   limit?: number;
 
-  @ApiPropertyOptional({ description: 'Load messages before this message ID (cursor)' })
+  @ApiPropertyOptional({
+    description: 'Load messages before this message ID (cursor)',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

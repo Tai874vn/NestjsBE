@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma.service';
 import {
-  RedisService,
-  CACHE_KEYS,
-  CACHE_TTL,
-} from '../../redis/redis.service';
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { PrismaService } from '../../../prisma.service';
+import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateBinhLuanDto } from '../dto/create-binh-luan.dto';
 import { UpdateBinhLuanDto } from '../dto/update-binh-luan.dto';
 import { Role } from '../../../common/constants/roles';
@@ -91,7 +91,12 @@ export class BinhLuanService {
     };
   }
 
-  async update(id: number, updateDto: UpdateBinhLuanDto, userId: number, userRole: string) {
+  async update(
+    id: number,
+    updateDto: UpdateBinhLuanDto,
+    userId: number,
+    userRole: Role,
+  ) {
     const binhLuan = await this.prisma.binhLuan.findUnique({
       where: { id },
     });
@@ -128,7 +133,7 @@ export class BinhLuanService {
     };
   }
 
-  async remove(id: number, userId: number, userRole: string) {
+  async remove(id: number, userId: number, userRole: Role) {
     const binhLuan = await this.prisma.binhLuan.findUnique({
       where: { id },
     });

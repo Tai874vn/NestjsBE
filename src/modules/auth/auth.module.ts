@@ -18,7 +18,7 @@ import { PrismaService } from '../../prisma.service';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: '15m', // Match access token cookie expiry
+          expiresIn: '15m',
         },
       }),
     }),

@@ -49,10 +49,7 @@ export class AuthService {
       throw new ConflictException('Email already exists');
     }
 
-    const hashedPassword: string = await bcrypt.hash(
-      signUpDto.password as string,
-      10,
-    );
+    const hashedPassword: string = await bcrypt.hash(signUpDto.password, 10);
 
     const user: NguoiDungType = await this.prisma.nguoiDung.create({
       data: {
@@ -220,7 +217,7 @@ export class AuthService {
 
     const refreshTokenMatches = await bcrypt.compare(
       refreshToken,
-      user.refreshToken as string,
+      user.refreshToken,
     );
 
     if (!refreshTokenMatches) {

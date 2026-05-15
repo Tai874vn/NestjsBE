@@ -20,7 +20,9 @@ export class RedisIoAdapter extends IoAdapter {
       await Promise.all([pubClient.connect(), subClient.connect()]);
 
       this.adapterConstructor = createAdapter(pubClient, subClient);
-      this.logger.log('Socket.io Redis adapter connected — cross-instance messaging enabled');
+      this.logger.log(
+        'Socket.io Redis adapter connected — cross-instance messaging enabled',
+      );
     } catch (error) {
       this.logger.warn(
         `Failed to connect Redis adapter: ${error instanceof Error ? error.message : 'Unknown error'}. Falling back to in-memory adapter.`,

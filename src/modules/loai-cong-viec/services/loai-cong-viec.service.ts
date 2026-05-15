@@ -1,10 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import {
-  RedisService,
-  CACHE_KEYS,
-  CACHE_TTL,
-} from '../../redis/redis.service';
+import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateLoaiCongViecDto } from '../dto/create-loai-cong-viec.dto';
 import { UpdateLoaiCongViecDto } from '../dto/update-loai-cong-viec.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';

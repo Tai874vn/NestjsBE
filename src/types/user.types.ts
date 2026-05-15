@@ -1,3 +1,5 @@
+import { Role } from 'src/common/constants/roles';
+
 export interface JwtPayload {
   sub: number;
   email: string;
@@ -17,5 +19,5 @@ export interface GoogleProfile {
 export class ValidatedUser {
   id: number;
   email: string;
-  role: string;
+  role: Role;
 }
