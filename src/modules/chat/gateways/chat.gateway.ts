@@ -104,7 +104,7 @@ export class ChatGateway
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      const user = await this.prisma.nguoiDung.findUnique({
+      const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
         select: { id: true, name: true, avatar: true },
       });

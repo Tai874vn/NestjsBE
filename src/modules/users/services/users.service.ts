@@ -19,7 +19,7 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto) {
-    const existingUser = await this.prisma.nguoiDung.findUnique({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
     });
 
@@ -29,7 +29,7 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    const user = await this.prisma.nguoiDung.create({
+    const user = await this.prisma.user.create({
       data: {
         ...createUserDto,
         password: hashedPassword,
@@ -61,7 +61,7 @@ export class UsersService {
   }
 
   async findAll() {
-    const users = await this.prisma.nguoiDung.findMany({
+    const users = await this.prisma.user.findMany({
       select: {
         id: true,
         name: true,
@@ -98,7 +98,7 @@ export class UsersService {
       : {};
 
     const [users, total] = await Promise.all([
-      this.prisma.nguoiDung.findMany({
+      this.prisma.user.findMany({
         where,
         skip,
         take: pageSize,
@@ -118,7 +118,7 @@ export class UsersService {
         },
         orderBy: { id: 'desc' },
       }),
-      this.prisma.nguoiDung.count({ where }),
+      this.prisma.user.count({ where }),
     ]);
 
     return {
@@ -144,7 +144,7 @@ export class UsersService {
       return cached;
     }
 
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -153,23 +153,23 @@ export class UsersService {
         skill: true,
         certification: true,
         createdAt: true,
-        congViecs: {
+        jobs: {
           select: {
             id: true,
-            tenCongViec: true,
-            hinhAnh: true,
-            giaTien: true,
-            saoCongViec: true,
-            danhGia: true,
-            moTaNgan: true,
+            title: true,
+            image: true,
+            price: true,
+            rating: true,
+            reviews: true,
+            shortDescription: true,
           },
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
         _count: {
           select: {
-            congViecs: true,
-            binhLuans: true,
+            jobs: true,
+            comments: true,
           },
         },
       },
@@ -199,7 +199,7 @@ export class UsersService {
       return cached;
     }
 
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -231,7 +231,7 @@ export class UsersService {
   }
 
   async searchByName(name: string) {
-    const users = await this.prisma.nguoiDung.findMany({
+    const users = await this.prisma.user.findMany({
       where: {
         name: {
           contains: name,
@@ -261,7 +261,7 @@ export class UsersService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
     });
 
@@ -270,7 +270,7 @@ export class UsersService {
     }
 
     if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingUser = await this.prisma.nguoiDung.findUnique({
+      const existingUser = await this.prisma.user.findUnique({
         where: { email: updateUserDto.email },
       });
 
@@ -279,7 +279,7 @@ export class UsersService {
       }
     }
 
-    const updatedUser = await this.prisma.nguoiDung.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: updateUserDto,
       select: {
@@ -308,7 +308,7 @@ export class UsersService {
   }
 
   async remove(id: number) {
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
     });
 
@@ -316,7 +316,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    await this.prisma.nguoiDung.delete({
+    await this.prisma.user.delete({
       where: { id },
     });
 
@@ -329,7 +329,7 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: number, filename: string) {
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
@@ -337,7 +337,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const updatedUser = await this.prisma.nguoiDung.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { avatar: filename },
       select: {

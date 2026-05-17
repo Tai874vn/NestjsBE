@@ -19,79 +19,79 @@ POST
 /api/auth/signup
 POST
 /api/auth/signin
-BinhLuan
+Comment
 
 GET
-/api/binh-luan
+/api/comments
 POST
-/api/binh-luan
+/api/comments
 PUT
-/api/binh-luan/{id}
+/api/comments/{id}
 DELETE
-/api/binh-luan/{id}
+/api/comments/{id}
 GET
-/api/binh-luan/lay-binh-luan-theo-cong-viec/{MaCongViec}
-ChiTietLoaiCongViec
+/api/comments/by-job/{jobId}
+Subcategory
 
 GET
-/api/chi-tiet-loai-cong-viec
+/api/subcategories
 POST
-/api/chi-tiet-loai-cong-viec
+/api/subcategories
 GET
-/api/chi-tiet-loai-cong-viec/phan-trang-tim-kiem
+/api/subcategories/paginated-search
 GET
-/api/chi-tiet-loai-cong-viec/{id}
+/api/subcategories/{id}
 PUT
-/api/chi-tiet-loai-cong-viec/{id}
+/api/subcategories/{id}
 DELETE
-/api/chi-tiet-loai-cong-viec/{id}
+/api/subcategories/{id}
 POST
-/api/chi-tiet-loai-cong-viec/them-nhom-chi-tiet-loai
+/api/subcategories/create-group
 POST
-/api/chi-tiet-loai-cong-viec/upload-hinh-nhom-loai-cong-viec/{MaNhomLoaiCongViec}
+/api/subcategories/upload-image/{subcategoryId}
 PUT
-/api/chi-tiet-loai-cong-viec/sua-nhom-chi-tiet-loai/{id}
-CongViec
+/api/subcategories/update-group/{id}
+Job
 
 GET
-/api/cong-viec
+/api/jobs
 POST
-/api/cong-viec
+/api/jobs
 GET
-/api/cong-viec/phan-trang-tim-kiem
+/api/jobs/paginated-search
 GET
-/api/cong-viec/{id}
+/api/jobs/{id}
 PUT
-/api/cong-viec/{id}
+/api/jobs/{id}
 DELETE
-/api/cong-viec/{id}
+/api/jobs/{id}
 POST
-/api/cong-viec/upload-hinh-cong-viec/{MaCongViec}
+/api/jobs/upload-image/{jobId}
 GET
-/api/cong-viec/lay-menu-loai-cong-viec
+/api/jobs/category-menu
 GET
-/api/cong-viec/lay-chi-tiet-loai-cong-viec/{MaLoaiCongViec}
+/api/jobs/subcategories/by-category/{categoryId}
 GET
-/api/cong-viec/lay-cong-viec-theo-chi-tiet-loai/{MaChiTietLoai}
+/api/jobs/by-subcategory/{subcategoryId}
 GET
-/api/cong-viec/lay-cong-viec-chi-tiet/{MaCongViec}
+/api/jobs/details/{jobId}
 GET
-/api/cong-viec/lay-danh-sach-cong-viec-theo-ten/{TenCongViec}
-LoaiCongViec
+/api/jobs/search/{name}
+Category
 
 GET
-/api/loai-cong-viec
+/api/categories
 POST
-/api/loai-cong-viec
+/api/categories
 GET
-/api/loai-cong-viec/phan-trang-tim-kiem
+/api/categories/paginated-search
 GET
-/api/loai-cong-viec/{id}
+/api/categories/{id}
 PUT
-/api/loai-cong-viec/{id}
+/api/categories/{id}
 DELETE
-/api/loai-cong-viec/{id}
-NguoiDung
+/api/categories/{id}
+User
 
 GET
 /api/users
@@ -100,39 +100,39 @@ POST
 DELETE
 /api/users
 GET
-/api/users/phan-trang-tim-kiem
+/api/users/paginated-search
 GET
 /api/users/{id}
 PUT
 /api/users/{id}
 GET
-/api/users/search/{TenNguoiDung}
+/api/users/search/{name}
 POST
 /api/users/upload-avatar
 Skill
 
 GET
 /api/skill
-ThueCongViec
+Hire
 
 GET
-/api/thue-cong-viec
+/api/hires
 POST
-/api/thue-cong-viec
+/api/hires
 GET
-/api/thue-cong-viec/phan-trang-tim-kiem
+/api/hires/paginated-search
 GET
-/api/thue-cong-viec/{id}
+/api/hires/{id}
 PUT
-/api/thue-cong-viec/{id}
+/api/hires/{id}
 DELETE
-/api/thue-cong-viec/{id}
+/api/hires/{id}
 GET
-/api/thue-cong-viec/lay-danh-sach-da-thue
+/api/hires/my-hires
 POST
-/api/thue-cong-viec/hoan-thanh-cong-viec/{MaThueCongViec}
+/api/hires/complete/{hireId}
 Models
-ThongTinNguoiDung{
+ThongTinUser{
 id integer($int32)
 name	string
 email	string
@@ -148,41 +148,41 @@ DangNhapView{
 email	string
 password	string
 }
-BinhLuanViewModel{
+CommentViewModel{
 id	integer($int32)
-maCongViec integer($int32)
-maNguoiBinhLuan	integer($int32)
-ngayBinhLuan string
-noiDung string
-saoBinhLuan integer($int32)
+jobId integer($int32)
+commenterId	integer($int32)
+commentedAt string
+content string
+rating integer($int32)
 }
-ChiTietLoaiView{
+SubcategoryView{
 id	integer($int32)
-tenChiTiet string
+name string
 }
-ChiTietLoaiCongViecViewModel{
+SubcategoryViewModel{
 id integer($int32)
-tenChiTiet	string
-maLoaiCongViec	integer($int32)
-danhSachChiTiet [...]
+name	string
+categoryId	integer($int32)
+subcategories [...]
 }
-CongViecViewModel{
+JobViewModel{
 id integer($int32)
-tenCongViec	string
-danhGia	integer($int32)
-giaTien integer($int32)
-nguoiTao	integer($int32)
-hinhAnh string
-moTa string
-maChiTietLoaiCongViec integer($int32)
-moTaNgan	string
-saoCongViec	integer($int32)
+title	string
+reviews	integer($int32)
+price integer($int32)
+creatorId	integer($int32)
+image string
+description string
+subcategoryId integer($int32)
+shortDescription	string
+rating	integer($int32)
 }
-LoaiCongViecViewModel{
+CategoryViewModel{
 id integer($int32)
-tenLoaiCongViec	string
+name	string
 }
-CapNhatNguoiDung{
+CapNhatUser{
 id	integer($int32)
 name string
 email string
@@ -193,10 +193,10 @@ role string
 skill [...]
 certification [...]
 }
-ThueCongViecViewModel{
+HireViewModel{
 id integer($int32)
-maCongViec	integer($int32)
-maNguoiThue integer($int32)
-ngayThue string
-hoanThanh boolean
+jobId	integer($int32)
+hirerId integer($int32)
+hiredAt string
+completed boolean
 }

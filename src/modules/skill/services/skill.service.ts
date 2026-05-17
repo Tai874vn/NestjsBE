@@ -13,7 +13,7 @@ export class SkillService {
     return this.redisService.getOrSet(
       CACHE_KEYS.SKILL_LIST,
       async () => {
-        const users = await this.prisma.nguoiDung.findMany({
+        const users = await this.prisma.user.findMany({
           select: {
             id: true,
             name: true,

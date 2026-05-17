@@ -7,11 +7,11 @@ import { AppService } from './app.service';
 import { RedisModule } from './modules/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
-import { LoaiCongViecModule } from './modules/loai-cong-viec/loai-cong-viec.module';
-import { ChiTietLoaiCongViecModule } from './modules/chi-tiet-loai-cong-viec/chi-tiet-loai-cong-viec.module';
-import { CongViecModule } from './modules/cong-viec/cong-viec.module';
-import { BinhLuanModule } from './modules/binh-luan/binh-luan.module';
-import { ThueCongViecModule } from './modules/thue-cong-viec/thue-cong-viec.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { SubcategoriesModule } from './modules/subcategories/subcategories.module';
+import { JobsModule } from './modules/jobs/jobs.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HiresModule } from './modules/hires/hires.module';
 import { SkillModule } from './modules/skill/skill.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -34,11 +34,11 @@ import { envValidationSchema } from './config/env.validation';
     CloudinaryModule,
     AuthModule,
     UsersModule,
-    LoaiCongViecModule,
-    ChiTietLoaiCongViecModule,
-    CongViecModule,
-    BinhLuanModule,
-    ThueCongViecModule,
+    CategoriesModule,
+    SubcategoriesModule,
+    JobsModule,
+    CommentsModule,
+    HiresModule,
     SkillModule,
     ChatModule,
   ],

@@ -5,14 +5,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { NguoiDung } from '@prisma/client';
+import { User } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
 import { ApiResponse, JwtPayload } from '../../../types';
 import { Role } from '../../../common/constants/roles';
 
-type NguoiDungType = NguoiDung;
+type UserType = User;
 
 @Injectable()
 export class AuthService {
@@ -34,13 +34,13 @@ export class AuthService {
 
   async signUp(signUpDto: SignUpDto): Promise<
     ApiResponse<{
-      user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
+      user: Omit<UserType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
     }>
   > {
-    const existingUser: NguoiDungType | null =
-      await this.prisma.nguoiDung.findUnique({
+    const existingUser: UserType | null =
+      await this.prisma.user.findUnique({
         where: { email: signUpDto.email },
       });
 
@@ -50,7 +50,7 @@ export class AuthService {
 
     const hashedPassword: string = await bcrypt.hash(signUpDto.password, 10);
 
-    const user: NguoiDungType = await this.prisma.nguoiDung.create({
+    const user: UserType = await this.prisma.user.create({
       data: {
         name: signUpDto.name,
         email: signUpDto.email,
@@ -83,12 +83,12 @@ export class AuthService {
 
   async signIn(signInDto: SignInDto): Promise<
     ApiResponse<{
-      user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
+      user: Omit<UserType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
     }>
   > {
-    const user: NguoiDungType | null = await this.prisma.nguoiDung.findUnique({
+    const user: UserType | null = await this.prisma.user.findUnique({
       where: { email: signInDto.email },
     });
 
@@ -122,8 +122,8 @@ export class AuthService {
     };
   }
 
-  async googleLogin(user: NguoiDungType): Promise<{
-    user: Omit<NguoiDungType, 'password' | 'refreshToken'>;
+  async googleLogin(user: UserType): Promise<{
+    user: Omit<UserType, 'password' | 'refreshToken'>;
     token: string;
     refreshToken: string;
   }> {
@@ -143,12 +143,12 @@ export class AuthService {
 
   async getCurrentUser(
     userId: number,
-  ): Promise<ApiResponse<Omit<NguoiDungType, 'password' | 'refreshToken'>>> {
+  ): Promise<ApiResponse<Omit<UserType, 'password' | 'refreshToken'>>> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
 
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -196,7 +196,7 @@ export class AuthService {
     refreshToken: string,
   ): Promise<void> {
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-    await this.prisma.nguoiDung.update({
+    await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: hashedRefreshToken },
     });
@@ -206,7 +206,7 @@ export class AuthService {
     userId: number,
     refreshToken: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const user = await this.prisma.nguoiDung.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
@@ -234,7 +234,7 @@ export class AuthService {
   }
 
   async logout(userId: number): Promise<void> {
-    await this.prisma.nguoiDung.update({
+    await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: null },
     });

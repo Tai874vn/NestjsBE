@@ -6,11 +6,11 @@ datasource db {
   provider = "postgresql"
 }
 
-model NguoiDung {
+model User {
   id            Int      @id @default(autoincrement())
   name          String
   email         String   @unique
-  password      String?  @map("passWord")
+  password      String?
   phone         String?
   birthDay      String?
   gender        String?
@@ -23,114 +23,113 @@ model NguoiDung {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  binhLuans        BinhLuan[]
-  thueCongViecs    ThueCongViec[]
-  congViecs        CongViec[]         @relation("CongViecNguoiTao")
-  chatRoomsCreated ChatRoom[]         @relation("ChatRoomCreator")
+  comments         Comment[]
+  hires            Hire[]
+  jobs             Job[]            @relation("JobCreator")
+  chatRoomsCreated ChatRoom[]       @relation("ChatRoomCreator")
   chatRoomMembers  ChatRoomMember[]
   chatMessages     ChatMessage[]
 
-  @@map("nguoi_dung")
+  @@map("users")
 }
 
-model LoaiCongViec {
-  id              Int    @id @default(autoincrement())
-  tenLoaiCongViec String
+model Category {
+  id   Int    @id @default(autoincrement())
+  name String
 
-  chiTietLoaiCongViecs ChiTietLoaiCongViec[]
+  subcategories Subcategory[]
 
-  @@map("loai_cong_viec")
+  @@map("categories")
 }
 
-model ChiTietLoaiCongViec {
-  id             Int     @id @default(autoincrement())
-  tenChiTiet     String
-  hinhAnh        String?
-  maLoaiCongViec Int
+model Subcategory {
+  id         Int     @id @default(autoincrement())
+  name       String
+  image      String?
+  categoryId Int
 
-  loaiCongViec LoaiCongViec @relation(fields: [maLoaiCongViec], references: [id], onDelete: Cascade)
-  congViecs    CongViec[]
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  jobs     Job[]
 
-  @@map("chi_tiet_loai_cong_viec")
+  @@map("subcategories")
 }
 
-model CongViec {
-  id            Int      @id @default(autoincrement())
-  tenCongViec   String
-  danhGia       Int      @default(0)
-  giaTien       Int
-  hinhAnh       String?
-  moTa          String?
-  moTaNgan      String?
-  saoCongViec   Int      @default(0)
-  maChiTietLoai Int
-  nguoiTao      Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model Job {
+  id               Int      @id @default(autoincrement())
+  title            String
+  reviews          Int      @default(0)
+  price            Int
+  image            String?
+  description      String?
+  shortDescription String?
+  rating           Int      @default(0)
+  subcategoryId    Int
+  creatorId        Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  chiTietLoaiCongViec ChiTietLoaiCongViec @relation(fields: [maChiTietLoai], references: [id], onDelete: Cascade)
-  nguoiDung           NguoiDung           @relation("CongViecNguoiTao", fields: [nguoiTao], references: [id], onDelete: Cascade)
-  binhLuans           BinhLuan[]
-  thueCongViecs       ThueCongViec[]
+  subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  user        User        @relation("JobCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  hires       Hire[]
 
-  @@map("cong_viec")
+  @@map("jobs")
 }
 
-model BinhLuan {
-  id              Int      @id @default(autoincrement())
-  maCongViec      Int
-  maNguoiBinhLuan Int
-  ngayBinhLuan    DateTime @default(now())
-  noiDung         String
-  saoBinhLuan     Int
-
-  congViec  CongViec  @relation(fields: [maCongViec], references: [id], onDelete: Cascade)
-  nguoiDung NguoiDung @relation(fields: [maNguoiBinhLuan], references: [id], onDelete: Cascade)
-
-  @@map("binh_luan")
-}
-
-model ThueCongViec {
+model Comment {
   id          Int      @id @default(autoincrement())
-  maCongViec  Int
-  maNguoiThue Int
-  ngayThue    DateTime @default(now())
-  hoanThanh   Boolean  @default(false)
+  jobId       Int
+  commenterId Int
+  commentedAt DateTime @default(now())
+  content     String
+  rating      Int
 
-  congViec  CongViec  @relation(fields: [maCongViec], references: [id], onDelete: Cascade)
-  nguoiDung NguoiDung @relation(fields: [maNguoiThue], references: [id], onDelete: Cascade)
+  job       Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [commenterId], references: [id], onDelete: Cascade)
 
-  @@map("thue_cong_viec")
+  @@map("comments")
 }
 
-// Chat Models
+model Hire {
+  id        Int      @id @default(autoincrement())
+  jobId     Int
+  hirerId   Int
+  hiredAt   DateTime @default(now())
+  completed Boolean  @default(false)
+
+  job   Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user  User @relation(fields: [hirerId], references: [id], onDelete: Cascade)
+
+  @@map("hires")
+}
+
 model ChatRoom {
-  id          Int      @id @default(autoincrement())
-  name        String?
-  isPrivate   Boolean  @default(true)
-  creatorId   Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  name      String?
+  isPrivate Boolean  @default(true)
+  creatorId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  creator  NguoiDung        @relation("ChatRoomCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  creator  User             @relation("ChatRoomCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   members  ChatRoomMember[]
   messages ChatMessage[]
 
-  @@map("chat_room")
+  @@map("chat_rooms")
 }
 
 model ChatRoomMember {
-  id         Int       @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   roomId     Int
   userId     Int
-  joinedAt   DateTime  @default(now())
-  lastReadAt DateTime  @default(now())
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
 
-  room ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user NguoiDung @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
-  @@map("chat_room_member")
+  @@map("chat_room_members")
 }
 
 model ChatMessage {
@@ -141,8 +140,8 @@ model ChatMessage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  room   ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender NguoiDung @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
-  @@map("chat_message")
+  @@map("chat_messages")
 }

@@ -2,12 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
-import { NguoiDung } from '@prisma/client';
+import { User } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { GoogleProfile } from '../../../types';
 import { Role } from '../../../common/constants/roles';
 
-type NguoiDungType = NguoiDung;
+type UserType = User;
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -31,23 +31,23 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): Promise<void> {
     const { id, emails, displayName, photos } = profile;
 
-    let user: NguoiDungType | null = await this.prisma.nguoiDung.findUnique({
+    let user: UserType | null = await this.prisma.user.findUnique({
       where: { googleId: id },
     });
 
     if (!user) {
-      const existingUser: NguoiDungType | null =
-        await this.prisma.nguoiDung.findUnique({
+      const existingUser: UserType | null =
+        await this.prisma.user.findUnique({
           where: { email: emails[0].value },
         });
 
       if (existingUser) {
-        user = await this.prisma.nguoiDung.update({
+        user = await this.prisma.user.update({
           where: { id: existingUser.id },
           data: { googleId: id },
         });
       } else {
-        user = await this.prisma.nguoiDung.create({
+        user = await this.prisma.user.create({
           data: {
             googleId: id,
             email: emails[0].value,

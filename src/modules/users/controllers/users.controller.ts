@@ -61,17 +61,17 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
-  @Get('phan-trang-tim-kiem')
+  @Get('paginated-search')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Search users with pagination (Admin only)' })
   findAllWithPagination(@Query() paginationDto: PaginationDto) {
     return this.usersService.findAllWithPagination(paginationDto);
   }
 
-  @Get('search/:TenNguoiDung')
+  @Get('search/:name')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Search users by name (Admin only)' })
-  searchByName(@Param('TenNguoiDung') name: string) {
+  searchByName(@Param('name') name: string) {
     return this.usersService.searchByName(name);
   }
 
