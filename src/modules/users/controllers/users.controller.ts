@@ -199,6 +199,10 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
+    if (!file) {
+      throw new BadRequestException('Avatar file is required');
+    }
+
     const result = await this.cloudinaryService.uploadImage(file, 'avatars');
     return this.usersService.uploadAvatar(user.id, result.secure_url);
   }
@@ -224,6 +228,10 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
+    if (!file) {
+      throw new BadRequestException('Cover image file is required');
+    }
+
     const result = await this.cloudinaryService.uploadImage(file, 'covers');
     return this.usersService.uploadCover(user.id, result.secure_url);
   }

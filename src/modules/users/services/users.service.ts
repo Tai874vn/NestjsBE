@@ -454,12 +454,15 @@ export class UsersService {
     });
 
     // Invalidate user caches
-    await this.updateProfileCompletion(userId);
+    const profileCompleted = await this.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Avatar uploaded successfully',
-      content: updatedUser,
+      content: {
+        ...updatedUser,
+        profileCompleted,
+      },
     };
   }
 
@@ -546,12 +549,15 @@ export class UsersService {
       },
     });
 
-    await this.updateProfileCompletion(userId);
+    const profileCompleted = await this.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Profile updated successfully',
-      content: updatedUser,
+      content: {
+        ...updatedUser,
+        profileCompleted,
+      },
     };
   }
 
@@ -712,12 +718,15 @@ export class UsersService {
       },
     });
 
-    await this.updateProfileCompletion(userId);
+    const profileCompleted = await this.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Cover image uploaded successfully',
-      content: updatedUser,
+      content: {
+        ...updatedUser,
+        profileCompleted,
+      },
     };
   }
 
@@ -772,7 +781,7 @@ export class UsersService {
     });
   }
 
-  private async updateProfileCompletion(userId: number) {
+  private async updateProfileCompletion(userId: number): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -788,7 +797,7 @@ export class UsersService {
     });
 
     if (!user) {
-      return;
+      return false;
     }
 
     const profileCompleted = Boolean(
@@ -803,6 +812,8 @@ export class UsersService {
       where: { id: userId },
       data: { profileCompleted },
     });
+
+    return profileCompleted;
   }
 
   private withLegacyProfileSkills<T extends { name: string }>(
