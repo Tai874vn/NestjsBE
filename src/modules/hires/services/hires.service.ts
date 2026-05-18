@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
+import { RedisService } from '../../redis/redis.service';
 import { CreateHireDto } from '../dto/create-hire.dto';
 import { UpdateHireDto } from '../dto/update-hire.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
@@ -12,7 +13,10 @@ import { Role } from '../../../common/constants/roles';
 
 @Injectable()
 export class HiresService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   async create(createDto: CreateHireDto, userId: number) {
     const job = await this.prisma.job.findUnique({
@@ -46,6 +50,8 @@ export class HiresService {
         },
       },
     });
+
+    await this.redisService.invalidateUserCaches(job.creatorId);
 
     return {
       message: 'Job hired successfully',
@@ -149,6 +155,13 @@ export class HiresService {
   ) {
     const hire = await this.prisma.hire.findUnique({
       where: { id },
+      include: {
+        job: {
+          select: {
+            creatorId: true,
+          },
+        },
+      },
     });
 
     if (!hire) {
@@ -175,6 +188,8 @@ export class HiresService {
       },
     });
 
+    await this.redisService.invalidateUserCaches(hire.job.creatorId);
+
     return {
       message: 'Hired job updated successfully',
       content: updated,
@@ -184,6 +199,13 @@ export class HiresService {
   async remove(id: number, userId: number, userRole: Role) {
     const hire = await this.prisma.hire.findUnique({
       where: { id },
+      include: {
+        job: {
+          select: {
+            creatorId: true,
+          },
+        },
+      },
     });
 
     if (!hire) {
@@ -197,6 +219,8 @@ export class HiresService {
     await this.prisma.hire.delete({
       where: { id },
     });
+
+    await this.redisService.invalidateUserCaches(hire.job.creatorId);
 
     return {
       message: 'Hired job deleted successfully',
@@ -234,6 +258,13 @@ export class HiresService {
   async completeJob(id: number, userId: number, userRole: Role) {
     const hire = await this.prisma.hire.findUnique({
       where: { id },
+      include: {
+        job: {
+          select: {
+            creatorId: true,
+          },
+        },
+      },
     });
 
     if (!hire) {
@@ -259,6 +290,8 @@ export class HiresService {
         },
       },
     });
+
+    await this.redisService.invalidateUserCaches(hire.job.creatorId);
 
     return {
       message: 'Job completed successfully',

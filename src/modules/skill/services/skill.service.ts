@@ -13,6 +13,17 @@ export class SkillService {
     return this.redisService.getOrSet(
       CACHE_KEYS.SKILL_LIST,
       async () => {
+        const profileSkills = await this.prisma.userSkill.findMany({
+          select: {
+            name: true,
+          },
+          orderBy: {
+            name: 'asc',
+          },
+        });
+
+        const structuredSkills = profileSkills.map((skill) => skill.name);
+
         const users = await this.prisma.user.findMany({
           select: {
             id: true,
@@ -26,7 +37,7 @@ export class SkillService {
           },
         });
 
-        const skills = users
+        const legacySkills = users
           .filter((user) => user.skill)
           .flatMap((user) => {
             try {
@@ -35,8 +46,11 @@ export class SkillService {
             } catch {
               return [];
             }
-          })
-          .filter((skill, index, self) => self.indexOf(skill) === index);
+          });
+
+        const skills = [...structuredSkills, ...legacySkills].filter(
+          (skill, index, self) => self.indexOf(skill) === index,
+        );
 
         return {
           message: 'Get skills successfully',

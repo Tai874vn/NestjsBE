@@ -124,9 +124,11 @@ export class RedisService {
    */
   async invalidateUserCaches(userId?: number): Promise<void> {
     await this.del(CACHE_KEYS.USER_LIST);
+    await this.del(CACHE_KEYS.SKILL_LIST);
 
     if (userId) {
       await this.del(`${CACHE_KEYS.USER}${userId}`);
+      await this.del(`${CACHE_KEYS.USER}profile:${userId}`);
     }
   }
 

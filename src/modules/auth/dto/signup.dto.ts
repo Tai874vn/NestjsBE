@@ -39,4 +39,20 @@ export class SignUpDto {
   @IsOptional()
   @IsString()
   certification?: string;
+
+  @IsOptional()
+  @IsString()
+  headline?: string;
+
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  website?: string;
 }

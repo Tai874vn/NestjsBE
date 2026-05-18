@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Put,
+  Patch,
   Param,
   Delete,
   Query,
@@ -20,6 +21,12 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../services/users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import {
+  ReplaceProfileCertificationsDto,
+  ReplaceProfileSkillsDto,
+  UpdateMyProfileDto,
+  UpsertPortfolioItemDto,
+} from '../dto/profile.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -73,6 +80,70 @@ export class UsersController {
   @ApiOperation({ summary: 'Search users by name (Admin only)' })
   searchByName(@Param('name') name: string) {
     return this.usersService.searchByName(name);
+  }
+
+  @Get('me/profile')
+  @ApiOperation({ summary: 'Get editable profile for current user' })
+  getMyProfile(@CurrentUser() user: ValidatedUser) {
+    return this.usersService.getMyProfile(user.id);
+  }
+
+  @Patch('me/profile')
+  @ApiOperation({ summary: 'Update editable profile fields for current user' })
+  updateMyProfile(
+    @Body() updateProfileDto: UpdateMyProfileDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.updateMyProfile(user.id, updateProfileDto);
+  }
+
+  @Put('me/profile/skills')
+  @ApiOperation({ summary: 'Replace current user profile skills' })
+  replaceProfileSkills(
+    @Body() replaceSkillsDto: ReplaceProfileSkillsDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.replaceProfileSkills(user.id, replaceSkillsDto);
+  }
+
+  @Put('me/profile/certifications')
+  @ApiOperation({ summary: 'Replace current user profile certifications' })
+  replaceProfileCertifications(
+    @Body() replaceCertificationsDto: ReplaceProfileCertificationsDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.replaceProfileCertifications(
+      user.id,
+      replaceCertificationsDto,
+    );
+  }
+
+  @Post('me/profile/portfolio')
+  @ApiOperation({ summary: 'Create current user portfolio item' })
+  createPortfolioItem(
+    @Body() portfolioDto: UpsertPortfolioItemDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.createPortfolioItem(user.id, portfolioDto);
+  }
+
+  @Put('me/profile/portfolio/:id')
+  @ApiOperation({ summary: 'Update current user portfolio item' })
+  updatePortfolioItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() portfolioDto: UpsertPortfolioItemDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.updatePortfolioItem(user.id, id, portfolioDto);
+  }
+
+  @Delete('me/profile/portfolio/:id')
+  @ApiOperation({ summary: 'Delete current user portfolio item' })
+  deletePortfolioItem(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.deletePortfolioItem(user.id, id);
   }
 
   @Get(':id')
@@ -130,5 +201,30 @@ export class UsersController {
   ) {
     const result = await this.cloudinaryService.uploadImage(file, 'avatars');
     return this.usersService.uploadAvatar(user.id, result.secure_url);
+  }
+
+  @Post('upload-cover')
+  @ApiOperation({ summary: 'Upload cover image for current user' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
+          return callback(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async uploadCover(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    const result = await this.cloudinaryService.uploadImage(file, 'covers');
+    return this.usersService.uploadCover(user.id, result.secure_url);
   }
 }

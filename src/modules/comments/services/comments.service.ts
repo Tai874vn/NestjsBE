@@ -36,6 +36,7 @@ export class CommentsService {
 
     // Invalidate comment caches for the job
     await this.redisService.invalidateCommentCaches(createDto.jobId);
+    await this.redisService.invalidateUserCaches(comment.job.creatorId);
 
     return {
       message: 'Comment created successfully',
@@ -99,6 +100,13 @@ export class CommentsService {
   ) {
     const comment = await this.prisma.comment.findUnique({
       where: { id },
+      include: {
+        job: {
+          select: {
+            creatorId: true,
+          },
+        },
+      },
     });
 
     if (!comment) {
@@ -126,6 +134,7 @@ export class CommentsService {
 
     // Invalidate comment caches
     await this.redisService.invalidateCommentCaches(comment.jobId);
+    await this.redisService.invalidateUserCaches(comment.job.creatorId);
 
     return {
       message: 'Comment updated successfully',
@@ -136,6 +145,13 @@ export class CommentsService {
   async remove(id: number, userId: number, userRole: Role) {
     const comment = await this.prisma.comment.findUnique({
       where: { id },
+      include: {
+        job: {
+          select: {
+            creatorId: true,
+          },
+        },
+      },
     });
 
     if (!comment) {
@@ -152,6 +168,7 @@ export class CommentsService {
 
     // Invalidate comment caches
     await this.redisService.invalidateCommentCaches(comment.jobId);
+    await this.redisService.invalidateUserCaches(comment.job.creatorId);
 
     return {
       message: 'Comment deleted successfully',

@@ -2,12 +2,20 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import {
+  ReplaceProfileCertificationsDto,
+  ReplaceProfileSkillsDto,
+  UpdateMyProfileDto,
+  UpsertPortfolioItemDto,
+} from '../dto/profile.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 
@@ -45,7 +53,13 @@ export class UsersService {
         role: true,
         skill: true,
         certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
         avatar: true,
+        coverImage: true,
+        profileCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -112,7 +126,13 @@ export class UsersService {
           role: true,
           skill: true,
           certification: true,
+          headline: true,
+          bio: true,
+          location: true,
+          website: true,
           avatar: true,
+          coverImage: true,
+          profileCompleted: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -150,6 +170,21 @@ export class UsersService {
         id: true,
         name: true,
         avatar: true,
+        coverImage: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
+        profileCompleted: true,
+        profileSkills: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        profileCertifications: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        portfolioItems: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
         skill: true,
         certification: true,
         createdAt: true,
@@ -162,6 +197,7 @@ export class UsersService {
             rating: true,
             reviews: true,
             shortDescription: true,
+            createdAt: true,
           },
           orderBy: { createdAt: 'desc' },
           take: 20,
@@ -179,9 +215,46 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    const [commentStats, completedHireCount] = await Promise.all([
+      this.prisma.comment.aggregate({
+        where: {
+          job: {
+            creatorId: id,
+          },
+        },
+        _avg: {
+          rating: true,
+        },
+        _count: {
+          rating: true,
+        },
+      }),
+      this.prisma.hire.count({
+        where: {
+          completed: true,
+          job: {
+            creatorId: id,
+          },
+        },
+      }),
+    ]);
+
     const result = {
       message: 'Get public profile successfully',
-      content: user,
+      content: {
+        ...user,
+        profileSkills: this.withLegacyProfileSkills(user.profileSkills, user.skill),
+        profileCertifications: this.withLegacyProfileCertifications(
+          user.profileCertifications,
+          user.certification,
+        ),
+        stats: {
+          totalJobs: user._count.jobs,
+          totalComments: commentStats._count.rating,
+          averageRating: commentStats._avg.rating ?? 0,
+          completedHires: completedHireCount,
+        },
+      },
     };
 
     await this.redisService.set(cacheKey, result, CACHE_TTL.MEDIUM);
@@ -211,7 +284,13 @@ export class UsersService {
         role: true,
         skill: true,
         certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
         avatar: true,
+        coverImage: true,
+        profileCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -248,7 +327,13 @@ export class UsersService {
         role: true,
         skill: true,
         certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
         avatar: true,
+        coverImage: true,
+        profileCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -292,7 +377,13 @@ export class UsersService {
         role: true,
         skill: true,
         certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
         avatar: true,
+        coverImage: true,
+        profileCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -350,18 +441,425 @@ export class UsersService {
         role: true,
         skill: true,
         certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
         avatar: true,
+        coverImage: true,
+        profileCompleted: true,
         createdAt: true,
         updatedAt: true,
       },
     });
 
     // Invalidate user caches
+    await this.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Avatar uploaded successfully',
       content: updatedUser,
     };
+  }
+
+  async getMyProfile(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        birthDay: true,
+        gender: true,
+        role: true,
+        skill: true,
+        certification: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
+        avatar: true,
+        coverImage: true,
+        profileCompleted: true,
+        createdAt: true,
+        updatedAt: true,
+        profileSkills: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        profileCertifications: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        portfolioItems: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return {
+      message: 'Get my profile successfully',
+      content: {
+        ...user,
+        profileSkills: this.withLegacyProfileSkills(user.profileSkills, user.skill),
+        profileCertifications: this.withLegacyProfileCertifications(
+          user.profileCertifications,
+          user.certification,
+        ),
+      },
+    };
+  }
+
+  async updateMyProfile(userId: number, dto: UpdateMyProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...dto,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        birthDay: true,
+        gender: true,
+        role: true,
+        headline: true,
+        bio: true,
+        location: true,
+        website: true,
+        avatar: true,
+        coverImage: true,
+        profileCompleted: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Profile updated successfully',
+      content: updatedUser,
+    };
+  }
+
+  async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
+    const skills = dto.skills.map((skill, index) => ({
+      name: skill.name.trim(),
+      level: skill.level?.trim(),
+      sortOrder: skill.sortOrder ?? index,
+    }));
+
+    if (skills.some((skill) => !skill.name)) {
+      throw new BadRequestException('Skill name is required');
+    }
+
+    const uniqueNames = new Set(skills.map((skill) => skill.name.toLowerCase()));
+    if (uniqueNames.size !== skills.length) {
+      throw new BadRequestException('Duplicate skills are not allowed');
+    }
+
+    await this.ensureUserExists(userId);
+
+    await this.prisma.$transaction([
+      this.prisma.userSkill.deleteMany({ where: { userId } }),
+      this.prisma.userSkill.createMany({
+        data: skills.map((skill) => ({
+          userId,
+          ...skill,
+        })),
+      }),
+    ]);
+
+    await this.updateLegacyProfileArrays(userId);
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return this.getMyProfile(userId);
+  }
+
+  async replaceProfileCertifications(
+    userId: number,
+    dto: ReplaceProfileCertificationsDto,
+  ) {
+    const certifications = dto.certifications.map((certification, index) => ({
+      name: certification.name.trim(),
+      issuer: certification.issuer?.trim(),
+      issuedAt: certification.issuedAt ? new Date(certification.issuedAt) : null,
+      expiresAt: certification.expiresAt
+        ? new Date(certification.expiresAt)
+        : null,
+      credentialUrl: certification.credentialUrl?.trim(),
+      credentialId: certification.credentialId?.trim(),
+      sortOrder: certification.sortOrder ?? index,
+    }));
+
+    if (certifications.some((certification) => !certification.name)) {
+      throw new BadRequestException('Certification name is required');
+    }
+
+    await this.ensureUserExists(userId);
+
+    await this.prisma.$transaction([
+      this.prisma.userCertification.deleteMany({ where: { userId } }),
+      this.prisma.userCertification.createMany({
+        data: certifications.map((certification) => ({
+          userId,
+          ...certification,
+        })),
+      }),
+    ]);
+
+    await this.updateLegacyProfileArrays(userId);
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return this.getMyProfile(userId);
+  }
+
+  async createPortfolioItem(userId: number, dto: UpsertPortfolioItemDto) {
+    await this.ensureUserExists(userId);
+
+    const item = await this.prisma.userPortfolioItem.create({
+      data: {
+        userId,
+        title: dto.title.trim(),
+        description: dto.description?.trim(),
+        image: dto.image?.trim(),
+        url: dto.url?.trim(),
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Portfolio item created successfully',
+      content: item,
+    };
+  }
+
+  async updatePortfolioItem(
+    userId: number,
+    itemId: number,
+    dto: UpsertPortfolioItemDto,
+  ) {
+    await this.ensurePortfolioOwnership(userId, itemId);
+
+    const item = await this.prisma.userPortfolioItem.update({
+      where: { id: itemId },
+      data: {
+        title: dto.title.trim(),
+        description: dto.description?.trim(),
+        image: dto.image?.trim(),
+        url: dto.url?.trim(),
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Portfolio item updated successfully',
+      content: item,
+    };
+  }
+
+  async deletePortfolioItem(userId: number, itemId: number) {
+    await this.ensurePortfolioOwnership(userId, itemId);
+
+    await this.prisma.userPortfolioItem.delete({
+      where: { id: itemId },
+    });
+
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Portfolio item deleted successfully',
+    };
+  }
+
+  async uploadCover(userId: number, filename: string) {
+    await this.ensureUserExists(userId);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: { coverImage: filename },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        coverImage: true,
+        headline: true,
+        bio: true,
+        profileCompleted: true,
+      },
+    });
+
+    await this.updateProfileCompletion(userId);
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Cover image uploaded successfully',
+      content: updatedUser,
+    };
+  }
+
+  private async ensureUserExists(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+  }
+
+  private async ensurePortfolioOwnership(userId: number, itemId: number) {
+    const item = await this.prisma.userPortfolioItem.findUnique({
+      where: { id: itemId },
+      select: { userId: true },
+    });
+
+    if (!item) {
+      throw new NotFoundException(`Portfolio item with ID ${itemId} not found`);
+    }
+
+    if (item.userId !== userId) {
+      throw new ForbiddenException('You can only update your own portfolio');
+    }
+  }
+
+  private async updateLegacyProfileArrays(userId: number) {
+    const [skills, certifications] = await Promise.all([
+      this.prisma.userSkill.findMany({
+        where: { userId },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        select: { name: true },
+      }),
+      this.prisma.userCertification.findMany({
+        where: { userId },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        select: { name: true },
+      }),
+    ]);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        skill: JSON.stringify(skills.map((skill) => skill.name)),
+        certification: JSON.stringify(
+          certifications.map((certification) => certification.name),
+        ),
+      },
+    });
+  }
+
+  private async updateProfileCompletion(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        avatar: true,
+        headline: true,
+        bio: true,
+        profileSkills: {
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const profileCompleted = Boolean(
+      user.name &&
+        user.avatar &&
+        user.headline &&
+        user.bio &&
+        user.profileSkills.length > 0,
+    );
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { profileCompleted },
+    });
+  }
+
+  private withLegacyProfileSkills<T extends { name: string }>(
+    skills: T[],
+    legacySkill?: string | null,
+  ) {
+    if (skills.length > 0) {
+      return skills;
+    }
+
+    return this.parseLegacyStringArray(legacySkill).map((name, index) => ({
+      id: 0 - index,
+      name,
+      level: null,
+      sortOrder: index,
+      createdAt: null,
+      updatedAt: null,
+    }));
+  }
+
+  private withLegacyProfileCertifications<T extends { name: string }>(
+    certifications: T[],
+    legacyCertification?: string | null,
+  ) {
+    if (certifications.length > 0) {
+      return certifications;
+    }
+
+    return this.parseLegacyStringArray(legacyCertification).map((name, index) => ({
+      id: 0 - index,
+      userId: null,
+      name,
+      issuer: null,
+      issuedAt: null,
+      expiresAt: null,
+      credentialUrl: null,
+      credentialId: null,
+      sortOrder: index,
+      createdAt: null,
+      updatedAt: null,
+    }));
+  }
+
+  private parseLegacyStringArray(value?: string | null): string[] {
+    if (!value) {
+      return [];
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string');
+      }
+    } catch {
+      return [value];
+    }
+
+    return [value];
   }
 }

@@ -17,8 +17,14 @@ model User {
   role          String   @default("user")
   skill         String?
   certification String?
+  headline      String?
+  bio           String?
+  location      String?
+  website       String?
   googleId      String?  @unique
   avatar        String?
+  coverImage    String?
+  profileCompleted Boolean @default(false)
   refreshToken  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -26,11 +32,63 @@ model User {
   comments         Comment[]
   hires            Hire[]
   jobs             Job[]            @relation("JobCreator")
+  profileSkills    UserSkill[]
+  profileCertifications UserCertification[]
+  portfolioItems   UserPortfolioItem[]
   chatRoomsCreated ChatRoom[]       @relation("ChatRoomCreator")
   chatRoomMembers  ChatRoomMember[]
   chatMessages     ChatMessage[]
 
   @@map("users")
+}
+
+model UserSkill {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  name      String
+  level     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@map("user_skills")
+}
+
+model UserCertification {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  name          String
+  issuer        String?
+  issuedAt      DateTime?
+  expiresAt     DateTime?
+  credentialUrl String?
+  credentialId  String?
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_certifications")
+}
+
+model UserPortfolioItem {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  image       String?
+  url         String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_portfolio_items")
 }
 
 model Category {

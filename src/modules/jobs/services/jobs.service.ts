@@ -45,6 +45,7 @@ export class JobsService {
 
     // Invalidate job caches
     await this.redisService.invalidateJobCaches();
+    await this.redisService.invalidateUserCaches(userId);
 
     return {
       message: 'Job created successfully',
@@ -209,6 +210,7 @@ export class JobsService {
 
     // Invalidate job caches
     await this.redisService.invalidateJobCaches(id);
+    await this.redisService.invalidateUserCaches(job.creatorId);
 
     return {
       message: 'Job updated successfully',
@@ -235,6 +237,7 @@ export class JobsService {
 
     // Invalidate job caches
     await this.redisService.invalidateJobCaches(id);
+    await this.redisService.invalidateUserCaches(job.creatorId);
 
     return {
       message: 'Job deleted successfully',
@@ -268,6 +271,7 @@ export class JobsService {
 
     // Invalidate job caches
     await this.redisService.invalidateJobCaches(id);
+    await this.redisService.invalidateUserCaches(job.creatorId);
 
     return {
       message: 'Image uploaded successfully',
