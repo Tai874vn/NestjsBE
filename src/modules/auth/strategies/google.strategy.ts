@@ -36,10 +36,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
 
     if (!user) {
-      const existingUser: UserType | null =
-        await this.prisma.user.findUnique({
-          where: { email: emails[0].value },
-        });
+      const existingUser: UserType | null = await this.prisma.user.findUnique({
+        where: { email: emails[0].value },
+      });
 
       if (existingUser) {
         user = await this.prisma.user.update({

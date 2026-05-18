@@ -39,10 +39,9 @@ export class AuthService {
       refreshToken: string;
     }>
   > {
-    const existingUser: UserType | null =
-      await this.prisma.user.findUnique({
-        where: { email: signUpDto.email },
-      });
+    const existingUser: UserType | null = await this.prisma.user.findUnique({
+      where: { email: signUpDto.email },
+    });
 
     if (existingUser) {
       throw new ConflictException('Email already exists');
