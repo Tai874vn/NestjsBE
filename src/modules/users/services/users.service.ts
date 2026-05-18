@@ -239,17 +239,22 @@ export class UsersService {
       }),
     ]);
 
+    const { skill, certification, _count, ...publicUser } = user;
+
     const result = {
       message: 'Get public profile successfully',
       content: {
-        ...user,
-        profileSkills: this.withLegacyProfileSkills(user.profileSkills, user.skill),
+        ...publicUser,
+        profileSkills: this.withLegacyProfileSkills(
+          publicUser.profileSkills,
+          skill,
+        ),
         profileCertifications: this.withLegacyProfileCertifications(
-          user.profileCertifications,
-          user.certification,
+          publicUser.profileCertifications,
+          certification,
         ),
         stats: {
-          totalJobs: user._count.jobs,
+          totalJobs: _count.jobs,
           totalComments: commentStats._count.rating,
           averageRating: commentStats._avg.rating ?? 0,
           completedHires: completedHireCount,
@@ -614,6 +619,13 @@ export class UsersService {
 
     if (certifications.some((certification) => !certification.name)) {
       throw new BadRequestException('Certification name is required');
+    }
+
+    const uniqueNames = new Set(
+      certifications.map((certification) => certification.name.toLowerCase()),
+    );
+    if (uniqueNames.size !== certifications.length) {
+      throw new BadRequestException('Duplicate certifications are not allowed');
     }
 
     await this.ensureUserExists(userId);

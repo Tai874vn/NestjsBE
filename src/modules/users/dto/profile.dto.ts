@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   MaxLength,
   Min,
   ValidateNested,
@@ -25,6 +26,8 @@ export class UpdateMyProfileDto {
 
   @IsOptional()
   @IsString()
+  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @MaxLength(30)
   birthDay?: string;
 

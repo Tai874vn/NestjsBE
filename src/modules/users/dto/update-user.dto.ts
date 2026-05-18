@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -15,6 +21,8 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
+  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   birthDay?: string;
 
   @IsOptional()
