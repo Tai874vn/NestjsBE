@@ -35,6 +35,7 @@ model User {
   profileSkills    UserSkill[]
   profileCertifications UserCertification[]
   portfolioItems   UserPortfolioItem[]
+  resume           UserResume?
   chatRoomsCreated ChatRoom[]       @relation("ChatRoomCreator")
   chatRoomMembers  ChatRoomMember[]
   chatMessages     ChatMessage[]
@@ -89,6 +90,20 @@ model UserPortfolioItem {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_portfolio_items")
+}
+
+model UserResume {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  data           Json
+  sourceFileName String?
+  schemaVersion  String   @default("v1")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_resumes")
 }
 
 model Category {

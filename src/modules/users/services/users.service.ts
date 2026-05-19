@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
@@ -16,6 +17,7 @@ import {
   UpdateMyProfileDto,
   UpsertPortfolioItemDto,
 } from '../dto/profile.dto';
+import { ImportResumeDto } from '../dto/import-resume.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 
@@ -566,6 +568,52 @@ export class UsersService {
     };
   }
 
+  async importResume(userId: number, dto: ImportResumeDto) {
+    await this.ensureUserExists(userId);
+
+    const sourceFileName = this.trimOptional(dto.sourceFileName);
+    const schemaVersion = this.trimOptional(dto.schemaVersion) ?? 'v1';
+
+    const resume = await this.prisma.userResume.upsert({
+      where: { userId },
+      update: {
+        data: dto.data as Prisma.InputJsonValue,
+        sourceFileName,
+        schemaVersion,
+      },
+      create: {
+        userId,
+        data: dto.data as Prisma.InputJsonValue,
+        sourceFileName,
+        schemaVersion,
+      },
+    });
+
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Resume imported successfully',
+      content: resume,
+    };
+  }
+
+  async getMyResume(userId: number) {
+    await this.ensureUserExists(userId);
+
+    const resume = await this.prisma.userResume.findUnique({
+      where: { userId },
+    });
+
+    if (!resume) {
+      throw new NotFoundException(`Resume for user ID ${userId} not found`);
+    }
+
+    return {
+      message: 'Get resume successfully',
+      content: resume,
+    };
+  }
+
   async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
     const skills = dto.skills.map((skill, index) => ({
       name: skill.name.trim(),
@@ -884,5 +932,10 @@ export class UsersService {
     }
 
     return [value];
+  }
+
+  private trimOptional(value?: string | null): string | null {
+    const trimmed = value?.trim();
+    return trimmed || null;
   }
 }

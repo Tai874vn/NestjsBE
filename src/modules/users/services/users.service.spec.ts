@@ -16,6 +16,10 @@ describe('UsersService profile behavior', () => {
       userSkill: {
         findMany: jest.fn(),
       },
+      userResume: {
+        upsert: jest.fn(),
+        findUnique: jest.fn(),
+      },
       comment: {
         aggregate: jest.fn(),
       },
@@ -151,5 +155,85 @@ describe('UsersService profile behavior', () => {
       data: { profileCompleted: false },
     });
     expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
+  });
+
+  it('stores extracted resume data for the current user', async () => {
+    const { service, prisma, redisService } = createService();
+    const resumeData = {
+      ResumeID: 'REAL_0001',
+      Category: 'Java Developer',
+      Name: 'Chad Griffin',
+      Email: 'contact@email.com',
+      Phone: '94105 555 4321000',
+      Location: 'City, State',
+      Summary: 'Highly skilled software development professional',
+      Skills: 'Python, SQL, Git, Linux',
+      Experience: 'Senior java developer',
+      Education: 'Computer Science degree',
+      Text: 'Full extracted resume text',
+      Source: 'ResumeAtlas',
+    };
+    const storedResume = {
+      id: 10,
+      userId: 1,
+      data: resumeData,
+      sourceFileName: 'resume.pdf',
+      schemaVersion: 'resume-atlas-v1',
+      createdAt: new Date('2026-05-19T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-19T00:00:00.000Z'),
+    };
+
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockResolvedValue(storedResume);
+
+    const result = await service.importResume(1, {
+      data: resumeData,
+      sourceFileName: ' resume.pdf ',
+      schemaVersion: ' resume-atlas-v1 ',
+    });
+
+    expect(prisma.userResume.upsert).toHaveBeenCalledWith({
+      where: { userId: 1 },
+      update: {
+        data: resumeData,
+        sourceFileName: 'resume.pdf',
+        schemaVersion: 'resume-atlas-v1',
+      },
+      create: {
+        userId: 1,
+        data: resumeData,
+        sourceFileName: 'resume.pdf',
+        schemaVersion: 'resume-atlas-v1',
+      },
+    });
+    expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
+    expect(result).toEqual({
+      message: 'Resume imported successfully',
+      content: storedResume,
+    });
+  });
+
+  it('returns the current user resume data', async () => {
+    const { service, prisma } = createService();
+    const storedResume = {
+      id: 10,
+      userId: 1,
+      data: { ResumeID: 'REAL_0001', Skills: 'Python, SQL, Git, Linux' },
+      sourceFileName: null,
+      schemaVersion: 'v1',
+      createdAt: new Date('2026-05-19T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-19T00:00:00.000Z'),
+    };
+
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.findUnique.mockResolvedValue(storedResume);
+
+    await expect(service.getMyResume(1)).resolves.toEqual({
+      message: 'Get resume successfully',
+      content: storedResume,
+    });
+    expect(prisma.userResume.findUnique).toHaveBeenCalledWith({
+      where: { userId: 1 },
+    });
   });
 });

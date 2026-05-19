@@ -27,6 +27,7 @@ import {
   UpdateMyProfileDto,
   UpsertPortfolioItemDto,
 } from '../dto/profile.dto';
+import { ImportResumeDto } from '../dto/import-resume.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -95,6 +96,21 @@ export class UsersController {
     @CurrentUser() user: ValidatedUser,
   ) {
     return this.usersService.updateMyProfile(user.id, updateProfileDto);
+  }
+
+  @Put('me/resume')
+  @ApiOperation({ summary: 'Import extracted CV/resume JSON for current user' })
+  importResume(
+    @Body() importResumeDto: ImportResumeDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.usersService.importResume(user.id, importResumeDto);
+  }
+
+  @Get('me/resume')
+  @ApiOperation({ summary: 'Get imported CV/resume JSON for current user' })
+  getMyResume(@CurrentUser() user: ValidatedUser) {
+    return this.usersService.getMyResume(user.id);
   }
 
   @Put('me/profile/skills')
