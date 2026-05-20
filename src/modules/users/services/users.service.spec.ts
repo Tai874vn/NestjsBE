@@ -236,4 +236,58 @@ describe('UsersService profile behavior', () => {
       where: { userId: 1 },
     });
   });
+
+  it('stores uploaded resume document metadata for the current user', async () => {
+    const { service, prisma, redisService } = createService();
+    const storedResume = {
+      id: 10,
+      userId: 1,
+      data: { ResumeID: 'REAL_0001' },
+      sourceFileName: 'resume.pdf',
+      sourceFileUrl: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
+      sourceFileMimeType: 'application/pdf',
+      sourceFileSize: 2048,
+      sourceFilePublicId: 'resumes/resume',
+      schemaVersion: 'v1',
+      createdAt: new Date('2026-05-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-20T00:00:00.000Z'),
+    };
+
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockResolvedValue(storedResume);
+
+    const result = await service.uploadResumeFile(1, {
+      originalName: ' resume.pdf ',
+      mimeType: 'application/pdf',
+      size: 2048,
+      url: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
+      publicId: 'resumes/resume',
+    });
+
+    expect(prisma.userResume.upsert).toHaveBeenCalledWith({
+      where: { userId: 1 },
+      update: {
+        sourceFileName: 'resume.pdf',
+        sourceFileUrl: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
+        sourceFileMimeType: 'application/pdf',
+        sourceFileSize: 2048,
+        sourceFilePublicId: 'resumes/resume',
+      },
+      create: {
+        userId: 1,
+        data: {},
+        sourceFileName: 'resume.pdf',
+        sourceFileUrl: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
+        sourceFileMimeType: 'application/pdf',
+        sourceFileSize: 2048,
+        sourceFilePublicId: 'resumes/resume',
+        schemaVersion: 'v1',
+      },
+    });
+    expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
+    expect(result).toEqual({
+      message: 'Resume file uploaded successfully',
+      content: storedResume,
+    });
+  });
 });

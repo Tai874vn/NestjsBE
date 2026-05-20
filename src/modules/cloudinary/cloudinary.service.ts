@@ -52,6 +52,52 @@ export class CloudinaryService {
     });
   }
 
+  async uploadDocument(
+    file: Express.Multer.File,
+    folder: string,
+  ): Promise<UploadApiResponse> {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const allowedMimeTypes = new Set([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]);
+
+    if (!allowedMimeTypes.has(file.mimetype)) {
+      throw new BadRequestException('Only PDF, DOC, and DOCX files are allowed');
+    }
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder,
+          resource_type: 'raw',
+          use_filename: true,
+          unique_filename: true,
+        },
+        (error, result) => {
+          if (error) {
+            reject(new BadRequestException(`Upload failed: ${error.message}`));
+          } else if (result) {
+            resolve(result);
+          } else {
+            reject(
+              new BadRequestException('Upload failed: No result returned'),
+            );
+          }
+        },
+      );
+
+      const readableStream = new Readable();
+      readableStream.push(file.buffer);
+      readableStream.push(null);
+      readableStream.pipe(uploadStream);
+    });
+  }
+
   async deleteImage(publicId: string): Promise<void> {
     try {
       await cloudinary.uploader.destroy(publicId);

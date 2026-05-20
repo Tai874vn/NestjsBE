@@ -23,3 +23,11 @@ export class ImportResumeDto {
   @MaxLength(40)
   schemaVersion?: string;
 }
+
+export interface UploadedResumeFileMetadata {
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  publicId: string;
+}

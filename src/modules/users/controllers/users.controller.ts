@@ -107,6 +107,49 @@ export class UsersController {
     return this.usersService.importResume(user.id, importResumeDto);
   }
 
+  @Post('me/resume/file')
+  @ApiOperation({ summary: 'Upload CV/resume file for current user' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        const allowedMimeTypes = new Set([
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ]);
+
+        if (!allowedMimeTypes.has(file.mimetype)) {
+          return callback(
+            new BadRequestException('Only PDF, DOC, and DOCX files are allowed'),
+            false,
+          );
+        }
+
+        callback(null, true);
+      },
+    }),
+  )
+  async uploadResumeFile(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Resume file is required');
+    }
+
+    const result = await this.cloudinaryService.uploadDocument(file, 'resumes');
+
+    return this.usersService.uploadResumeFile(user.id, {
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      url: result.secure_url,
+      publicId: result.public_id,
+    });
+  }
+
   @Get('me/resume')
   @ApiOperation({ summary: 'Get imported CV/resume JSON for current user' })
   getMyResume(@CurrentUser() user: ValidatedUser) {

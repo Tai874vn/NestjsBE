@@ -17,7 +17,10 @@ import {
   UpdateMyProfileDto,
   UpsertPortfolioItemDto,
 } from '../dto/profile.dto';
-import { ImportResumeDto } from '../dto/import-resume.dto';
+import {
+  ImportResumeDto,
+  UploadedResumeFileMetadata,
+} from '../dto/import-resume.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 
@@ -610,6 +613,44 @@ export class UsersService {
 
     return {
       message: 'Get resume successfully',
+      content: resume,
+    };
+  }
+
+  async uploadResumeFile(
+    userId: number,
+    fileMetadata: UploadedResumeFileMetadata,
+  ) {
+    await this.ensureUserExists(userId);
+
+    const sourceFileName =
+      this.trimOptional(fileMetadata.originalName) ?? 'resume';
+
+    const resume = await this.prisma.userResume.upsert({
+      where: { userId },
+      update: {
+        sourceFileName,
+        sourceFileUrl: fileMetadata.url,
+        sourceFileMimeType: fileMetadata.mimeType,
+        sourceFileSize: fileMetadata.size,
+        sourceFilePublicId: fileMetadata.publicId,
+      },
+      create: {
+        userId,
+        data: {},
+        sourceFileName,
+        sourceFileUrl: fileMetadata.url,
+        sourceFileMimeType: fileMetadata.mimeType,
+        sourceFileSize: fileMetadata.size,
+        sourceFilePublicId: fileMetadata.publicId,
+        schemaVersion: 'v1',
+      },
+    });
+
+    await this.redisService.invalidateUserCaches(userId);
+
+    return {
+      message: 'Resume file uploaded successfully',
       content: resume,
     };
   }

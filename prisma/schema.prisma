@@ -97,6 +97,10 @@ model UserResume {
   userId         Int      @unique
   data           Json
   sourceFileName String?
+  sourceFileUrl  String?
+  sourceFileMimeType String?
+  sourceFileSize Int?
+  sourceFilePublicId String?
   schemaVersion  String   @default("v1")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
