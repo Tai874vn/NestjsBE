@@ -14,6 +14,8 @@ describe('UsersService profile behavior', () => {
         findMany: jest.fn(),
       },
       userSkill: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
         findMany: jest.fn(),
       },
       userResume: {
@@ -155,6 +157,122 @@ describe('UsersService profile behavior', () => {
       data: { profileCompleted: false },
     });
     expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
+  });
+
+  it('returns my profile with normalized skills and without legacy profile strings', async () => {
+    const { service, prisma } = createService();
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      phone: null,
+      birthDay: null,
+      gender: null,
+      role: 'user',
+      skill: JSON.stringify(['["React"]', 'NestJS']),
+      certification: JSON.stringify(['AWS']),
+      headline: 'Fullstack Developer',
+      bio: 'Builds products',
+      location: 'Bangkok',
+      website: 'https://example.com',
+      avatar: 'https://example.com/avatar.png',
+      coverImage: 'https://example.com/cover.png',
+      profileCompleted: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      profileSkills: [
+        {
+          id: 10,
+          userId: 1,
+          name: '["React"]',
+          level: null,
+          sortOrder: 0,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          id: 11,
+          userId: 1,
+          name: 'NestJS',
+          level: null,
+          sortOrder: 1,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      profileCertifications: [],
+      portfolioItems: [],
+    });
+
+    const result = await service.getMyProfile(1);
+
+    expect(result.content).not.toHaveProperty('skill');
+    expect(result.content).not.toHaveProperty('certification');
+    expect(result.content.profileSkills).toEqual([
+      expect.objectContaining({ name: 'React' }),
+      expect.objectContaining({ name: 'NestJS' }),
+    ]);
+    expect(result.content.profileCertifications).toEqual([
+      expect.objectContaining({ name: 'AWS' }),
+    ]);
+  });
+
+  it('flattens accidentally stringified skill arrays before replacing profile skills', async () => {
+    const { service, prisma } = createService();
+
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({
+        name: 'Jane Doe',
+        avatar: 'https://example.com/avatar.png',
+        headline: 'Fullstack Developer',
+        bio: 'Builds products',
+        profileSkills: [{ id: 1 }],
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: null,
+        birthDay: null,
+        gender: null,
+        role: 'user',
+        skill: JSON.stringify(['React', 'NestJS']),
+        certification: null,
+        headline: 'Fullstack Developer',
+        bio: 'Builds products',
+        location: null,
+        website: null,
+        avatar: 'https://example.com/avatar.png',
+        coverImage: null,
+        profileCompleted: true,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        profileSkills: [],
+        profileCertifications: [],
+        portfolioItems: [],
+      });
+    prisma.$transaction.mockResolvedValue([]);
+    prisma.userSkill.findMany.mockResolvedValue([
+      { name: 'React' },
+      { name: 'NestJS' },
+    ]);
+    prisma.userCertification.findMany.mockResolvedValue([]);
+    prisma.user.update
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ profileCompleted: true });
+
+    await service.replaceProfileSkills(1, {
+      skills: [{ name: '["React"]' }, { name: 'NestJS' }],
+    });
+
+    expect(prisma.userSkill.createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: 1, name: 'React', level: undefined, sortOrder: 0 },
+        { userId: 1, name: 'NestJS', level: undefined, sortOrder: 1 },
+      ],
+    });
   });
 
   it('stores extracted resume data for the current user', async () => {

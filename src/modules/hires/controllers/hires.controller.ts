@@ -24,10 +24,7 @@ export class HiresController {
   constructor(private readonly hiresService: HiresService) {}
 
   @Post()
-  create(
-    @Body() createDto: CreateHireDto,
-    @CurrentUser() user: ValidatedUser,
-  ) {
+  create(@Body() createDto: CreateHireDto, @CurrentUser() user: ValidatedUser) {
     return this.hiresService.create(createDto, user.id);
   }
 

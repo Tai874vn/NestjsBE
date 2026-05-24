@@ -24,9 +24,7 @@ export class HiresService {
     });
 
     if (!job) {
-      throw new NotFoundException(
-        `Job with ID ${createDto.jobId} not found`,
-      );
+      throw new NotFoundException(`Job with ID ${createDto.jobId} not found`);
     }
 
     if (job.creatorId === userId) {

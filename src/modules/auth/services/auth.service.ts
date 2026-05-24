@@ -144,9 +144,7 @@ export class AuthService {
     };
   }
 
-  async getCurrentUser(
-    userId: number,
-  ): Promise<ApiResponse<Omit<UserType, 'password' | 'refreshToken'>>> {
+  async getCurrentUser(userId: number) {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -173,6 +171,15 @@ export class AuthService {
         profileCompleted: true,
         createdAt: true,
         updatedAt: true,
+        profileSkills: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        profileCertifications: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        portfolioItems: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
       },
     });
 
@@ -180,9 +187,42 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const { skill, certification, ...profile } = user;
+
     return {
       message: 'Get current user successfully',
-      content: user,
+      content: {
+        ...profile,
+        profileSkills: this.withLegacyProfileRows(
+          user.profileSkills,
+          skill,
+          (name, index) => ({
+            id: 0 - index,
+            name,
+            level: null,
+            sortOrder: index,
+            createdAt: null,
+            updatedAt: null,
+          }),
+        ),
+        profileCertifications: this.withLegacyProfileRows(
+          user.profileCertifications,
+          certification,
+          (name, index) => ({
+            id: 0 - index,
+            userId: null,
+            name,
+            issuer: null,
+            issuedAt: null,
+            expiresAt: null,
+            credentialUrl: null,
+            credentialId: null,
+            sortOrder: index,
+            createdAt: null,
+            updatedAt: null,
+          }),
+        ),
+      },
     };
   }
 
@@ -247,5 +287,58 @@ export class AuthService {
       where: { id: userId },
       data: { refreshToken: null },
     });
+  }
+
+  private withLegacyProfileRows<T extends { name: string }, FallbackRow>(
+    rows: T[],
+    legacyValue: string | null,
+    createFallbackRow: (name: string, index: number) => FallbackRow,
+  ): Array<T | FallbackRow> {
+    const normalizedRows = this.normalizeProfileRows(rows);
+    if (normalizedRows.length > 0) {
+      return normalizedRows;
+    }
+
+    return this.parseStringArrayValue(legacyValue).map(createFallbackRow);
+  }
+
+  private normalizeProfileRows<T extends { name: string }>(rows: T[]): T[] {
+    const seenNames = new Set<string>();
+
+    return rows.flatMap((row) =>
+      this.parseStringArrayValue(row.name).flatMap((name) => {
+        const key = name.toLowerCase();
+        if (seenNames.has(key)) {
+          return [];
+        }
+
+        seenNames.add(key);
+        return [{ ...row, name }];
+      }),
+    );
+  }
+
+  private parseStringArrayValue(value?: string | null): string[] {
+    if (!value) {
+      return [];
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((item) =>
+          typeof item === 'string' ? this.parseStringArrayValue(item) : [],
+        );
+      }
+    } catch {
+      return [trimmed];
+    }
+
+    return [trimmed];
   }
 }

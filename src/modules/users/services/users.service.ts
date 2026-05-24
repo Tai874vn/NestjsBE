@@ -514,14 +514,19 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
+    const { skill, certification, ...profile } = user;
+
     return {
       message: 'Get my profile successfully',
       content: {
-        ...user,
-        profileSkills: this.withLegacyProfileSkills(user.profileSkills, user.skill),
+        ...profile,
+        profileSkills: this.withLegacyProfileSkills(
+          user.profileSkills,
+          skill,
+        ),
         profileCertifications: this.withLegacyProfileCertifications(
           user.profileCertifications,
-          user.certification,
+          certification,
         ),
       },
     };
@@ -656,11 +661,18 @@ export class UsersService {
   }
 
   async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
-    const skills = dto.skills.map((skill, index) => ({
-      name: skill.name.trim(),
-      level: skill.level?.trim(),
-      sortOrder: skill.sortOrder ?? index,
-    }));
+    const skills = dto.skills
+      .flatMap((skill) =>
+        this.parseStringArrayValue(skill.name).map((name) => ({
+          name,
+          level: skill.level?.trim(),
+          sortOrder: skill.sortOrder,
+        })),
+      )
+      .map((skill, index) => ({
+        ...skill,
+        sortOrder: skill.sortOrder ?? index,
+      }));
 
     if (skills.some((skill) => !skill.name)) {
       throw new BadRequestException('Skill name is required');
@@ -921,11 +933,12 @@ export class UsersService {
     skills: T[],
     legacySkill?: string | null,
   ) {
-    if (skills.length > 0) {
-      return skills;
+    const normalizedSkills = this.normalizeProfileRows(skills);
+    if (normalizedSkills.length > 0) {
+      return normalizedSkills;
     }
 
-    return this.parseLegacyStringArray(legacySkill).map((name, index) => ({
+    return this.parseStringArrayValue(legacySkill).map((name, index) => ({
       id: 0 - index,
       name,
       level: null,
@@ -939,11 +952,12 @@ export class UsersService {
     certifications: T[],
     legacyCertification?: string | null,
   ) {
-    if (certifications.length > 0) {
-      return certifications;
+    const normalizedCertifications = this.normalizeProfileRows(certifications);
+    if (normalizedCertifications.length > 0) {
+      return normalizedCertifications;
     }
 
-    return this.parseLegacyStringArray(legacyCertification).map((name, index) => ({
+    return this.parseStringArrayValue(legacyCertification).map((name, index) => ({
       id: 0 - index,
       userId: null,
       name,
@@ -958,21 +972,44 @@ export class UsersService {
     }));
   }
 
-  private parseLegacyStringArray(value?: string | null): string[] {
+  private normalizeProfileRows<T extends { name: string }>(rows: T[]): T[] {
+    const seenNames = new Set<string>();
+
+    return rows.flatMap((row) =>
+      this.parseStringArrayValue(row.name).flatMap((name) => {
+        const key = name.toLowerCase();
+        if (seenNames.has(key)) {
+          return [];
+        }
+
+        seenNames.add(key);
+        return [{ ...row, name }];
+      }),
+    );
+  }
+
+  private parseStringArrayValue(value?: string | null): string[] {
     if (!value) {
       return [];
     }
 
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((item): item is string => typeof item === 'string');
-      }
-    } catch {
-      return [value];
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
     }
 
-    return [value];
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((item) =>
+          typeof item === 'string' ? this.parseStringArrayValue(item) : [],
+        );
+      }
+    } catch {
+      return [trimmed];
+    }
+
+    return [trimmed];
   }
 
   private trimOptional(value?: string | null): string | null {
