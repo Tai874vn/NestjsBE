@@ -24,6 +24,10 @@ export const envValidationSchema = Joi.object({
   // Redis (optional)
   REDIS_URL: Joi.string().uri().optional(),
 
+  // AI recommendation service
+  AI_SERVICE_URL: Joi.string().uri().required(),
+  AI_SERVICE_TIMEOUT_MS: Joi.number().optional(),
+
   // Cloudinary (if used)
   CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
   CLOUDINARY_API_KEY: Joi.string().optional(),

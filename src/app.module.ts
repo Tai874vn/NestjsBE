@@ -16,6 +16,7 @@ import { SkillModule } from './modules/skill/skill.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { envValidationSchema } from './config/env.validation';
+import { RecommendationsModule } from './modules/recommendations/recommendations.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { envValidationSchema } from './config/env.validation';
     HiresModule,
     SkillModule,
     ChatModule,
+    RecommendationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
