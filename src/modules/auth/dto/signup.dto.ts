@@ -4,7 +4,9 @@ import {
   IsString,
   MinLength,
   IsOptional,
+  IsIn,
 } from 'class-validator';
+import { Role } from '../../../common/constants/roles';
 
 export class SignUpDto {
   @IsNotEmpty()
@@ -31,6 +33,10 @@ export class SignUpDto {
   @IsOptional()
   @IsString()
   gender?: string;
+
+  @IsOptional()
+  @IsIn([Role.USER, Role.EMPLOYER])
+  role?: Role.USER | Role.EMPLOYER;
 
   @IsOptional()
   @IsString()

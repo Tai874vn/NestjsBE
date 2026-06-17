@@ -1,6 +1,7 @@
 import { validate } from 'class-validator';
 import { SignUpDto } from '../signup.dto';
 import { SignInDto } from '../signin.dto';
+import { Role } from '../../../../common/constants/roles';
 
 describe('Auth DTOs', () => {
   describe('SignUpDto', () => {
@@ -59,6 +60,39 @@ describe('Auth DTOs', () => {
 
       const errors = await validate(dto);
       expect(errors.length).toBe(0);
+    });
+
+    it('should allow employer account role', async () => {
+      const dto = new SignUpDto();
+      dto.name = 'Hiring Manager';
+      dto.email = 'hiring@example.com';
+      dto.password = 'password123';
+      dto.role = Role.EMPLOYER;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should reject unknown account roles', async () => {
+      const dto = new SignUpDto();
+      dto.name = 'Hiring Manager';
+      dto.email = 'hiring@example.com';
+      dto.password = 'password123';
+      dto.role = 'recruiting-admin' as Role;
+
+      const errors = await validate(dto);
+      expect(errors.some((error) => error.property === 'role')).toBe(true);
+    });
+
+    it('should reject public admin signup role', async () => {
+      const dto = new SignUpDto();
+      dto.name = 'Admin User';
+      dto.email = 'admin-signup@example.com';
+      dto.password = 'password123';
+      dto.role = Role.ADMIN;
+
+      const errors = await validate(dto);
+      expect(errors.some((error) => error.property === 'role')).toBe(true);
     });
   });
 

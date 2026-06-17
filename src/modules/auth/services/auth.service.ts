@@ -63,7 +63,7 @@ export class AuthService {
         bio: signUpDto.bio,
         location: signUpDto.location,
         website: signUpDto.website,
-        role: Role.USER,
+        role: signUpDto.role ?? Role.USER,
       },
     });
 

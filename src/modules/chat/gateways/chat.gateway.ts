@@ -157,7 +157,8 @@ export class ChatGateway
       }
     }
 
-    // Send user their rooms
+    // Send user their rooms. Keep rooms-list for compatibility with older clients.
+    client.emit('rooms', rooms);
     client.emit('rooms-list', rooms);
   }
 
@@ -366,7 +367,9 @@ export class ChatGateway
         }
       }
 
-      return { status: 'success', onlineUsers: Array.from(contactIds) };
+      const onlineUsers = Array.from(contactIds);
+      client.emit('online-users', onlineUsers);
+      return { status: 'success', onlineUsers };
     } catch (error) {
       this.logger.error(`Get online users error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to get online users' };

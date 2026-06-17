@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Role } from '../../../common/constants/roles';
 import { UsersService } from './users.service';
 
 describe('UsersService profile behavior', () => {
@@ -6,6 +7,8 @@ describe('UsersService profile behavior', () => {
     const prisma = {
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
         update: jest.fn(),
       },
       userCertification: {
@@ -407,5 +410,111 @@ describe('UsersService profile behavior', () => {
       message: 'Resume file uploaded successfully',
       content: storedResume,
     });
+  });
+
+  it('returns paginated candidate directory cards from completed worker profiles only', async () => {
+    const { service, prisma } = createService();
+    const updatedAt = new Date('2026-06-01T00:00:00.000Z');
+
+    prisma.user.count.mockResolvedValue(2);
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 10,
+        name: 'Lina Tran',
+        email: 'private@example.com',
+        phone: '+85511111111',
+        role: Role.USER,
+        avatar: 'https://example.com/avatar.png',
+        headline: 'Senior Backend Engineer',
+        bio: 'Builds Python API platforms',
+        location: 'Remote',
+        skill: JSON.stringify(['Python', 'FastAPI']),
+        profileCompleted: true,
+        updatedAt,
+        profileSkills: [
+          { id: 1, name: 'Python', level: 'advanced', sortOrder: 0 },
+          { id: 2, name: 'FastAPI', level: null, sortOrder: 1 },
+        ],
+        profileCertifications: [{ id: 7 }],
+        portfolioItems: [{ id: 8 }, { id: 9 }],
+        jobs: [
+          {
+            rating: 5,
+            reviews: 8,
+            hires: [{ id: 100 }, { id: 101 }],
+          },
+        ],
+        resume: { data: { Text: 'Raw private resume text' } },
+      },
+      {
+        id: 11,
+        name: 'Mei Chen',
+        email: 'mei@example.com',
+        phone: '+85522222222',
+        role: Role.USER,
+        avatar: null,
+        headline: 'Data Analyst',
+        bio: 'SQL reporting',
+        location: 'Phnom Penh',
+        skill: JSON.stringify(['SQL']),
+        profileCompleted: true,
+        updatedAt,
+        profileSkills: [{ id: 3, name: 'SQL', level: null, sortOrder: 0 }],
+        profileCertifications: [],
+        portfolioItems: [],
+        jobs: [],
+        resume: null,
+      },
+    ]);
+
+    const result = await service.findCandidates({
+      page: 1,
+      pageSize: 10,
+      keyword: 'backend',
+      skill: 'Python',
+      location: 'Remote',
+    });
+
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        role: Role.USER,
+        profileCompleted: true,
+      }),
+    });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          role: Role.USER,
+          profileCompleted: true,
+        }),
+      }),
+    );
+    expect(result.content).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      total: 2,
+      totalPages: 1,
+    });
+    expect(result.content.data[0]).toMatchObject({
+      id: 10,
+      name: 'Lina Tran',
+      headline: 'Senior Backend Engineer',
+      profileSkills: [
+        expect.objectContaining({ name: 'Python' }),
+        expect.objectContaining({ name: 'FastAPI' }),
+      ],
+      stats: {
+        portfolioItems: 2,
+        certifications: 1,
+        completedWork: 2,
+        rating: 5,
+      },
+      match: expect.objectContaining({
+        label: 'high_match',
+      }),
+    });
+    expect(result.content.data[0]).not.toHaveProperty('email');
+    expect(result.content.data[0]).not.toHaveProperty('phone');
+    expect(result.content.data[0]).not.toHaveProperty('resume');
   });
 });

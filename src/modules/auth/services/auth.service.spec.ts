@@ -1,18 +1,52 @@
 import { AuthService } from './auth.service';
+import { Role } from '../../../common/constants/roles';
 
 describe('AuthService current user profile', () => {
   const createService = () => {
     const prisma = {
       user: {
         findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
     };
-    const jwtService = {};
+    const jwtService = {
+      sign: jest.fn().mockReturnValue('jwt-token'),
+      verify: jest.fn(),
+    };
 
     const service = new AuthService(prisma as any, jwtService as any);
 
     return { service, prisma };
   };
+
+  it('creates employer accounts when signup role is employer', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 11,
+      name: 'Hiring Manager',
+      email: 'hiring@example.com',
+      password: 'hashed',
+      refreshToken: null,
+      role: Role.EMPLOYER,
+    });
+    prisma.user.update.mockResolvedValue({});
+
+    const result = await service.signUp({
+      name: 'Hiring Manager',
+      email: 'hiring@example.com',
+      password: 'password123',
+      role: Role.EMPLOYER,
+    });
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ role: Role.EMPLOYER }),
+      }),
+    );
+    expect(result.content?.user).toMatchObject({ role: Role.EMPLOYER });
+  });
 
   it('returns normalized current user profile data without legacy skill strings', async () => {
     const { service, prisma } = createService();

@@ -20,7 +20,7 @@ import { ChatService } from '../services/chat.service';
 import { CreateRoomDto } from '../dto/chat.dto';
 
 @ApiTags('Chat')
-@Controller('api/chat')
+@Controller('chat')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ChatController {

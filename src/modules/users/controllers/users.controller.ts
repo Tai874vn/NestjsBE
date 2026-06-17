@@ -28,6 +28,7 @@ import {
   UpsertPortfolioItemDto,
 } from '../dto/profile.dto';
 import { ImportResumeDto } from '../dto/import-resume.dto';
+import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -81,6 +82,13 @@ export class UsersController {
   @ApiOperation({ summary: 'Search users by name (Admin only)' })
   searchByName(@Param('name') name: string) {
     return this.usersService.searchByName(name);
+  }
+
+  @Get('candidates')
+  @Roles(Role.EMPLOYER, Role.ADMIN)
+  @ApiOperation({ summary: 'Browse completed worker profiles for recruiters' })
+  findCandidates(@Query() query: CandidateDirectoryQueryDto) {
+    return this.usersService.findCandidates(query);
   }
 
   @Get('me/profile')
