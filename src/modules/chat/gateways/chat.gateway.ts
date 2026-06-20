@@ -16,6 +16,7 @@ import {
   ValidationPipe,
   Inject,
   Optional,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -134,32 +135,23 @@ export class ChatGateway
     await this.addOnlineUser(user.id, client.id);
 
     // Auto-join user's rooms
-    const rooms = await this.chatService.getUserRooms(user.id);
-    for (const room of rooms) {
-      await client.join(`room:${room.id}`);
-    }
+    const [roomIds, contactIds] = await Promise.all([
+      this.chatService.getUserRoomIds(user.id),
+      this.chatService.getUserContactIds(user.id),
+    ]);
+    await Promise.all(roomIds.map((roomId) => client.join(`room:${roomId}`)));
 
     // Broadcast online status — deduplicate so each user receives it once
-    const notifiedUsers = new Set<number>();
-    for (const room of rooms) {
-      for (const member of room.members) {
-        if (member.id !== user.id && !notifiedUsers.has(member.id)) {
-          notifiedUsers.add(member.id);
-          const memberSockets = await this.getOnlineSockets(member.id);
-          for (const socketId of memberSockets) {
-            this.server.to(socketId).emit('user-online', {
-              userId: user.id,
-              name: user.name,
-              avatar: user.avatar,
-            });
-          }
-        }
+    for (const contactId of contactIds) {
+      const memberSockets = await this.getOnlineSockets(contactId);
+      for (const socketId of memberSockets) {
+        this.server.to(socketId).emit('user-online', {
+          userId: user.id,
+          name: user.name,
+          avatar: user.avatar,
+        });
       }
     }
-
-    // Send user their rooms. Keep rooms-list for compatibility with older clients.
-    client.emit('rooms', rooms);
-    client.emit('rooms-list', rooms);
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
@@ -226,7 +218,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
-      const room = await this.chatService.getRoom(data.roomId, user.id);
+      const isMember = await this.chatService.isRoomMember(
+        data.roomId,
+        user.id,
+      );
+      if (!isMember) {
+        throw new ForbiddenException('You are not a member of this room');
+      }
 
       await client.join(`room:${data.roomId}`);
 
@@ -236,12 +234,7 @@ export class ChatGateway
         user: { id: user.id, name: user.name, avatar: user.avatar },
       });
 
-      // Send latest room messages to the user
-      const messages = await this.chatService.getMessages(user.id, {
-        roomId: data.roomId,
-      });
-
-      return { status: 'success', room, messages };
+      return { status: 'success', roomId: data.roomId };
     } catch (error) {
       this.logger.error(`Join room error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to join room' };
@@ -355,19 +348,8 @@ export class ChatGateway
   async handleGetOnlineUsers(@ConnectedSocket() client: AuthenticatedSocket) {
     try {
       const user = client.data.user!;
-      const rooms = await this.chatService.getUserRooms(user.id);
-
-      // Collect unique user IDs from shared rooms, filtered to online only
-      const contactIds = new Set<number>();
-      for (const room of rooms) {
-        for (const member of room.members) {
-          if (member.id !== user.id && (await this.isUserOnline(member.id))) {
-            contactIds.add(member.id);
-          }
-        }
-      }
-
-      const onlineUsers = Array.from(contactIds);
+      const contactIds = await this.chatService.getUserContactIds(user.id);
+      const onlineUsers = await this.getOnlineUserIds(contactIds);
       client.emit('online-users', onlineUsers);
       return { status: 'success', onlineUsers };
     } catch (error) {
@@ -447,6 +429,20 @@ export class ChatGateway
     } else {
       return this.onlineUsers.has(userId);
     }
+  }
+
+  private async getOnlineUserIds(userIds: number[]): Promise<number[]> {
+    if (!this.redisClient) {
+      return userIds.filter((userId) => this.onlineUsers.has(userId));
+    }
+    if (userIds.length === 0) return [];
+
+    const pipeline = this.redisClient.multi();
+    for (const userId of userIds) {
+      pipeline.sCard(`${ONLINE_KEY_PREFIX}${userId}`);
+    }
+    const counts = await pipeline.exec();
+    return userIds.filter((_, index) => Number(counts[index]) > 0);
   }
 
   // ─── Error helper ───

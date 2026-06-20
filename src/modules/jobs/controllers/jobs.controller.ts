@@ -53,6 +53,15 @@ export class JobsController {
   }
 
   @Public()
+  @Get('by-creator/:creatorId')
+  findByCreator(
+    @Param('creatorId', ParseIntPipe) creatorId: number,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    return this.jobsService.findByCreator(creatorId, paginationDto);
+  }
+
+  @Public()
   @Get('category-menu')
   getCategoryMenu() {
     return this.jobsService.getCategoryMenu();

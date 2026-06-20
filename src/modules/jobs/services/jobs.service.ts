@@ -125,6 +125,35 @@ export class JobsService {
     );
   }
 
+  async findByCreator(creatorId: number, paginationDto: PaginationDto) {
+    const { page = 1, pageSize = 20 } = paginationDto;
+    const where = { creatorId };
+    const [jobs, total] = await Promise.all([
+      this.prisma.job.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+          subcategory: { include: { category: true } },
+        },
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.job.count({ where }),
+    ]);
+
+    return {
+      message: 'Get creator jobs successfully',
+      content: {
+        data: jobs,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  }
+
   async findOne(id: number) {
     const cacheKey = `${CACHE_KEYS.JOB_DETAIL}${id}`;
 

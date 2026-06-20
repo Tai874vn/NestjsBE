@@ -80,9 +80,7 @@ export class RedisService {
       keys = await this.cacheManager.store.client.keys(pattern);
     }
 
-    for (const key of keys) {
-      await this.cacheManager.del(key);
-    }
+    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
   }
 
   /**

@@ -567,6 +567,8 @@ export class UsersService {
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
         select: {
           id: true,
           name: true,
@@ -618,12 +620,10 @@ export class UsersService {
         return b.id - a.id;
       });
 
-    const start = (page - 1) * pageSize;
-
     return {
       message: 'Get candidates successfully',
       content: {
-        data: rankedCandidates.slice(start, start + pageSize),
+        data: rankedCandidates,
         total,
         page,
         pageSize,

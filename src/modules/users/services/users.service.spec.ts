@@ -60,6 +60,18 @@ describe('UsersService profile behavior', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('paginates candidate rows in the database', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.user.count.mockResolvedValue(0);
+
+    await service.findCandidates({ page: 3, pageSize: 10 });
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 10 }),
+    );
+  });
+
   it('returns a public profile without legacy or internal count fields', async () => {
     const { service, prisma, redisService } = createService();
     const createdAt = new Date('2026-01-01T00:00:00.000Z');

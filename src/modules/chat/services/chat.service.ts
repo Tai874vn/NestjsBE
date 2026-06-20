@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import {
   CreateRoomDto,
@@ -104,6 +105,18 @@ export class ChatService {
     return members.map((m) => m.roomId);
   }
 
+  async getUserContactIds(userId: number): Promise<number[]> {
+    const members = await this.prisma.chatRoomMember.findMany({
+      where: {
+        userId: { not: userId },
+        room: { members: { some: { userId } } },
+      },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    return members.map((member) => member.userId);
+  }
+
   async getUserRooms(userId: number): Promise<RoomResponse[]> {
     const rooms = await this.prisma.chatRoom.findMany({
       where: {
@@ -149,25 +162,23 @@ export class ChatService {
   ): Promise<Map<number, number>> {
     if (roomIds.length === 0) return new Map();
 
-    const members = await this.prisma.chatRoomMember.findMany({
-      where: { userId, roomId: { in: roomIds } },
-      select: { roomId: true, lastReadAt: true },
-    });
+    const counts = await this.prisma.$queryRaw<
+      Array<{ roomId: number; count: bigint | number }>
+    >(Prisma.sql`
+      SELECT members."roomId" AS "roomId", COUNT(messages.id) AS "count"
+      FROM "chat_room_members" AS members
+      LEFT JOIN "chat_messages" AS messages
+        ON messages."roomId" = members."roomId"
+        AND messages."createdAt" > members."lastReadAt"
+        AND messages."senderId" <> ${userId}
+      WHERE members."userId" = ${userId}
+        AND members."roomId" IN (${Prisma.join(roomIds)})
+      GROUP BY members."roomId"
+    `);
 
-    const counts = await Promise.all(
-      members.map(async (m) => {
-        const count = await this.prisma.chatMessage.count({
-          where: {
-            roomId: m.roomId,
-            createdAt: { gt: m.lastReadAt },
-            senderId: { not: userId },
-          },
-        });
-        return { roomId: m.roomId, count };
-      }),
+    return new Map(
+      counts.map((item) => [item.roomId, Number(item.count)]),
     );
-
-    return new Map(counts.map((c) => [c.roomId, c.count]));
   }
 
   async getRoom(roomId: number, userId: number): Promise<RoomResponse> {

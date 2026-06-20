@@ -12,7 +12,10 @@ describe('ChatGateway socket events', () => {
       {} as PrismaService,
       {
         getUserRooms: jest.fn(),
-        getUserRoomIds: jest.fn(),
+        getUserRoomIds: jest.fn().mockResolvedValue([]),
+        getUserContactIds: jest.fn().mockResolvedValue([]),
+        isRoomMember: jest.fn(),
+        getMessages: jest.fn(),
       } as unknown as ChatService,
       null,
     );
@@ -27,7 +30,7 @@ describe('ChatGateway socket events', () => {
     };
   };
 
-  it('emits the frontend rooms event when a user connects', async () => {
+  it('joins room IDs without loading or emitting room responses', async () => {
     const { gateway, chatService } = createGateway();
     const client = {
       id: 'socket-1',
@@ -35,24 +38,19 @@ describe('ChatGateway socket events', () => {
       join: jest.fn(),
       emit: jest.fn(),
     };
-    const rooms = [
-      {
-        id: 1,
-        name: null,
-        isPrivate: true,
-        members: [{ id: 6, name: 'Tai', avatar: null }],
-        unreadCount: 0,
-        createdAt: new Date('2026-06-16T00:00:00.000Z'),
-        updatedAt: new Date('2026-06-16T00:00:00.000Z'),
-      },
-    ];
-
-    chatService.getUserRooms.mockResolvedValue(rooms);
+    chatService.getUserRoomIds.mockResolvedValue([1, 2]);
 
     await gateway.handleConnection(client as never);
 
-    expect(client.emit).toHaveBeenCalledWith('rooms', rooms);
-    expect(client.emit).toHaveBeenCalledWith('rooms-list', rooms);
+    expect(chatService.getUserRooms).not.toHaveBeenCalled();
+    expect(client.join).toHaveBeenCalledTimes(2);
+    expect(client.join).toHaveBeenNthCalledWith(1, 'room:1');
+    expect(client.join).toHaveBeenNthCalledWith(2, 'room:2');
+    expect(client.emit).not.toHaveBeenCalledWith('rooms', expect.anything());
+    expect(client.emit).not.toHaveBeenCalledWith(
+      'rooms-list',
+      expect.anything(),
+    );
   });
 
   it('emits online-users when the frontend asks for online contacts', async () => {
@@ -61,28 +59,30 @@ describe('ChatGateway socket events', () => {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
       emit: jest.fn(),
     };
-    const rooms = [
-      {
-        id: 1,
-        name: null,
-        isPrivate: true,
-        members: [
-          { id: 6, name: 'Tai', avatar: null },
-          { id: 7, name: 'Lina', avatar: null },
-        ],
-        unreadCount: 0,
-        createdAt: new Date('2026-06-16T00:00:00.000Z'),
-        updatedAt: new Date('2026-06-16T00:00:00.000Z'),
-      },
-    ];
-
-    chatService.getUserRooms.mockResolvedValue(rooms);
+    chatService.getUserContactIds.mockResolvedValue([7]);
     await gateway['addOnlineUser'](7, 'socket-7');
 
     await expect(gateway.handleGetOnlineUsers(client as never)).resolves.toEqual({
       status: 'success',
       onlineUsers: [7],
     });
+    expect(chatService.getUserRooms).not.toHaveBeenCalled();
     expect(client.emit).toHaveBeenCalledWith('online-users', [7]);
+  });
+
+  it('joins an authorized room without loading message history', async () => {
+    const { gateway, chatService } = createGateway();
+    const client = {
+      data: { user: { id: 6, name: 'Tai', avatar: null } },
+      join: jest.fn(),
+    };
+    chatService.isRoomMember.mockResolvedValue(true);
+
+    await expect(
+      gateway.handleJoinRoom({ roomId: 9 }, client as never),
+    ).resolves.toEqual({ status: 'success', roomId: 9 });
+
+    expect(client.join).toHaveBeenCalledWith('room:9');
+    expect(chatService.getMessages).not.toHaveBeenCalled();
   });
 });

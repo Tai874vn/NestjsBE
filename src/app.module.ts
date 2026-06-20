@@ -17,6 +17,10 @@ import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { envValidationSchema } from './config/env.validation';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
+import { PostsModule } from './modules/posts/posts.module';
+import { SavedItemsModule } from './modules/saved-items/saved-items.module';
+import { ConnectionsModule } from './modules/connections/connections.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -43,6 +47,10 @@ import { RecommendationsModule } from './modules/recommendations/recommendations
     SkillModule,
     ChatModule,
     RecommendationsModule,
+    PostsModule,
+    SavedItemsModule,
+    ConnectionsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
