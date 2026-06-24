@@ -9,6 +9,8 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import * as express from 'express';
 import { AuthService } from '../services/auth.service';
@@ -40,10 +42,35 @@ export class AuthController {
       sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
+
+    res.cookie('csrf_token', randomBytes(32).toString('base64url'), {
+      httpOnly: false,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  private clearAuthCookies(res: express.Response): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const options = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+
+    res.clearCookie('access_token', options);
+    res.clearCookie('refresh_token', options);
+    res.clearCookie('csrf_token', {
+      ...options,
+      httpOnly: false,
+    });
   }
 
   @Public()
   @Post('signup')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async signUp(
     @Body() signUpDto: SignUpDto,
     @Res({ passthrough: true }) res: express.Response,
@@ -64,6 +91,7 @@ export class AuthController {
 
   @Public()
   @Post('signin')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async signIn(
     @Body() signInDto: SignInDto,
     @Res({ passthrough: true }) res: express.Response,
@@ -118,6 +146,7 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async refresh(
     @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
@@ -141,17 +170,23 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('logout')
   async logout(
     @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
   ) {
-    if (req.user) {
-      await this.authService.logout(req.user.id);
+    const refreshToken = req.cookies?.refresh_token;
+    if (typeof refreshToken === 'string') {
+      try {
+        const payload = this.authService.verifyRefreshToken(refreshToken);
+        await this.authService.logout(payload.sub);
+      } catch {
+        // The browser cookies should still be cleared even if the server token is stale.
+      }
     }
 
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
+    this.clearAuthCookies(res);
 
     return {
       message: 'Logged out successfully',

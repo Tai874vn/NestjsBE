@@ -227,12 +227,16 @@ export class AuthService {
   }
 
   private generateToken(userId: number, email: string): string {
-    const payload: { sub: number; email: string } = { sub: userId, email };
+    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
+      sub: userId,
+      email,
+      type: 'access',
+    };
     return this.jwtService.sign(payload);
   }
 
   private generateRefreshToken(userId: number, email: string): string {
-    const payload: { sub: number; email: string; type: string } = {
+    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
       sub: userId,
       email,
       type: 'refresh',

@@ -32,10 +32,12 @@ export interface AiCandidateMatchRequest {
 export class AiRecommendationClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly serviceApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl = this.configService.getOrThrow<string>('AI_SERVICE_URL').replace(/\/+$/, '');
     this.timeoutMs = Number(this.configService.get<string>('AI_SERVICE_TIMEOUT_MS') ?? 10000);
+    this.serviceApiKey = this.configService.getOrThrow<string>('AI_SERVICE_API_KEY');
   }
 
   matchJobs(payload: AiJobMatchRequest): Promise<AiMatchResponse> {
@@ -53,7 +55,10 @@ export class AiRecommendationClient {
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Service-Key': this.serviceApiKey,
+        },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });

@@ -23,6 +23,8 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Role } from '../../../common/constants/roles';
 
 @Controller('jobs')
 @UseGuards(JwtAuthGuard)
@@ -33,6 +35,7 @@ export class JobsController {
   ) {}
 
   @Post()
+  @Roles(Role.USER)
   create(
     @Body() createDto: CreateJobDto,
     @CurrentUser() user: ValidatedUser,

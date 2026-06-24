@@ -22,11 +22,8 @@ export class JobsService {
       data: {
         title: createDto.title,
         price: createDto.price,
-        image: createDto.image,
         description: createDto.description,
         shortDescription: createDto.shortDescription,
-        reviews: createDto.reviews ?? 0,
-        rating: createDto.rating ?? 0,
         subcategory: {
           connect: { id: createDto.subcategoryId },
         },

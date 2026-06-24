@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
@@ -17,6 +19,33 @@ export class CommentsService {
   ) {}
 
   async create(createDto: CreateCommentDto, userId: number) {
+    const job = await this.prisma.job.findUnique({
+      where: { id: createDto.jobId },
+      select: { id: true, creatorId: true },
+    });
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${createDto.jobId} not found`);
+    }
+    if (job.creatorId === userId) {
+      throw new BadRequestException('You cannot review your own service');
+    }
+
+    const completedHire = await this.prisma.hire.findFirst({
+      where: { jobId: createDto.jobId, hirerId: userId, completed: true },
+      select: { id: true },
+    });
+    if (!completedHire) {
+      throw new ForbiddenException('Complete a hire before reviewing this service');
+    }
+
+    const existingReview = await this.prisma.comment.findFirst({
+      where: { jobId: createDto.jobId, commenterId: userId },
+      select: { id: true },
+    });
+    if (existingReview) {
+      throw new ConflictException('You have already reviewed this service');
+    }
+
     const comment = await this.prisma.comment.create({
       data: {
         ...createDto,

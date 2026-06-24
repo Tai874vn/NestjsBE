@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsString, IsInt, Min, Max } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsInt,
+  MaxLength,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateCommentDto {
   @IsNotEmpty()
@@ -7,6 +14,7 @@ export class CreateCommentDto {
 
   @IsNotEmpty()
   @IsString()
+  @MaxLength(2000)
   content: string;
 
   @IsNotEmpty()

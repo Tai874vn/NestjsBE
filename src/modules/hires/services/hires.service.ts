@@ -119,7 +119,7 @@ export class HiresService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, userId: number, userRole: Role) {
     const hire = await this.prisma.hire.findUnique({
       where: { id },
       include: {
@@ -137,6 +137,14 @@ export class HiresService {
 
     if (!hire) {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
+    }
+
+    if (
+      hire.hirerId !== userId &&
+      hire.job.creatorId !== userId &&
+      userRole !== Role.ADMIN
+    ) {
+      throw new ForbiddenException('You are not part of this hire');
     }
 
     return {

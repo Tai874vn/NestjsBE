@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -21,6 +23,10 @@ import { PostsModule } from './modules/posts/posts.module';
 import { SavedItemsModule } from './modules/saved-items/saved-items.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
+import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 
 @Module({
   imports: [
@@ -35,6 +41,9 @@ import { AdminModule } from './modules/admin/admin.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 120 },
+    ]),
     RedisModule,
     CloudinaryModule,
     AuthModule,
@@ -53,6 +62,12 @@ import { AdminModule } from './modules/admin/admin.module';
     AdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+  ],
 })
 export class AppModule {}

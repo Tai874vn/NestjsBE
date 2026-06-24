@@ -1,14 +1,17 @@
-import { IsNotEmpty, IsString, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsInt,
+  IsOptional,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateJobDto {
   @IsNotEmpty()
   @IsString()
+  @MaxLength(160)
   title: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  reviews?: number;
 
   @IsNotEmpty()
   @IsInt()
@@ -17,20 +20,13 @@ export class CreateJobDto {
 
   @IsOptional()
   @IsString()
-  image?: string;
-
-  @IsOptional()
-  @IsString()
+  @MaxLength(5000)
   description?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   shortDescription?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  rating?: number;
 
   @IsNotEmpty()
   @IsInt()
