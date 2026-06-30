@@ -2,13 +2,20 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
+import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
+
+type JobCursor = {
+  createdAt: string;
+  id: number;
+};
 
 @Injectable()
 export class JobsService {
@@ -51,7 +58,7 @@ export class JobsService {
   }
 
   async findAll() {
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}all`;
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}all:seller:v2`;
 
     return this.redisService.getOrSet(
       cacheKey,
@@ -63,6 +70,7 @@ export class JobsService {
                 category: true,
               },
             },
+            user: { select: { id: true, name: true, avatar: true } },
           },
         });
 
@@ -77,7 +85,7 @@ export class JobsService {
 
   async findAllWithPagination(paginationDto: PaginationDto) {
     const { page = 1, pageSize = 10, keyword } = paginationDto;
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}page:${page}:size:${pageSize}:keyword:${keyword || ''}`;
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}seller:v2:page:${page}:size:${pageSize}:keyword:${keyword || ''}`;
 
     return this.redisService.getOrSet(
       cacheKey,
@@ -96,6 +104,7 @@ export class JobsService {
             skip,
             take: pageSize,
             include: {
+              user: { select: { id: true, name: true, avatar: true } },
               subcategory: {
                 include: {
                   category: true,
@@ -115,6 +124,68 @@ export class JobsService {
             page,
             pageSize,
             totalPages: Math.ceil(total / pageSize),
+          },
+        };
+      },
+      CACHE_TTL.SHORT,
+    );
+  }
+
+  async findAllWithCursor(query: JobCursorQueryDto) {
+    const limit = query.limit ?? 10;
+    const keyword = query.keyword?.trim();
+    const cursor = this.decodeCursor(query.cursor);
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}cursor:${query.cursor || 'first'}:limit:${limit}:keyword:${keyword || ''}`;
+
+    return this.redisService.getOrSet(
+      cacheKey,
+      async () => {
+        const where = {
+          ...(keyword
+            ? {
+                title: { contains: keyword, mode: 'insensitive' as const },
+              }
+            : {}),
+          ...(cursor
+            ? {
+                OR: [
+                  { createdAt: { lt: new Date(cursor.createdAt) } },
+                  {
+                    createdAt: new Date(cursor.createdAt),
+                    id: { lt: cursor.id },
+                  },
+                ],
+              }
+            : {}),
+        };
+
+        const rows = await this.prisma.job.findMany({
+          where,
+          take: limit + 1,
+          include: {
+            user: { select: { id: true, name: true, avatar: true } },
+            subcategory: {
+              include: {
+                category: true,
+              },
+            },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        const hasMore = rows.length > limit;
+        const page = rows.slice(0, limit);
+
+        return {
+          message: 'Get jobs with cursor successfully',
+          content: {
+            data: page,
+            nextCursor:
+              hasMore && page.length
+                ? this.encodeCursor({
+                    createdAt: page[page.length - 1].createdAt.toISOString(),
+                    id: page[page.length - 1].id,
+                  })
+                : null,
           },
         };
       },
@@ -459,5 +530,28 @@ export class JobsService {
       },
       CACHE_TTL.SHORT, // 2 minutes for search results
     );
+  }
+
+  private encodeCursor(cursor: JobCursor) {
+    return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+  }
+
+  private decodeCursor(value?: string): JobCursor | null {
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(value, 'base64url').toString('utf8'),
+      ) as JobCursor;
+      if (
+        !Number.isInteger(parsed.id) ||
+        !parsed.createdAt ||
+        Number.isNaN(new Date(parsed.createdAt).getTime())
+      ) {
+        throw new Error('invalid');
+      }
+      return parsed;
+    } catch {
+      throw new BadRequestException('Invalid jobs cursor');
+    }
   }
 }

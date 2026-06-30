@@ -17,6 +17,7 @@ import { memoryStorage } from 'multer';
 import { JobsService } from '../services/jobs.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
+import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -47,6 +48,12 @@ export class JobsController {
   @Get()
   findAll() {
     return this.jobsService.findAll();
+  }
+
+  @Public()
+  @Get('cursor')
+  findAllWithCursor(@Query() query: JobCursorQueryDto) {
+    return this.jobsService.findAllWithCursor(query);
   }
 
   @Public()
