@@ -4,9 +4,11 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConnectionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { ConnectionsQueryDto } from '../dto/connections-query.dto';
 
 export function pairKeyFor(firstUserId: number, secondUserId: number) {
@@ -29,7 +31,11 @@ const publicUserSelect = {
 
 @Injectable()
 export class ConnectionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly notifications?: NotificationsService,
+  ) {}
 
   async sendRequest(requesterId: number, recipientId: number) {
     if (requesterId === recipientId) {
@@ -54,6 +60,11 @@ export class ConnectionsService {
     const connection = await this.prisma.connection.create({
       data: { pairKey, requesterId, recipientId },
     });
+    await this.notifications?.notifyConnectionRequest({
+      requesterId,
+      recipientId,
+      connectionId: connection.id,
+    });
     return { message: 'Connection request sent', content: connection };
   }
 
@@ -70,6 +81,11 @@ export class ConnectionsService {
     const updated = await this.prisma.connection.update({
       where: { id: connectionId },
       data: { status: ConnectionStatus.ACCEPTED },
+    });
+    await this.notifications?.notifyConnectionAccepted({
+      accepterId: userId,
+      requesterId: connection.requesterId,
+      connectionId,
     });
     return { message: 'Connection request accepted', content: updated };
   }

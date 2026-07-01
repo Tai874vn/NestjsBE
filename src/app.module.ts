@@ -23,6 +23,7 @@ import { PostsModule } from './modules/posts/posts.module';
 import { SavedItemsModule } from './modules/saved-items/saved-items.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -59,6 +60,7 @@ import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
     PostsModule,
     SavedItemsModule,
     ConnectionsModule,
+    NotificationsModule,
     AdminModule,
   ],
   controllers: [AppController],

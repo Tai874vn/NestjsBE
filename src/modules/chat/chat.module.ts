@@ -5,9 +5,11 @@ import { ChatGateway } from './gateways/chat.gateway';
 import { ChatService } from './services/chat.service';
 import { ChatController } from './controllers/chat.controller';
 import { PrismaService } from '../../prisma.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
+    NotificationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

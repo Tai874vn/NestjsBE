@@ -117,6 +117,14 @@ export class ChatService {
     return members.map((member) => member.userId);
   }
 
+  async getRoomMemberIds(roomId: number): Promise<number[]> {
+    const members = await this.prisma.chatRoomMember.findMany({
+      where: { roomId },
+      select: { userId: true },
+    });
+    return members.map((member) => member.userId);
+  }
+
   async getUserRooms(userId: number): Promise<RoomResponse[]> {
     const rooms = await this.prisma.chatRoom.findMany({
       where: {
@@ -369,6 +377,7 @@ export class ChatService {
         id: m.user.id,
         name: m.user.name,
         avatar: m.user.avatar,
+        lastReadAt: m.lastReadAt,
       })),
       lastMessage: room.messages?.[0]
         ? this.formatMessageResponse(room.messages[0])

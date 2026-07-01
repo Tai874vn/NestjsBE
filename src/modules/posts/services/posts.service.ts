@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { Role } from '../../../common/constants/roles';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import {
   CommentsQueryDto,
   CreatePostCommentDto,
@@ -18,6 +19,8 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   async createPost(authorId: number, dto: CreatePostDto, image?: UploadedPostImage) {
@@ -152,11 +155,16 @@ export class PostsService {
   }
 
   async likePost(postId: number, userId: number) {
-    await this.ensurePost(postId);
+    const post = await this.ensurePost(postId);
     await this.prisma.postLike.upsert({
       where: { postId_userId: { postId, userId } },
       create: { postId, userId },
       update: {},
+    });
+    await this.notifications?.notifyPostLike({
+      actorId: userId,
+      recipientId: post.authorId,
+      postId,
     });
     return { message: 'Post liked successfully' };
   }
@@ -191,10 +199,17 @@ export class PostsService {
   }
 
   async createComment(postId: number, authorId: number, dto: CreatePostCommentDto) {
-    await this.ensurePost(postId);
+    const post = await this.ensurePost(postId);
     const comment = await this.prisma.postComment.create({
       data: { postId, authorId, content: dto.content.trim() },
       include: { author: { select: { id: true, name: true, avatar: true, headline: true } } },
+    });
+    await this.notifications?.notifyPostComment({
+      actorId: authorId,
+      recipientId: post.authorId,
+      postId,
+      commentId: comment.id,
+      preview: comment.content,
     });
     return { message: 'Comment created successfully', content: comment };
   }
@@ -231,8 +246,9 @@ export class PostsService {
   }
 
   private async ensurePost(postId: number) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+    const post = await this.prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
     if (!post) throw new NotFoundException('Post not found');
+    return post;
   }
 
   private postInclude(userId: number) {

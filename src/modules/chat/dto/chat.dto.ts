@@ -110,6 +110,7 @@ export interface RoomResponse {
     id: number;
     name: string;
     avatar: string | null;
+    lastReadAt?: Date;
   }[];
   lastMessage?: MessageResponse;
   unreadCount: number;

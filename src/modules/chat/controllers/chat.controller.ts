@@ -126,6 +126,7 @@ export class ChatController {
             id: m.user.id,
             name: m.user.name,
             avatar: m.user.avatar,
+            lastReadAt: m.lastReadAt,
           })),
           createdAt: existingRoom.createdAt,
         },

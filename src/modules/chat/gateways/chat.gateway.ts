@@ -24,6 +24,7 @@ import { createClient } from 'redis';
 import { PrismaService } from '../../../prisma.service';
 import { ChatService } from '../services/chat.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import {
   SendMessageDto,
   JoinRoomDto,
@@ -72,6 +73,8 @@ export class ChatGateway
     @Optional()
     @Inject(REDIS_CLIENT)
     private injectedRedisClient: ReturnType<typeof createClient> | null,
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   afterInit(server: Server) {
@@ -280,6 +283,21 @@ export class ChatGateway
 
       // Broadcast to all room members
       this.server.to(`room:${data.roomId}`).emit('new-message', message);
+
+      const recipientIds = (await this.chatService.getRoomMemberIds(data.roomId))
+        .filter((memberId) => memberId !== user.id);
+      const recipients = await Promise.all(
+        recipientIds.map(async (recipientId) => ({
+          recipientId,
+          unreadCount: await this.chatService.getUnreadCount(data.roomId, recipientId),
+        })),
+      );
+      await this.notifications?.notifyChatMessageRecipients({
+        senderId: user.id,
+        recipients,
+        roomId: data.roomId,
+        messageId: message.id,
+      });
 
       return { status: 'success', message };
     } catch (error) {
