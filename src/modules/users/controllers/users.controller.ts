@@ -38,6 +38,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { Role } from '../../../common/constants/roles';
+import { imageFileFilter } from '../../../common/image-file-filter';
 
 @ApiTags('Users')
 @Controller('users')
@@ -251,15 +252,7 @@ export class UsersController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Only image files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadAvatar(
@@ -280,15 +273,7 @@ export class UsersController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Only image files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadCover(

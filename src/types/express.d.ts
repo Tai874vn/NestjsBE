@@ -1,29 +1,29 @@
-import { User } from '@prisma/client';
+import type { User as PrismaUser } from '@prisma/client';
 
 declare global {
   namespace Express {
     interface User {
-      id: User['id'];
-      name: User['name'];
-      email: User['email'];
-      password: User['password'];
-      phone: User['phone'];
-      birthDay: User['birthDay'];
-      gender: User['gender'];
-      role: User['role'];
-      skill: User['skill'];
-      certification: User['certification'];
-      headline: User['headline'];
-      bio: User['bio'];
-      location: User['location'];
-      website: User['website'];
-      googleId: User['googleId'];
-      avatar: User['avatar'];
-      coverImage: User['coverImage'];
-      profileCompleted: User['profileCompleted'];
-      refreshToken: User['refreshToken'];
-      createdAt: User['createdAt'];
-      updatedAt: User['updatedAt'];
+      id: PrismaUser['id'];
+      name: PrismaUser['name'];
+      email: PrismaUser['email'];
+      password: PrismaUser['password'];
+      phone: PrismaUser['phone'];
+      birthDay: PrismaUser['birthDay'];
+      gender: PrismaUser['gender'];
+      role: PrismaUser['role'];
+      skill: PrismaUser['skill'];
+      certification: PrismaUser['certification'];
+      headline: PrismaUser['headline'];
+      bio: PrismaUser['bio'];
+      location: PrismaUser['location'];
+      website: PrismaUser['website'];
+      googleId: PrismaUser['googleId'];
+      avatar: PrismaUser['avatar'];
+      coverImage: PrismaUser['coverImage'];
+      profileCompleted: PrismaUser['profileCompleted'];
+      refreshToken: PrismaUser['refreshToken'];
+      createdAt: PrismaUser['createdAt'];
+      updatedAt: PrismaUser['updatedAt'];
     }
 
     interface Request {

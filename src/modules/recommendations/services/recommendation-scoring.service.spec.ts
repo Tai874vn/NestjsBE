@@ -21,6 +21,23 @@ describe('RecommendationScoringService', () => {
     expect(result.skillScore).toBe(1);
     expect(result.seniorityScore).toBe(1);
     expect(result.categoryScore).toBe(1);
+    expect(result.requiredSkills).toEqual(['Python', 'FastAPI']);
+    expect(result.missingSkills).toEqual([]);
+  });
+
+  it('returns missing required skills and improvement tips', () => {
+    const result = service.scoreJobMatch({
+      aiScore: 0.74,
+      resumeSkills: ['Python', 'FastAPI'],
+      resumeText: 'Backend developer using Python and FastAPI',
+      jobText: 'Need Python FastAPI developer with Docker, PostgreSQL, and AWS experience',
+      jobCategoryText: 'Backend',
+    });
+
+    expect(result.requiredSkills).toEqual(['Python', 'FastAPI', 'PostgreSQL', 'Docker', 'AWS']);
+    expect(result.matchedSkills).toEqual(['Python', 'FastAPI']);
+    expect(result.missingSkills).toEqual(['PostgreSQL', 'Docker', 'AWS']);
+    expect(result.improvementTips[0]).toContain('PostgreSQL, Docker, AWS');
   });
 
   it('labels weak matches as low match and clamps scores', () => {

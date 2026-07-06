@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
+import { JobSearchQueryDto, JobSearchSort } from '../dto/job-search-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 
@@ -83,20 +85,16 @@ export class JobsService {
     );
   }
 
-  async findAllWithPagination(paginationDto: PaginationDto) {
-    const { page = 1, pageSize = 10, keyword } = paginationDto;
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}seller:v2:page:${page}:size:${pageSize}:keyword:${keyword || ''}`;
+  async findAllWithPagination(query: JobSearchQueryDto) {
+    const { page = 1, pageSize = 10 } = query;
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}seller:v4:${this.jobSearchCacheKey(query)}`;
 
     return this.redisService.getOrSet(
       cacheKey,
       async () => {
         const skip = (page - 1) * pageSize;
-
-        const where = keyword
-          ? {
-              title: { contains: keyword, mode: 'insensitive' as const },
-            }
-          : {};
+        const where = this.buildJobSearchWhere(query);
+        const orderBy = this.buildJobSearchOrderBy(query.sort);
 
         const [jobs, total] = await Promise.all([
           this.prisma.job.findMany({
@@ -111,7 +109,7 @@ export class JobsService {
                 },
               },
             },
-            orderBy: { id: 'desc' },
+            orderBy,
           }),
           this.prisma.job.count({ where }),
         ]);
@@ -133,20 +131,15 @@ export class JobsService {
 
   async findAllWithCursor(query: JobCursorQueryDto) {
     const limit = query.limit ?? 10;
-    const keyword = query.keyword?.trim();
     const cursor = this.decodeCursor(query.cursor);
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}cursor:${query.cursor || 'first'}:limit:${limit}:keyword:${keyword || ''}`;
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}cursor:v2:${this.jobSearchCacheKey(query)}:cursor:${query.cursor || 'first'}:limit:${limit}`;
 
     return this.redisService.getOrSet(
       cacheKey,
       async () => {
-        const where = {
-          ...(keyword
-            ? {
-                title: { contains: keyword, mode: 'insensitive' as const },
-              }
-            : {}),
-          ...(cursor
+        const where = this.andJobWhere(
+          this.buildJobSearchWhere(query),
+          cursor
             ? {
                 OR: [
                   { createdAt: { lt: new Date(cursor.createdAt) } },
@@ -156,8 +149,8 @@ export class JobsService {
                   },
                 ],
               }
-            : {}),
-        };
+            : {},
+        );
 
         const rows = await this.prisma.job.findMany({
           where,
@@ -191,6 +184,86 @@ export class JobsService {
       },
       CACHE_TTL.SHORT,
     );
+  }
+
+  private buildJobSearchWhere(query: JobSearchQueryDto): Prisma.JobWhereInput {
+    const filters: Prisma.JobWhereInput[] = [];
+    const keyword = query.keyword?.trim();
+
+    if (keyword) {
+      filters.push({
+        OR: [
+          { title: { contains: keyword, mode: 'insensitive' } },
+          { shortDescription: { contains: keyword, mode: 'insensitive' } },
+          { description: { contains: keyword, mode: 'insensitive' } },
+          { user: { name: { contains: keyword, mode: 'insensitive' } } },
+          { subcategory: { name: { contains: keyword, mode: 'insensitive' } } },
+          {
+            subcategory: {
+              category: { name: { contains: keyword, mode: 'insensitive' } },
+            },
+          },
+        ],
+      });
+    }
+
+    if (query.subcategoryId) {
+      filters.push({ subcategoryId: query.subcategoryId });
+    } else if (query.categoryId) {
+      filters.push({ subcategory: { categoryId: query.categoryId } });
+    }
+
+    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+      filters.push({
+        price: {
+          ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}),
+          ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}),
+        },
+      });
+    }
+
+    if (query.minRating !== undefined) {
+      filters.push({ rating: { gte: query.minRating } });
+    }
+
+    return this.andJobWhere(...filters);
+  }
+
+  private andJobWhere(...filters: Prisma.JobWhereInput[]): Prisma.JobWhereInput {
+    const activeFilters = filters.filter((filter) => Object.keys(filter).length > 0);
+    return activeFilters.length ? { AND: activeFilters } : {};
+  }
+
+  private buildJobSearchOrderBy(sort?: JobSearchSort): Prisma.JobOrderByWithRelationInput[] {
+    if (sort === 'price_asc') {
+      return [{ price: 'asc' }, { id: 'desc' }];
+    }
+    if (sort === 'price_desc') {
+      return [{ price: 'desc' }, { id: 'desc' }];
+    }
+    if (sort === 'rating_desc') {
+      return [{ rating: 'desc' }, { reviews: 'desc' }, { id: 'desc' }];
+    }
+    if (sort === 'newest') {
+      return [{ createdAt: 'desc' }, { id: 'desc' }];
+    }
+    return [{ id: 'desc' }];
+  }
+
+  private jobSearchCacheKey(query: JobSearchQueryDto): string {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    return [
+      `page:${page}`,
+      `size:${pageSize}`,
+      `keyword:${query.keyword?.trim() || ''}`,
+      `category:${query.categoryId ?? ''}`,
+      `subcategory:${query.subcategoryId ?? ''}`,
+      `minPrice:${query.minPrice ?? ''}`,
+      `maxPrice:${query.maxPrice ?? ''}`,
+      `minRating:${query.minRating ?? ''}`,
+      `sort:${query.sort ?? ''}`,
+    ].join(':');
   }
 
   async findByCreator(creatorId: number, paginationDto: PaginationDto) {
@@ -339,6 +412,23 @@ export class JobsService {
     return {
       message: 'Job deleted successfully',
     };
+  }
+
+  async ensureCanManageJob(id: number, userId: number, userRole: Role) {
+    const job = await this.prisma.job.findUnique({
+      where: { id },
+      select: { creatorId: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+
+    if (job.creatorId !== userId && userRole !== Role.ADMIN) {
+      throw new ForbiddenException('You can only manage your own jobs');
+    }
+
+    return job;
   }
 
   async uploadImage(

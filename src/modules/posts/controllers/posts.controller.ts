@@ -18,6 +18,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
+import { imageFileFilter } from '../../../common/image-file-filter';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import {
   CommentsQueryDto,
@@ -47,7 +48,13 @@ export class PostsController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: imageFileFilter,
+    }),
+  )
   async createPost(
     @CurrentUser() user: ValidatedUser,
     @Body() dto: CreatePostDto,

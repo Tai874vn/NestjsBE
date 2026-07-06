@@ -116,14 +116,11 @@ export class NotificationsGateway
   }
 
   private extractToken(socket: Socket): string | null {
-    if (socket.handshake.auth?.token) return socket.handshake.auth.token;
+    const authToken = socket.handshake.auth?.token;
+    if (typeof authToken === 'string' && authToken) return authToken;
 
     const authHeader = socket.handshake.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
-
-    if (socket.handshake.query?.token) {
-      return socket.handshake.query.token as string;
-    }
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) return authHeader.slice(7);
 
     const cookies = socket.handshake.headers.cookie;
     if (!cookies) return null;

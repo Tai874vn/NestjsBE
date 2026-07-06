@@ -60,6 +60,20 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Uploads
 /uploads
 
+# Documentation files
+docs/
+**/docs/
 *.md
+*.mdx
+*.markdown
+*.doc
+*.docx
+*.pdf
+*.rtf
+*.txt
+
+# Seed files
+**/seed/
+**/*seed*
 
 repomix-output.xml

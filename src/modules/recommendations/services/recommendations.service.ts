@@ -1,17 +1,29 @@
 import {
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { Role } from '../../../common/constants/roles';
+import { RedisService } from '../../redis/redis.service';
 import { RecommendationQueryDto } from '../dto/recommendation-query.dto';
 import { AiMatchItem, AiRecommendationClient } from './ai-recommendation.client';
 import {
   RecommendationScore,
   RecommendationScoringService,
 } from './recommendation-scoring.service';
+
+const DAILY_RECOMMENDATION_LIMIT = 5;
+
+type RecommendationQuota = {
+  limit: number;
+  used: number;
+  remaining: number;
+  resetAt: string;
+};
 
 type UserForRecommendation = {
   id: number;
@@ -54,11 +66,20 @@ export class RecommendationsService {
     private readonly prisma: PrismaService,
     private readonly aiClient: AiRecommendationClient,
     private readonly scoringService: RecommendationScoringService,
+    private readonly redisService: RedisService,
   ) {}
+
+  async getQuotaForUser(userId: number) {
+    return {
+      message: 'Get AI recommendation quota successfully',
+      content: await this.readQuota(userId),
+    };
+  }
 
   async recommendJobsForUser(userId: number, query: RecommendationQueryDto) {
     const topK = query.topK ?? 10;
     const poolSize = query.poolSize ?? 100;
+    await this.ensureQuotaAvailable(userId);
     const user = await this.loadUserForRecommendation(userId);
     const jobs = await this.loadJobsForRecommendation(userId, poolSize);
     const resumePayload = this.buildResumePayload(user);
@@ -97,6 +118,7 @@ export class RecommendationsService {
         data: matches,
         model: aiResponse.model,
         elapsedMs: aiResponse.elapsed_ms,
+        quota: matches.length ? await this.consumeQuota(userId) : await this.readQuota(userId),
       },
     };
   }
@@ -109,11 +131,18 @@ export class RecommendationsService {
   ) {
     const topK = query.topK ?? 10;
     const poolSize = query.poolSize ?? 100;
+
+    if (userRole !== Role.EMPLOYER && userRole !== Role.ADMIN) {
+      throw new ForbiddenException('Only employers can view candidate recommendations');
+    }
+
     const job = await this.loadJobForCandidateRecommendation(jobId);
 
     if (job.creatorId !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only view candidate recommendations for your own jobs');
     }
+
+    await this.ensureQuotaAvailable(userId);
 
     const candidates = await this.loadCandidatesForRecommendation(poolSize);
     const jobPayload = this.buildJobPayload(job);
@@ -153,7 +182,62 @@ export class RecommendationsService {
         data: matches,
         model: aiResponse.model,
         elapsedMs: aiResponse.elapsed_ms,
+        quota: matches.length ? await this.consumeQuota(userId) : await this.readQuota(userId),
       },
+    };
+  }
+
+  private async ensureQuotaAvailable(userId: number) {
+    const quota = await this.readQuota(userId);
+    if (quota.remaining <= 0) {
+      throw this.quotaExceeded();
+    }
+  }
+
+  private async consumeQuota(userId: number): Promise<RecommendationQuota> {
+    const { key, ttl, resetAt } = this.quotaWindow(userId);
+    const used = await this.redisService.increment(key, ttl);
+    const normalizedUsed = Math.max(0, used);
+    if (normalizedUsed > DAILY_RECOMMENDATION_LIMIT) {
+      await this.redisService.decrement(key, ttl);
+      throw this.quotaExceeded();
+    }
+
+    return this.quotaFromUsage(normalizedUsed, resetAt);
+  }
+
+  private quotaExceeded() {
+    return new HttpException(
+      'Daily AI recommendation limit reached',
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private async readQuota(userId: number): Promise<RecommendationQuota> {
+    const { key, resetAt } = this.quotaWindow(userId);
+    const used = (await this.redisService.get<number>(key)) ?? 0;
+    return this.quotaFromUsage(used, resetAt);
+  }
+
+  private quotaFromUsage(used: number, resetAt: Date): RecommendationQuota {
+    const normalizedUsed = Math.min(DAILY_RECOMMENDATION_LIMIT, Math.max(0, used));
+    return {
+      limit: DAILY_RECOMMENDATION_LIMIT,
+      used: normalizedUsed,
+      remaining: Math.max(0, DAILY_RECOMMENDATION_LIMIT - normalizedUsed),
+      resetAt: resetAt.toISOString(),
+    };
+  }
+
+  private quotaWindow(userId: number) {
+    const now = new Date();
+    const resetAt = new Date(now);
+    resetAt.setUTCHours(24, 0, 0, 0);
+    const day = now.toISOString().slice(0, 10);
+    return {
+      key: `ai:recommendations:quota:${userId}:${day}`,
+      ttl: Math.max(60_000, resetAt.getTime() - now.getTime()),
+      resetAt,
     };
   }
 
@@ -239,36 +323,37 @@ export class RecommendationsService {
 
   private buildResumePayload(user: UserForRecommendation): Record<string, unknown> {
     const data = this.asRecord(user.resume?.data);
+    const sanitizedData = this.sanitizeResumeData(data);
     const skills = this.mergeSkills(
       user.profileSkills?.map((skill) => skill.name) ?? [],
       this.parseStringArrayValue(user.skill),
-      this.parseDelimitedString(data.Skills),
+      this.parseDelimitedString(sanitizedData.Skills),
     );
     const text = [
       user.headline,
       user.bio,
       user.location,
-      data.Category,
-      data.Summary,
-      data.Skills,
-      data.Experience,
-      data.Education,
-      data.Text,
+      sanitizedData.Category,
+      sanitizedData.Summary,
+      sanitizedData.Skills,
+      sanitizedData.Experience,
+      sanitizedData.Education,
+      sanitizedData.Text,
     ]
       .filter(Boolean)
       .join('\n');
 
     return {
       id: user.id,
-      role: user.headline ?? data.Category ?? 'Candidate',
-      title: user.headline ?? data.Name ?? `Candidate #${user.id}`,
-      location: user.location ?? data.Location,
+      role: user.headline ?? sanitizedData.Category ?? 'Candidate',
+      title: user.headline ?? sanitizedData.Category ?? `Candidate #${user.id}`,
+      location: user.location ?? sanitizedData.Location,
       skills,
-      summary: user.bio ?? data.Summary,
-      experience: data.Experience,
-      education: data.Education,
-      text,
-      data,
+      summary: user.bio ?? sanitizedData.Summary,
+      experience: sanitizedData.Experience,
+      education: sanitizedData.Education,
+      text: this.redactContactInfo(text),
+      data: sanitizedData,
     };
   }
 
@@ -387,6 +472,41 @@ export class RecommendationsService {
 
   private asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  }
+
+  private sanitizeResumeData(data: Record<string, unknown>): Record<string, unknown> {
+    const omittedKeys = new Set(['name', 'email', 'phone', 'resumeid', 'source']);
+    return Object.fromEntries(
+      Object.entries(data).flatMap(([key, value]) => {
+        if (omittedKeys.has(key.toLowerCase())) {
+          return [];
+        }
+
+        return [[key, this.sanitizeResumeValue(value)]];
+      }),
+    );
+  }
+
+  private sanitizeResumeValue(value: unknown): unknown {
+    if (typeof value === 'string') {
+      return this.redactContactInfo(value);
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizeResumeValue(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return this.sanitizeResumeData(value as Record<string, unknown>);
+    }
+
+    return value;
+  }
+
+  private redactContactInfo(value: string): string {
+    return value
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')
+      .replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, '[redacted-phone]');
   }
 
   private async callAi<T>(callback: () => Promise<T>): Promise<T> {

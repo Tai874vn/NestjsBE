@@ -1,7 +1,8 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { JobSearchQueryDto } from './job-search-query.dto';
 
-export class JobCursorQueryDto {
+export class JobCursorQueryDto extends JobSearchQueryDto {
   @IsOptional()
   @IsString()
   cursor?: string;
@@ -13,7 +14,4 @@ export class JobCursorQueryDto {
   @Max(50)
   limit: number = 10;
 
-  @IsOptional()
-  @IsString()
-  keyword?: string;
 }

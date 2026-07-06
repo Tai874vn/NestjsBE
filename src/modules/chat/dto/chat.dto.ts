@@ -82,6 +82,7 @@ export class GetMessagesDto {
 export class TypingDto {
   @ApiProperty({ description: 'Room ID' })
   @IsInt()
+  @Min(1)
   roomId: number;
 
   @ApiProperty({ description: 'Whether user is typing' })

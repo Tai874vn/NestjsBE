@@ -16,6 +16,7 @@ describe('ChatGateway socket events', () => {
         getUserContactIds: jest.fn().mockResolvedValue([]),
         isRoomMember: jest.fn(),
         getMessages: jest.fn(),
+        leaveRoom: jest.fn(),
       } as unknown as ChatService,
       null,
     );
@@ -84,5 +85,74 @@ describe('ChatGateway socket events', () => {
 
     expect(client.join).toHaveBeenCalledWith('room:9');
     expect(chatService.getMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not broadcast typing events for sockets outside a room', async () => {
+    const { gateway, chatService } = createGateway();
+    const emit = jest.fn();
+    const client = {
+      data: { user: { id: 6, name: 'Tai', avatar: null } },
+      rooms: new Set(['socket-1']),
+      join: jest.fn(),
+      to: jest.fn().mockReturnValue({ emit }),
+    };
+    chatService.isRoomMember.mockResolvedValue(false);
+
+    await expect(
+      gateway.handleTyping({ roomId: 9, isTyping: true }, client as never),
+    ).resolves.toEqual({
+      status: 'error',
+      message: 'Failed to send typing status',
+    });
+
+    expect(client.to).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('does not emit leave-room events for non-members', async () => {
+    const { gateway, chatService } = createGateway();
+    const client = {
+      data: { user: { id: 6, name: 'Tai', avatar: null } },
+      rooms: new Set(['socket-1']),
+      join: jest.fn(),
+      leave: jest.fn(),
+    };
+    chatService.isRoomMember.mockResolvedValue(false);
+
+    await expect(
+      gateway.handleLeaveRoom({ roomId: 9 }, client as never),
+    ).resolves.toEqual({
+      status: 'error',
+      message: 'Failed to leave room',
+    });
+
+    expect(chatService.leaveRoom).not.toHaveBeenCalled();
+    expect(gateway.server.to).not.toHaveBeenCalled();
+  });
+
+  it('does not accept access tokens from socket query strings', () => {
+    const { gateway } = createGateway();
+    const socket = {
+      handshake: {
+        auth: {},
+        headers: {},
+        query: { token: 'query-token' },
+      },
+    };
+
+    expect(gateway['extractToken'](socket as never)).toBeNull();
+  });
+
+  it('accepts cookie tokens for socket authentication', () => {
+    const { gateway } = createGateway();
+    const socket = {
+      handshake: {
+        auth: {},
+        headers: { cookie: 'theme=light; access_token=cookie%2Etoken' },
+        query: {},
+      },
+    };
+
+    expect(gateway['extractToken'](socket as never)).toBe('cookie.token');
   });
 });

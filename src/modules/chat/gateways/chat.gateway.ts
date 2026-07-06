@@ -255,12 +255,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const roomName = await this.ensureSocketRoomMember(client, data.roomId);
 
-      await client.leave(`room:${data.roomId}`);
+      await client.leave(roomName);
       await this.chatService.leaveRoom(data.roomId, user.id);
 
       // Notify room members
-      this.server.to(`room:${data.roomId}`).emit('user-left-room', {
+      this.server.to(roomName).emit('user-left-room', {
         roomId: data.roomId,
         userId: user.id,
       });
@@ -351,19 +352,27 @@ export class ChatGateway
   }
 
   @SubscribeMessage('typing')
-  handleTyping(
+  async handleTyping(
     @MessageBody() data: TypingDto,
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
-    const user = client.data.user!;
+    try {
+      const user = client.data.user!;
+      const roomName = await this.ensureSocketRoomMember(client, data.roomId);
 
-    // Broadcast to room except sender
-    client.to(`room:${data.roomId}`).emit('user-typing', {
-      roomId: data.roomId,
-      userId: user.id,
-      name: user.name,
-      isTyping: data.isTyping,
-    });
+      // Broadcast to room except sender
+      client.to(roomName).emit('user-typing', {
+        roomId: data.roomId,
+        userId: user.id,
+        name: user.name,
+        isTyping: data.isTyping,
+      });
+
+      return { status: 'success' };
+    } catch (error) {
+      this.logger.error(`Typing error: ${this.getErrMsg(error)}`);
+      return { status: 'error', message: 'Failed to send typing status' };
+    }
   }
 
   @SubscribeMessage('get-online-users')
@@ -467,6 +476,29 @@ export class ChatGateway
     return userIds.filter((_, index) => Number(counts[index]) > 0);
   }
 
+  private async ensureSocketRoomMember(
+    client: AuthenticatedSocket,
+    roomId: number,
+  ): Promise<string> {
+    const user = client.data.user;
+    if (!user) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    const roomName = `room:${roomId}`;
+    if (client.rooms.has(roomName)) {
+      return roomName;
+    }
+
+    const isMember = await this.chatService.isRoomMember(roomId, user.id);
+    if (!isMember) {
+      throw new ForbiddenException('You are not a member of this room');
+    }
+
+    await client.join(roomName);
+    return roomName;
+  }
+
   // ─── Error helper ───
 
   private getErrMsg(error: unknown): string {
@@ -477,19 +509,15 @@ export class ChatGateway
 
   private extractToken(socket: Socket): string | null {
     // Try auth object first (recommended)
-    if (socket.handshake.auth?.token) {
-      return socket.handshake.auth.token;
+    const authToken = socket.handshake.auth?.token;
+    if (typeof authToken === 'string' && authToken) {
+      return authToken;
     }
 
     // Try Authorization header
     const authHeader = socket.handshake.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       return authHeader.slice(7);
-    }
-
-    // Try query parameter
-    if (socket.handshake.query?.token) {
-      return socket.handshake.query.token as string;
     }
 
     // Try cookie
@@ -499,7 +527,7 @@ export class ChatGateway
         .split(';')
         .find((c) => c.trim().startsWith('access_token='));
       if (tokenCookie) {
-        return tokenCookie.split('=')[1];
+        return decodeURIComponent(tokenCookie.split('=').slice(1).join('='));
       }
     }
 

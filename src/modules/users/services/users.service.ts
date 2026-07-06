@@ -42,12 +42,16 @@ type CandidateDirectoryUser = {
     createdAt?: Date | null;
     updatedAt?: Date | null;
   }>;
-  profileCertifications?: Array<{ id?: number }>;
-  portfolioItems?: Array<{ id?: number }>;
+  _count?: {
+    profileCertifications?: number;
+    portfolioItems?: number;
+  };
   jobs?: Array<{
     rating?: number | null;
     reviews?: number | null;
-    hires?: Array<{ id?: number }>;
+    _count?: {
+      hires?: number;
+    };
   }>;
 };
 
@@ -589,19 +593,20 @@ export class UsersService {
             },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
           },
-          profileCertifications: {
-            select: { id: true },
-          },
-          portfolioItems: {
-            select: { id: true },
+          _count: {
+            select: {
+              profileCertifications: true,
+              portfolioItems: true,
+            },
           },
           jobs: {
             select: {
               rating: true,
               reviews: true,
-              hires: {
-                where: { completed: true },
-                select: { id: true },
+              _count: {
+                select: {
+                  hires: { where: { completed: true } },
+                },
               },
             },
           },
@@ -1124,6 +1129,14 @@ export class UsersService {
       });
     }
 
+    if (query.hasPortfolio) {
+      filters.push({ portfolioItems: { some: {} } });
+    }
+
+    if (query.hasCertification) {
+      filters.push({ profileCertifications: { some: {} } });
+    }
+
     return {
       role: Role.USER,
       profileCompleted: true,
@@ -1141,7 +1154,7 @@ export class UsersService {
     );
     const skills = profileSkills.map((skill) => skill.name);
     const completedWork =
-      user.jobs?.reduce((total, job) => total + (job.hires?.length ?? 0), 0) ??
+      user.jobs?.reduce((total, job) => total + (job._count?.hires ?? 0), 0) ??
       0;
     const ratings =
       user.jobs
@@ -1160,8 +1173,8 @@ export class UsersService {
         bio: user.bio,
         location: user.location,
         skills,
-        portfolioItems: user.portfolioItems?.length ?? 0,
-        certifications: user.profileCertifications?.length ?? 0,
+        portfolioItems: user._count?.portfolioItems ?? 0,
+        certifications: user._count?.profileCertifications ?? 0,
         completedWork,
         rating,
       },
@@ -1177,8 +1190,8 @@ export class UsersService {
       location: user.location ?? null,
       profileSkills,
       stats: {
-        portfolioItems: user.portfolioItems?.length ?? 0,
-        certifications: user.profileCertifications?.length ?? 0,
+        portfolioItems: user._count?.portfolioItems ?? 0,
+        certifications: user._count?.profileCertifications ?? 0,
         completedWork,
         rating,
       },
@@ -1269,9 +1282,15 @@ export class UsersService {
   }
 
   private normalizeText(value?: unknown) {
-    return String(value ?? '')
-      .trim()
-      .toLowerCase();
+    if (typeof value === 'string') {
+      return value.trim().toLowerCase();
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value).trim().toLowerCase();
+    }
+
+    return '';
   }
 
   private normalizeProfileRows<T extends { name: string }>(rows: T[]): T[] {

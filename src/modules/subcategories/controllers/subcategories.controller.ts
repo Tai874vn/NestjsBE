@@ -25,6 +25,7 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { imageFileFilter } from '../../../common/image-file-filter';
 
 @Controller('subcategories')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -85,21 +86,17 @@ export class SubcategoriesController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Only image files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadImage(
     @Param('subcategoryId', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    if (!file) {
+      throw new BadRequestException('Subcategory image file is required');
+    }
+
     const result = await this.cloudinaryService.uploadImage(
       file,
       'subcategories',

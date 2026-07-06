@@ -17,7 +17,66 @@ export interface RecommendationScore {
   skillScore: number;
   seniorityScore: number;
   categoryScore: number;
+  requiredSkills: string[];
+  matchedSkills: string[];
+  missingSkills: string[];
+  improvementTips: string[];
 }
+
+const SKILL_TERMS: Array<{ name: string; aliases: string[] }> = [
+  { name: 'Python', aliases: ['python'] },
+  { name: 'JavaScript', aliases: ['javascript', 'js'] },
+  { name: 'TypeScript', aliases: ['typescript', 'ts'] },
+  { name: 'React', aliases: ['react', 'react.js', 'reactjs'] },
+  { name: 'Next.js', aliases: ['next.js', 'nextjs'] },
+  { name: 'Node.js', aliases: ['node.js', 'nodejs'] },
+  { name: 'NestJS', aliases: ['nestjs', 'nest.js'] },
+  { name: 'Express', aliases: ['express', 'express.js'] },
+  { name: 'FastAPI', aliases: ['fastapi'] },
+  { name: 'Django', aliases: ['django'] },
+  { name: 'Flask', aliases: ['flask'] },
+  { name: 'Java', aliases: ['java'] },
+  { name: 'Spring Boot', aliases: ['spring boot', 'springboot'] },
+  { name: 'C#', aliases: ['c#', 'c sharp'] },
+  { name: '.NET', aliases: ['.net', 'dotnet'] },
+  { name: 'PHP', aliases: ['php'] },
+  { name: 'Laravel', aliases: ['laravel'] },
+  { name: 'Go', aliases: ['golang', 'go programming'] },
+  { name: 'SQL', aliases: ['sql'] },
+  { name: 'PostgreSQL', aliases: ['postgresql', 'postgres'] },
+  { name: 'MySQL', aliases: ['mysql'] },
+  { name: 'MongoDB', aliases: ['mongodb', 'mongo'] },
+  { name: 'Redis', aliases: ['redis'] },
+  { name: 'Prisma', aliases: ['prisma'] },
+  { name: 'Docker', aliases: ['docker'] },
+  { name: 'Kubernetes', aliases: ['kubernetes', 'k8s'] },
+  { name: 'AWS', aliases: ['aws', 'amazon web services'] },
+  { name: 'Azure', aliases: ['azure'] },
+  { name: 'GCP', aliases: ['gcp', 'google cloud'] },
+  { name: 'CI/CD', aliases: ['ci/cd', 'cicd', 'continuous integration'] },
+  { name: 'Git', aliases: ['git'] },
+  { name: 'REST API', aliases: ['rest api', 'restful'] },
+  { name: 'GraphQL', aliases: ['graphql'] },
+  { name: 'HTML', aliases: ['html'] },
+  { name: 'CSS', aliases: ['css'] },
+  { name: 'Tailwind CSS', aliases: ['tailwind', 'tailwind css'] },
+  { name: 'Figma', aliases: ['figma'] },
+  { name: 'UI/UX', aliases: ['ui/ux', 'ux', 'user experience'] },
+  { name: 'SEO', aliases: ['seo'] },
+  { name: 'Data Analysis', aliases: ['data analysis', 'data analytics'] },
+  { name: 'Machine Learning', aliases: ['machine learning', 'ml'] },
+  { name: 'TensorFlow', aliases: ['tensorflow'] },
+  { name: 'PyTorch', aliases: ['pytorch'] },
+  { name: 'Cybersecurity', aliases: ['cybersecurity', 'cyber security'] },
+  { name: 'Network Security', aliases: ['network security'] },
+  { name: 'SIEM', aliases: ['siem'] },
+  { name: 'Splunk', aliases: ['splunk'] },
+  { name: 'Incident Response', aliases: ['incident response'] },
+  { name: 'Penetration Testing', aliases: ['penetration testing', 'pentest'] },
+  { name: 'Vulnerability Assessment', aliases: ['vulnerability assessment', 'vulnerability scanning'] },
+  { name: 'SOC', aliases: ['soc', 'security operations center'] },
+  { name: 'IAM', aliases: ['iam', 'identity and access management'] },
+];
 
 @Injectable()
 export class RecommendationScoringService {
@@ -31,7 +90,10 @@ export class RecommendationScoringService {
 
   private score(input: RecommendationScoreInput): RecommendationScore {
     const aiScore = this.clamp(input.aiScore);
-    const skillScore = this.skillOverlapScore(input.resumeSkills, input.jobText);
+    const skillInsight = this.skillInsight(input);
+    const skillScore = skillInsight.requiredSkills.length
+      ? skillInsight.matchedSkills.length / skillInsight.requiredSkills.length
+      : this.skillOverlapScore(input.resumeSkills, input.jobText);
     const seniorityScore = this.seniorityScore(input.resumeText, input.jobText);
     const categoryScore = this.categoryScore(input.resumeText, input.jobCategoryText);
     const finalScore = this.clamp(
@@ -45,7 +107,51 @@ export class RecommendationScoringService {
       skillScore: this.round(skillScore),
       seniorityScore: this.round(seniorityScore),
       categoryScore: this.round(categoryScore),
+      requiredSkills: skillInsight.requiredSkills,
+      matchedSkills: skillInsight.matchedSkills,
+      missingSkills: skillInsight.missingSkills,
+      improvementTips: this.improvementTips(skillInsight.missingSkills, this.round(skillScore)),
     };
+  }
+
+  private skillInsight(input: RecommendationScoreInput) {
+    const requiredSkills = this.extractSkills(input.jobText);
+    const candidateText = this.normalize([input.resumeText, ...input.resumeSkills].join(' '));
+    const matchedSkills = requiredSkills.filter((skill) => this.skillMatchesCandidate(skill, candidateText));
+    const missingSkills = requiredSkills.filter((skill) => !matchedSkills.includes(skill));
+
+    return { requiredSkills, matchedSkills, missingSkills };
+  }
+
+  private extractSkills(text: string): string[] {
+    const normalizedText = this.normalize(text);
+    return SKILL_TERMS.flatMap((skill) =>
+      skill.aliases.some((alias) => this.includesTerm(normalizedText, this.normalize(alias))) ? [skill.name] : [],
+    );
+  }
+
+  private skillMatchesCandidate(skillName: string, candidateText: string): boolean {
+    const skill = SKILL_TERMS.find((item) => item.name === skillName);
+    if (!skill) {
+      return this.includesTerm(candidateText, this.normalize(skillName));
+    }
+    return skill.aliases.some((alias) => this.includesTerm(candidateText, this.normalize(alias)));
+  }
+
+  private improvementTips(missingSkills: string[], skillScore: number): string[] {
+    if (missingSkills.length) {
+      const visibleSkills = missingSkills.slice(0, 4).join(', ');
+      return [
+        `Add profile or resume evidence for ${visibleSkills} if you have that experience.`,
+        'Add project bullets that show how you used the missing skills in real work.',
+      ];
+    }
+
+    if (skillScore < 0.5) {
+      return ['Make your profile skills more explicit so matching can read your strongest tools.'];
+    }
+
+    return ['Your listed skills cover the main detected requirements for this job.'];
   }
 
   private skillOverlapScore(skills: string[], targetText: string): number {
@@ -101,6 +207,14 @@ export class RecommendationScoringService {
 
   private normalize(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim();
+  }
+
+  private includesTerm(normalizedText: string, normalizedTerm: string): boolean {
+    if (!normalizedTerm) {
+      return false;
+    }
+    const escaped = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(normalizedText);
   }
 
   private clamp(value: number): number {

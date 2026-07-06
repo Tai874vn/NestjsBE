@@ -46,6 +46,8 @@ model User {
   savedJobs        SavedJob[]
   sentConnections     Connection[] @relation("ConnectionRequester")
   receivedConnections Connection[] @relation("ConnectionRecipient")
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsActed    Notification[] @relation("NotificationActor")
 
   @@index([role, profileCompleted, updatedAt, id])
   @@map("users")
@@ -81,6 +83,7 @@ model UserCertification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_certifications")
 }
 
@@ -97,6 +100,7 @@ model UserPortfolioItem {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_portfolio_items")
 }
 
@@ -161,6 +165,9 @@ model Job {
 
   @@index([creatorId, id])
   @@index([subcategoryId, id])
+  @@index([createdAt, id])
+  @@index([price, id])
+  @@index([rating, id])
   @@map("jobs")
 }
 
@@ -272,6 +279,16 @@ enum ConnectionStatus {
   ACCEPTED
 }
 
+enum NotificationType {
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  POST_LIKE
+  POST_COMMENT
+  HIRE_CREATED
+  HIRE_COMPLETED
+  CHAT_MESSAGE
+}
+
 model Connection {
   id          Int              @id @default(autoincrement())
   pairKey     String           @unique
@@ -287,6 +304,32 @@ model Connection {
   @@index([requesterId, status, updatedAt])
   @@index([recipientId, status, updatedAt])
   @@map("connections")
+}
+
+model Notification {
+  id          Int              @id @default(autoincrement())
+  recipientId Int
+  actorId     Int?
+  type        NotificationType
+  title       String
+  body        String
+  entityType  String?
+  entityId    Int?
+  actionUrl   String?
+  metadata    Json?
+  dedupeKey   String?          @unique
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, readAt, createdAt, id])
+  @@index([recipientId, id])
+  @@index([recipientId, updatedAt, id])
+  @@index([actorId])
+  @@map("notifications")
 }
 
 model ChatRoom {

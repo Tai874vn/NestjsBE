@@ -10,7 +10,12 @@ interface CacheStore {
   keys?(pattern: string): Promise<string[]>;
   store?: {
     keys?: (pattern: string) => Promise<string[]>;
-    client?: { keys: (pattern: string) => Promise<string[]> };
+    client?: {
+      keys: (pattern: string) => Promise<string[]>;
+      incr?: (key: string) => Promise<number>;
+      decr?: (key: string) => Promise<number>;
+      pExpire?: (key: string, ttlMs: number) => Promise<unknown>;
+    };
     reset?: () => Promise<void>;
   };
 }
@@ -62,6 +67,38 @@ export class RedisService {
    */
   async del(key: string): Promise<void> {
     await this.cacheManager.del(key);
+  }
+
+  async increment(key: string, ttl?: number): Promise<number> {
+    const client = this.cacheManager.store?.client;
+    if (client?.incr) {
+      const value = await client.incr(key);
+      if (value === 1 && ttl && client.pExpire) {
+        await client.pExpire(key, ttl);
+      }
+      return value;
+    }
+
+    const current = (await this.get<number>(key)) ?? 0;
+    const next = current + 1;
+    await this.set(key, next, ttl);
+    return next;
+  }
+
+  async decrement(key: string, ttl?: number): Promise<number> {
+    const client = this.cacheManager.store?.client;
+    if (client?.decr) {
+      const value = await client.decr(key);
+      if (ttl && client.pExpire) {
+        await client.pExpire(key, ttl);
+      }
+      return value;
+    }
+
+    const current = (await this.get<number>(key)) ?? 0;
+    const next = Math.max(0, current - 1);
+    await this.set(key, next, ttl);
+    return next;
   }
 
   /**
