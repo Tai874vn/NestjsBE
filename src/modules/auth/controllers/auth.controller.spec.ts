@@ -3,6 +3,7 @@ import { AuthController } from './auth.controller';
 describe('AuthController logout', () => {
   const authService = {
     verifyRefreshToken: jest.fn(),
+    refreshTokens: jest.fn(),
     logout: jest.fn(),
   };
 
@@ -12,6 +13,7 @@ describe('AuthController logout', () => {
 
   function createResponse() {
     return {
+      cookie: jest.fn(),
       clearCookie: jest.fn(),
     };
   }
@@ -50,6 +52,43 @@ describe('AuthController logout', () => {
     await createController().logout({ cookies: { refresh_token: 'bad-token' } } as any, response as any);
 
     expect(authService.logout).not.toHaveBeenCalled();
+    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
+    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
+    expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  });
+
+  it('clears browser cookies when refresh token verification fails', async () => {
+    authService.verifyRefreshToken.mockImplementation(() => {
+      throw new Error('invalid token');
+    });
+    const response = createResponse();
+
+    await expect(
+      createController().refresh(
+        { cookies: { refresh_token: 'bad-token' } } as any,
+        response as any,
+      ),
+    ).rejects.toThrow('invalid token');
+
+    expect(authService.refreshTokens).not.toHaveBeenCalled();
+    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
+    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
+    expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  });
+
+  it('clears browser cookies when the stored refresh token no longer matches', async () => {
+    authService.verifyRefreshToken.mockReturnValue({ sub: 7, email: 'admin@example.com', type: 'refresh' });
+    authService.refreshTokens.mockRejectedValue(new Error('Access Denied'));
+    const response = createResponse();
+
+    await expect(
+      createController().refresh(
+        { cookies: { refresh_token: 'stale-token' } } as any,
+        response as any,
+      ),
+    ).rejects.toThrow('Access Denied');
+
+    expect(authService.refreshTokens).toHaveBeenCalledWith(7, 'stale-token');
     expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
     expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
     expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));

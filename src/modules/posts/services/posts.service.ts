@@ -165,6 +165,7 @@ export class PostsService {
       actorId: userId,
       recipientId: post.authorId,
       postId,
+      postTitle: post.content,
     });
     return { message: 'Post liked successfully' };
   }
@@ -210,6 +211,7 @@ export class PostsService {
       postId,
       commentId: comment.id,
       preview: comment.content,
+      postTitle: post.content,
     });
     return { message: 'Comment created successfully', content: comment };
   }
@@ -246,7 +248,10 @@ export class PostsService {
   }
 
   private async ensurePost(postId: number) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true, content: true },
+    });
     if (!post) throw new NotFoundException('Post not found');
     return post;
   }

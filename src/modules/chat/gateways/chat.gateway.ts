@@ -8,23 +8,24 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import {
   Logger,
   UnauthorizedException,
   UsePipes,
   ValidationPipe,
-  Inject,
   Optional,
   ForbiddenException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { createClient } from 'redis';
-import { PrismaService } from '../../../prisma.service';
+import {
+  ObservabilityService,
+  OperationTimer,
+} from '../../../common/observability/observability.service';
 import { ChatService } from '../services/chat.service';
-import { REDIS_CLIENT } from '../../redis/redis.module';
 import { NotificationsService } from '../../notifications/services/notifications.service';
+import { ChatPresenceService } from '../services/chat-presence.service';
+import { ChatSocketAuthService } from '../services/chat-socket-auth.service';
+import type { AuthenticatedSocket } from '../services/authenticated-socket.type';
 import {
   SendMessageDto,
   JoinRoomDto,
@@ -32,19 +33,6 @@ import {
   CreateRoomDto,
   MarkAsReadDto,
 } from '../dto/chat.dto';
-
-interface AuthenticatedSocket extends Socket {
-  data: {
-    user?: {
-      id: number;
-      name: string;
-      avatar: string | null;
-    };
-  };
-}
-
-const ONLINE_KEY_PREFIX = 'chat:online:';
-const ONLINE_TTL = 60 * 60; // 1 hour — refreshed on every connection
 
 @WebSocketGateway({
   cors: {
@@ -61,72 +49,29 @@ export class ChatGateway
   server: Server;
 
   private logger = new Logger('ChatGateway');
-  // In-memory fallback when Redis is not available
-  private onlineUsers = new Map<number, Set<string>>();
-  private redisClient: ReturnType<typeof createClient> | null = null;
 
   constructor(
-    private jwtService: JwtService,
-    private configService: ConfigService,
-    private prisma: PrismaService,
-    private chatService: ChatService,
-    @Optional()
-    @Inject(REDIS_CLIENT)
-    private injectedRedisClient: ReturnType<typeof createClient> | null,
+    private readonly chatService: ChatService,
+    private readonly socketAuth: ChatSocketAuthService,
+    private readonly presence: ChatPresenceService,
     @Optional()
     private readonly notifications?: NotificationsService,
+    @Optional()
+    private readonly observability?: ObservabilityService,
   ) {}
 
   afterInit(server: Server) {
     this.logger.log('WebSocket Gateway initialized');
 
-    // Use injected Redis client for online user tracking (adapter is set up in main.ts)
-    if (this.injectedRedisClient) {
-      this.redisClient = this.injectedRedisClient;
-      this.logger.log('Redis client available for online user tracking');
-    } else {
+    this.presence.logMode();
+    if (false) {
       this.logger.log('No Redis client — using in-memory online tracking');
     }
 
     // Authentication middleware
     server.use((socket: AuthenticatedSocket, next) => {
-      void this.authenticateSocket(socket, next);
+      void this.socketAuth.authenticateSocket(socket, next);
     });
-  }
-
-  private async authenticateSocket(
-    socket: AuthenticatedSocket,
-    next: (err?: Error) => void,
-  ): Promise<void> {
-    try {
-      const token = this.extractToken(socket);
-      if (!token) {
-        return next(new UnauthorizedException('No token provided'));
-      }
-
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
-
-      if (payload.type !== 'access') {
-        return next(new UnauthorizedException('Invalid access token'));
-      }
-
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        select: { id: true, name: true, avatar: true },
-      });
-
-      if (!user) {
-        return next(new UnauthorizedException('User not found'));
-      }
-
-      socket.data.user = user;
-      next();
-    } catch (error) {
-      this.logger.error(`Authentication error: ${this.getErrMsg(error)}`);
-      next(new UnauthorizedException('Invalid token'));
-    }
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -139,7 +84,7 @@ export class ChatGateway
     this.logger.log(`User ${user.name} (${user.id}) connected: ${client.id}`);
 
     // Track online status
-    await this.addOnlineUser(user.id, client.id);
+    await this.presence.addOnlineUser(user.id, client.id);
 
     // Auto-join user's rooms
     const [roomIds, contactIds] = await Promise.all([
@@ -150,7 +95,7 @@ export class ChatGateway
 
     // Broadcast online status — deduplicate so each user receives it once
     for (const contactId of contactIds) {
-      const memberSockets = await this.getOnlineSockets(contactId);
+      const memberSockets = await this.presence.getOnlineSockets(contactId);
       for (const socketId of memberSockets) {
         this.server.to(socketId).emit('user-online', {
           userId: user.id,
@@ -170,7 +115,7 @@ export class ChatGateway
     );
 
     // Remove socket from tracking
-    const remainingSockets = await this.removeOnlineUser(user.id, client.id);
+    const remainingSockets = await this.presence.removeOnlineUser(user.id, client.id);
     if (remainingSockets === 0) {
       try {
         const roomIds = await this.chatService.getUserRoomIds(user.id);
@@ -201,7 +146,7 @@ export class ChatGateway
 
       // Notify all members
       for (const member of room.members) {
-        const memberSockets = await this.getOnlineSockets(member.id);
+        const memberSockets = await this.presence.getOnlineSockets(member.id);
         for (const socketId of memberSockets) {
           const memberSocket = this.server.sockets.sockets.get(socketId);
           if (memberSocket) {
@@ -278,30 +223,45 @@ export class ChatGateway
     @MessageBody() data: SendMessageDto,
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
+    let timer: OperationTimer | undefined;
     try {
       const user = client.data.user!;
-      const message = await this.chatService.saveMessage(user.id, data);
+      timer = this.observability?.startOperation('chat.socket.send-message', {
+        userId: user.id,
+        roomId: data.roomId,
+      });
+      const message = await this.timeSocketStep(timer, 'db.saveMessage', () =>
+        this.chatService.saveMessage(user.id, data),
+      );
 
       // Broadcast to all room members
       this.server.to(`room:${data.roomId}`).emit('new-message', message);
 
-      const recipientIds = (await this.chatService.getRoomMemberIds(data.roomId))
+      const recipientIds = (await this.timeSocketStep(timer, 'db.roomMembers', () =>
+        this.chatService.getRoomMemberIds(data.roomId),
+      ))
         .filter((memberId) => memberId !== user.id);
-      const recipients = await Promise.all(
-        recipientIds.map(async (recipientId) => ({
-          recipientId,
-          unreadCount: await this.chatService.getUnreadCount(data.roomId, recipientId),
-        })),
+      const recipients = await this.timeSocketStep(timer, 'db.unreadCounts', () =>
+        Promise.all(
+          recipientIds.map(async (recipientId) => ({
+            recipientId,
+            unreadCount: await this.chatService.getUnreadCount(data.roomId, recipientId),
+          })),
+        ),
       );
-      await this.notifications?.notifyChatMessageRecipients({
-        senderId: user.id,
-        recipients,
-        roomId: data.roomId,
-        messageId: message.id,
+      await this.timeSocketStep(timer, 'notifications.fanout', async () => {
+        await this.notifications?.notifyChatMessageRecipients({
+          senderId: user.id,
+          recipients,
+          roomId: data.roomId,
+          messageId: message.id,
+        });
       });
+      timer?.end({ recipientCount: recipients.length, messageId: message.id });
 
       return { status: 'success', message };
     } catch (error) {
+      timer?.fail(error);
       this.logger.error(`Send message error: ${this.getErrMsg(error)}`);
       return { status: 'error', message: 'Failed to send message' };
     }
@@ -380,7 +340,7 @@ export class ChatGateway
     try {
       const user = client.data.user!;
       const contactIds = await this.chatService.getUserContactIds(user.id);
-      const onlineUsers = await this.getOnlineUserIds(contactIds);
+      const onlineUsers = await this.presence.getOnlineUserIds(contactIds);
       client.emit('online-users', onlineUsers);
       return { status: 'success', onlineUsers };
     } catch (error) {
@@ -402,79 +362,6 @@ export class ChatGateway
   }
 
   // ─── Online user tracking (Redis-backed with in-memory fallback) ───
-
-  private async addOnlineUser(userId: number, socketId: string): Promise<void> {
-    if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      await this.redisClient.sAdd(key, socketId);
-      await this.redisClient.expire(key, ONLINE_TTL);
-    } else {
-      if (!this.onlineUsers.has(userId)) {
-        this.onlineUsers.set(userId, new Set());
-      }
-      this.onlineUsers.get(userId)!.add(socketId);
-    }
-  }
-
-  private async removeOnlineUser(
-    userId: number,
-    socketId: string,
-  ): Promise<number> {
-    if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      await this.redisClient.sRem(key, socketId);
-      const remaining = await this.redisClient.sCard(key);
-      if (remaining === 0) {
-        await this.redisClient.del(key);
-      }
-      return remaining;
-    } else {
-      const sockets = this.onlineUsers.get(userId);
-      if (sockets) {
-        sockets.delete(socketId);
-        if (sockets.size === 0) {
-          this.onlineUsers.delete(userId);
-          return 0;
-        }
-        return sockets.size;
-      }
-      return 0;
-    }
-  }
-
-  private async getOnlineSockets(userId: number): Promise<string[]> {
-    if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      return this.redisClient.sMembers(key);
-    } else {
-      const sockets = this.onlineUsers.get(userId);
-      return sockets ? Array.from(sockets) : [];
-    }
-  }
-
-  private async isUserOnline(userId: number): Promise<boolean> {
-    if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      const count = await this.redisClient.sCard(key);
-      return count > 0;
-    } else {
-      return this.onlineUsers.has(userId);
-    }
-  }
-
-  private async getOnlineUserIds(userIds: number[]): Promise<number[]> {
-    if (!this.redisClient) {
-      return userIds.filter((userId) => this.onlineUsers.has(userId));
-    }
-    if (userIds.length === 0) return [];
-
-    const pipeline = this.redisClient.multi();
-    for (const userId of userIds) {
-      pipeline.sCard(`${ONLINE_KEY_PREFIX}${userId}`);
-    }
-    const counts = await pipeline.exec();
-    return userIds.filter((_, index) => Number(counts[index]) > 0);
-  }
 
   private async ensureSocketRoomMember(
     client: AuthenticatedSocket,
@@ -505,32 +392,14 @@ export class ChatGateway
     return error instanceof Error ? error.message : String(error);
   }
 
+  private timeSocketStep<T>(
+    timer: OperationTimer | undefined,
+    step: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    return timer ? timer.time(step, callback) : callback();
+  }
+
   // ─── Token extraction ───
 
-  private extractToken(socket: Socket): string | null {
-    // Try auth object first (recommended)
-    const authToken = socket.handshake.auth?.token;
-    if (typeof authToken === 'string' && authToken) {
-      return authToken;
-    }
-
-    // Try Authorization header
-    const authHeader = socket.handshake.headers.authorization;
-    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      return authHeader.slice(7);
-    }
-
-    // Try cookie
-    const cookies = socket.handshake.headers.cookie;
-    if (cookies) {
-      const tokenCookie = cookies
-        .split(';')
-        .find((c) => c.trim().startsWith('access_token='));
-      if (tokenCookie) {
-        return decodeURIComponent(tokenCookie.split('=').slice(1).join('='));
-      }
-    }
-
-    return null;
-  }
 }

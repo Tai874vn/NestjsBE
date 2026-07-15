@@ -1,64 +1,28 @@
 import {
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { Role } from '../../../common/constants/roles';
-import { RedisService } from '../../redis/redis.service';
+import { ObservabilityService } from '../../../common/observability/observability.service';
 import { RecommendationQueryDto } from '../dto/recommendation-query.dto';
 import { AiMatchItem, AiRecommendationClient } from './ai-recommendation.client';
+import {
+  CachedRecommendationResult,
+  RecommendationCacheService,
+} from './recommendation-cache.service';
+import { RecommendationQuotaService } from './recommendation-quota.service';
 import {
   RecommendationScore,
   RecommendationScoringService,
 } from './recommendation-scoring.service';
-
-const DAILY_RECOMMENDATION_LIMIT = 5;
-
-type RecommendationQuota = {
-  limit: number;
-  used: number;
-  remaining: number;
-  resetAt: string;
-};
-
-type UserForRecommendation = {
-  id: number;
-  name?: string | null;
-  avatar?: string | null;
-  headline?: string | null;
-  bio?: string | null;
-  location?: string | null;
-  skill?: string | null;
-  profileSkills?: Array<{ name: string; level?: string | null }>;
-  resume?: { data: unknown } | null;
-};
-
-type JobForRecommendation = {
-  id: number;
-  title: string;
-  price?: number;
-  image?: string | null;
-  description?: string | null;
-  shortDescription?: string | null;
-  rating?: number;
-  reviews?: number;
-  creatorId?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-  subcategory?: {
-    name: string;
-    category?: { name: string } | null;
-  } | null;
-  user?: {
-    id: number;
-    name: string;
-    avatar?: string | null;
-  } | null;
-};
+import {
+  JobForRecommendation,
+  RecommendationPayloadMapperService,
+  UserForRecommendation,
+} from './recommendation-payload-mapper.service';
 
 @Injectable()
 export class RecommendationsService {
@@ -66,61 +30,117 @@ export class RecommendationsService {
     private readonly prisma: PrismaService,
     private readonly aiClient: AiRecommendationClient,
     private readonly scoringService: RecommendationScoringService,
-    private readonly redisService: RedisService,
+    private readonly payloadMapper: RecommendationPayloadMapperService,
+    private readonly quotaService: RecommendationQuotaService,
+    private readonly cacheService: RecommendationCacheService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   async getQuotaForUser(userId: number) {
     return {
       message: 'Get AI recommendation quota successfully',
-      content: await this.readQuota(userId),
+      content: await this.quotaService.getQuotaForUser(userId),
     };
   }
 
   async recommendJobsForUser(userId: number, query: RecommendationQueryDto) {
     const topK = query.topK ?? 10;
     const poolSize = query.poolSize ?? 100;
-    await this.ensureQuotaAvailable(userId);
-    const user = await this.loadUserForRecommendation(userId);
-    const jobs = await this.loadJobsForRecommendation(userId, poolSize);
-    const resumePayload = this.buildResumePayload(user);
-    const knownSkills = resumePayload.skills as string[];
-    const jobPayloads = jobs.map((job) => this.buildJobPayload(job, knownSkills));
+    const timer = this.observability.startOperation('recommendations.jobs', {
+      userId,
+      topK,
+      poolSize,
+    });
 
-    const aiResponse = await this.callAi(() =>
-      this.aiClient.matchJobs({
-        resume: resumePayload,
-        jobs: jobPayloads,
-        top_k: topK,
-      }),
-    );
+    try {
+      const cached = await timer.time('cache.get', () =>
+        this.cacheService.getJobs<unknown>(
+          userId,
+          topK,
+          poolSize,
+        ),
+      );
 
-    const jobsById = new Map(jobs.map((job) => [String(job.id), job]));
-    const matches = aiResponse.matches
-      .map((match) => {
-        const job = jobsById.get(String(match.id));
-        if (!job) {
-          return null;
-        }
-        const score = this.scoringService.scoreJobMatch({
-          aiScore: match.score,
-          resumeSkills: knownSkills,
-          resumeText: String(resumePayload.text ?? ''),
-          jobText: this.jobToText(job),
-          jobCategoryText: this.jobCategoryText(job),
-        });
-        return this.withRecommendation(job, match, score);
-      })
-      .filter((match): match is NonNullable<typeof match> => Boolean(match));
+      if (cached) {
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId),
+        );
+        timer.end({ cache: 'hit', resultCount: cached.data.length });
+        return {
+          message: 'Get recommended jobs successfully',
+          content: {
+            ...cached,
+            quota,
+            cache: { hit: true, ttlSeconds: this.cacheService.ttlSeconds },
+          },
+        };
+      }
 
-    return {
-      message: 'Get recommended jobs successfully',
-      content: {
+      timer.annotate({ cache: 'miss' });
+      await timer.time('quota.ensure', () => this.quotaService.ensureAvailable(userId));
+      const user = await timer.time('db.user', () => this.loadUserForRecommendation(userId));
+      const jobs = await timer.time('db.jobs', () =>
+        this.loadJobsForRecommendation(userId, poolSize),
+      );
+      const resumePayload = this.payloadMapper.buildResumePayload(user);
+      const knownSkills = resumePayload.skills as string[];
+      const jobPayloads = jobs.map((job) => this.payloadMapper.buildJobPayload(job, knownSkills));
+
+      const aiResponse = await timer.time('aiService', () =>
+        this.callAi(() =>
+          this.aiClient.matchJobs({
+            resume: resumePayload,
+            jobs: jobPayloads,
+            top_k: topK,
+          }),
+        ),
+      );
+
+      const jobsById = new Map(jobs.map((job) => [String(job.id), job]));
+      const matches = aiResponse.matches
+        .map((match) => {
+          const job = jobsById.get(String(match.id));
+          if (!job) {
+            return null;
+          }
+          const score = this.scoringService.scoreJobMatch({
+            aiScore: match.score,
+            resumeSkills: knownSkills,
+            resumeText: String(resumePayload.text ?? ''),
+            jobText: this.payloadMapper.jobToText(job),
+            jobCategoryText: this.payloadMapper.jobCategoryText(job),
+          });
+          return this.withRecommendation(job, match, score);
+        })
+        .filter((match): match is NonNullable<typeof match> => Boolean(match));
+
+      const result: CachedRecommendationResult<(typeof matches)[number]> = {
         data: matches,
         model: aiResponse.model,
         elapsedMs: aiResponse.elapsed_ms,
-        quota: matches.length ? await this.consumeQuota(userId) : await this.readQuota(userId),
-      },
-    };
+        generatedAt: new Date().toISOString(),
+      };
+      const quota = matches.length
+        ? await timer.time('quota.consume', () => this.quotaService.consume(userId))
+        : await timer.time('quota.read', () => this.quotaService.getQuotaForUser(userId));
+
+      await timer.time('cache.set', () =>
+        this.cacheService.setJobs(userId, topK, poolSize, result),
+      );
+      timer.end({ resultCount: matches.length, aiElapsedMs: aiResponse.elapsed_ms });
+
+      return {
+        message: 'Get recommended jobs successfully',
+        content: {
+          ...result,
+          quota,
+          cache: { hit: false, ttlSeconds: this.cacheService.ttlSeconds },
+        },
+      };
+    } catch (error) {
+      timer.fail(error);
+      throw error;
+    }
   }
 
   async recommendCandidatesForJob(
@@ -136,109 +156,111 @@ export class RecommendationsService {
       throw new ForbiddenException('Only employers can view candidate recommendations');
     }
 
-    const job = await this.loadJobForCandidateRecommendation(jobId);
+    const timer = this.observability.startOperation('recommendations.candidates', {
+      userId,
+      jobId,
+      topK,
+      poolSize,
+    });
 
-    if (job.creatorId !== userId && userRole !== Role.ADMIN) {
-      throw new ForbiddenException('You can only view candidate recommendations for your own jobs');
-    }
+    try {
+      const job = await timer.time('db.job', () =>
+        this.loadJobForCandidateRecommendation(jobId),
+      );
 
-    await this.ensureQuotaAvailable(userId);
+      if (job.creatorId !== userId && userRole !== Role.ADMIN) {
+        throw new ForbiddenException('You can only view candidate recommendations for your own jobs');
+      }
 
-    const candidates = await this.loadCandidatesForRecommendation(poolSize);
-    const jobPayload = this.buildJobPayload(job);
-    const candidatePayloads = candidates.map((candidate) => this.buildResumePayload(candidate));
+      const cached = await timer.time('cache.get', () =>
+        this.cacheService.getCandidates<unknown>(
+          userId,
+          jobId,
+          topK,
+          poolSize,
+        ),
+      );
 
-    const aiResponse = await this.callAi(() =>
-      this.aiClient.matchCandidates({
-        job: jobPayload,
-        candidates: candidatePayloads,
-        top_k: topK,
-      }),
-    );
+      if (cached) {
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId),
+        );
+        timer.end({ cache: 'hit', resultCount: cached.data.length });
+        return {
+          message: 'Get recommended candidates successfully',
+          content: {
+            ...cached,
+            quota,
+            cache: { hit: true, ttlSeconds: this.cacheService.ttlSeconds },
+          },
+        };
+      }
 
-    const candidatesById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]));
-    const jobText = this.jobToText(job);
-    const matches = aiResponse.matches
-      .map((match) => {
-        const candidate = candidatesById.get(String(match.id));
-        if (!candidate) {
-          return null;
-        }
-        const resumePayload = this.buildResumePayload(candidate);
-        const score = this.scoringService.scoreCandidateMatch({
-          aiScore: match.score,
-          resumeSkills: resumePayload.skills as string[],
-          resumeText: String(resumePayload.text ?? ''),
-          jobText,
-          jobCategoryText: this.jobCategoryText(job),
-        });
-        return this.safeCandidate(candidate, match, score);
-      })
-      .filter((match): match is NonNullable<typeof match> => Boolean(match));
+      timer.annotate({ cache: 'miss' });
+      await timer.time('quota.ensure', () => this.quotaService.ensureAvailable(userId));
+      const candidates = await timer.time('db.candidates', () =>
+        this.loadCandidatesForRecommendation(poolSize),
+      );
+      const jobPayload = this.payloadMapper.buildJobPayload(job);
+      const candidatePayloads = candidates.map((candidate) => this.payloadMapper.buildResumePayload(candidate));
 
-    return {
-      message: 'Get recommended candidates successfully',
-      content: {
+      const aiResponse = await timer.time('aiService', () =>
+        this.callAi(() =>
+          this.aiClient.matchCandidates({
+            job: jobPayload,
+            candidates: candidatePayloads,
+            top_k: topK,
+          }),
+        ),
+      );
+
+      const candidatesById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]));
+      const jobText = this.payloadMapper.jobToText(job);
+      const matches = aiResponse.matches
+        .map((match) => {
+          const candidate = candidatesById.get(String(match.id));
+          if (!candidate) {
+            return null;
+          }
+          const resumePayload = this.payloadMapper.buildResumePayload(candidate);
+          const score = this.scoringService.scoreCandidateMatch({
+            aiScore: match.score,
+            resumeSkills: resumePayload.skills as string[],
+            resumeText: String(resumePayload.text ?? ''),
+            jobText,
+            jobCategoryText: this.payloadMapper.jobCategoryText(job),
+          });
+          return this.safeCandidate(candidate, match, score);
+        })
+        .filter((match): match is NonNullable<typeof match> => Boolean(match));
+
+      const result: CachedRecommendationResult<(typeof matches)[number]> = {
         data: matches,
         model: aiResponse.model,
         elapsedMs: aiResponse.elapsed_ms,
-        quota: matches.length ? await this.consumeQuota(userId) : await this.readQuota(userId),
-      },
-    };
-  }
+        generatedAt: new Date().toISOString(),
+      };
+      const quota = matches.length
+        ? await timer.time('quota.consume', () => this.quotaService.consume(userId))
+        : await timer.time('quota.read', () => this.quotaService.getQuotaForUser(userId));
 
-  private async ensureQuotaAvailable(userId: number) {
-    const quota = await this.readQuota(userId);
-    if (quota.remaining <= 0) {
-      throw this.quotaExceeded();
+      await timer.time('cache.set', () =>
+        this.cacheService.setCandidates(userId, jobId, topK, poolSize, result),
+      );
+      timer.end({ resultCount: matches.length, aiElapsedMs: aiResponse.elapsed_ms });
+
+      return {
+        message: 'Get recommended candidates successfully',
+        content: {
+          ...result,
+          quota,
+          cache: { hit: false, ttlSeconds: this.cacheService.ttlSeconds },
+        },
+      };
+    } catch (error) {
+      timer.fail(error);
+      throw error;
     }
-  }
-
-  private async consumeQuota(userId: number): Promise<RecommendationQuota> {
-    const { key, ttl, resetAt } = this.quotaWindow(userId);
-    const used = await this.redisService.increment(key, ttl);
-    const normalizedUsed = Math.max(0, used);
-    if (normalizedUsed > DAILY_RECOMMENDATION_LIMIT) {
-      await this.redisService.decrement(key, ttl);
-      throw this.quotaExceeded();
-    }
-
-    return this.quotaFromUsage(normalizedUsed, resetAt);
-  }
-
-  private quotaExceeded() {
-    return new HttpException(
-      'Daily AI recommendation limit reached',
-      HttpStatus.TOO_MANY_REQUESTS,
-    );
-  }
-
-  private async readQuota(userId: number): Promise<RecommendationQuota> {
-    const { key, resetAt } = this.quotaWindow(userId);
-    const used = (await this.redisService.get<number>(key)) ?? 0;
-    return this.quotaFromUsage(used, resetAt);
-  }
-
-  private quotaFromUsage(used: number, resetAt: Date): RecommendationQuota {
-    const normalizedUsed = Math.min(DAILY_RECOMMENDATION_LIMIT, Math.max(0, used));
-    return {
-      limit: DAILY_RECOMMENDATION_LIMIT,
-      used: normalizedUsed,
-      remaining: Math.max(0, DAILY_RECOMMENDATION_LIMIT - normalizedUsed),
-      resetAt: resetAt.toISOString(),
-    };
-  }
-
-  private quotaWindow(userId: number) {
-    const now = new Date();
-    const resetAt = new Date(now);
-    resetAt.setUTCHours(24, 0, 0, 0);
-    const day = now.toISOString().slice(0, 10);
-    return {
-      key: `ai:recommendations:quota:${userId}:${day}`,
-      ttl: Math.max(60_000, resetAt.getTime() - now.getTime()),
-      resetAt,
-    };
   }
 
   private async loadUserForRecommendation(userId: number): Promise<UserForRecommendation> {
@@ -321,58 +343,6 @@ export class RecommendationsService {
     });
   }
 
-  private buildResumePayload(user: UserForRecommendation): Record<string, unknown> {
-    const data = this.asRecord(user.resume?.data);
-    const sanitizedData = this.sanitizeResumeData(data);
-    const skills = this.mergeSkills(
-      user.profileSkills?.map((skill) => skill.name) ?? [],
-      this.parseStringArrayValue(user.skill),
-      this.parseDelimitedString(sanitizedData.Skills),
-    );
-    const text = [
-      user.headline,
-      user.bio,
-      user.location,
-      sanitizedData.Category,
-      sanitizedData.Summary,
-      sanitizedData.Skills,
-      sanitizedData.Experience,
-      sanitizedData.Education,
-      sanitizedData.Text,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    return {
-      id: user.id,
-      role: user.headline ?? sanitizedData.Category ?? 'Candidate',
-      title: user.headline ?? sanitizedData.Category ?? `Candidate #${user.id}`,
-      location: user.location ?? sanitizedData.Location,
-      skills,
-      summary: user.bio ?? sanitizedData.Summary,
-      experience: sanitizedData.Experience,
-      education: sanitizedData.Education,
-      text: this.redactContactInfo(text),
-      data: sanitizedData,
-    };
-  }
-
-  private buildJobPayload(job: JobForRecommendation, knownSkills: string[] = []): Record<string, unknown> {
-    const jobText = this.jobToText(job);
-    return {
-      id: job.id,
-      job_title: job.title,
-      title: job.title,
-      description: job.description,
-      short_description: job.shortDescription,
-      industry: job.subcategory?.category?.name,
-      required_skills: this.skillsMentionedInText(knownSkills, jobText),
-      text: jobText,
-      category: job.subcategory?.category?.name,
-      subcategory: job.subcategory?.name,
-    };
-  }
-
   private withRecommendation(job: JobForRecommendation, match: AiMatchItem, score: RecommendationScore) {
     return {
       ...job,
@@ -407,106 +377,6 @@ export class RecommendationsService {
         categoryScore: score.categoryScore,
       },
     };
-  }
-
-  private jobToText(job: JobForRecommendation): string {
-    return [
-      job.title,
-      job.shortDescription,
-      job.description,
-      job.subcategory?.name,
-      job.subcategory?.category?.name,
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  private jobCategoryText(job: JobForRecommendation): string {
-    return [job.subcategory?.name, job.subcategory?.category?.name].filter(Boolean).join(' ');
-  }
-
-  private skillsMentionedInText(skills: string[], text: string): string[] {
-    const normalizedText = text.toLowerCase();
-    return skills.filter((skill) => normalizedText.includes(skill.toLowerCase()));
-  }
-
-  private mergeSkills(...skillGroups: string[][]): string[] {
-    const seen = new Set<string>();
-    return skillGroups.flat().flatMap((skill) => {
-      const trimmed = skill.trim();
-      const key = trimmed.toLowerCase();
-      if (!trimmed || seen.has(key)) {
-        return [];
-      }
-      seen.add(key);
-      return [trimmed];
-    });
-  }
-
-  private parseStringArrayValue(value?: string | null): string[] {
-    if (!value?.trim()) {
-      return [];
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.flatMap((item) => (typeof item === 'string' ? this.parseDelimitedString(item) : []));
-      }
-    } catch {
-      return this.parseDelimitedString(value);
-    }
-
-    return this.parseDelimitedString(value);
-  }
-
-  private parseDelimitedString(value: unknown): string[] {
-    if (typeof value !== 'string') {
-      return [];
-    }
-    return value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  private asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  }
-
-  private sanitizeResumeData(data: Record<string, unknown>): Record<string, unknown> {
-    const omittedKeys = new Set(['name', 'email', 'phone', 'resumeid', 'source']);
-    return Object.fromEntries(
-      Object.entries(data).flatMap(([key, value]) => {
-        if (omittedKeys.has(key.toLowerCase())) {
-          return [];
-        }
-
-        return [[key, this.sanitizeResumeValue(value)]];
-      }),
-    );
-  }
-
-  private sanitizeResumeValue(value: unknown): unknown {
-    if (typeof value === 'string') {
-      return this.redactContactInfo(value);
-    }
-
-    if (Array.isArray(value)) {
-      return value.map((item) => this.sanitizeResumeValue(item));
-    }
-
-    if (value && typeof value === 'object') {
-      return this.sanitizeResumeData(value as Record<string, unknown>);
-    }
-
-    return value;
-  }
-
-  private redactContactInfo(value: string): string {
-    return value
-      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')
-      .replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, '[redacted-phone]');
   }
 
   private async callAi<T>(callback: () => Promise<T>): Promise<T> {

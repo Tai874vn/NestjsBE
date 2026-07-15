@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
+import { RecommendationPayloadMapperService } from './recommendation-payload-mapper.service';
 import { RecommendationsService } from './recommendations.service';
 
 const redisFreePrisma = {
@@ -23,22 +24,57 @@ const scoring = {
   scoreCandidateMatch: jest.fn(),
 };
 
-const redis = {
-  get: jest.fn(),
-  increment: jest.fn(),
-  decrement: jest.fn(),
+const quota = {
+  getQuotaForUser: jest.fn(),
+  ensureAvailable: jest.fn(),
+  consume: jest.fn(),
 };
 
+const cache = {
+  ttlSeconds: 300,
+  getJobs: jest.fn(),
+  setJobs: jest.fn(),
+  getCandidates: jest.fn(),
+  setCandidates: jest.fn(),
+};
+
+const timer = {
+  time: jest.fn((_step: string, callback: () => Promise<unknown>) => callback()),
+  annotate: jest.fn(),
+  end: jest.fn(),
+  fail: jest.fn(),
+};
+
+const observability = {
+  startOperation: jest.fn(() => timer),
+};
+
+const payloadMapper = new RecommendationPayloadMapperService();
+
 function createService() {
-  return new RecommendationsService(redisFreePrisma as any, aiClient as any, scoring as any, redis as any);
+  return new RecommendationsService(
+    redisFreePrisma as any,
+    aiClient as any,
+    scoring as any,
+    payloadMapper,
+    quota as any,
+    cache as any,
+    observability as any,
+  );
 }
 
 describe('RecommendationsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    redis.get.mockResolvedValue(0);
-    redis.increment.mockResolvedValue(1);
-    redis.decrement.mockResolvedValue(0);
+    quota.getQuotaForUser.mockResolvedValue({ limit: 5, used: 0, remaining: 5, resetAt: 'tomorrow' });
+    quota.ensureAvailable.mockResolvedValue(undefined);
+    quota.consume.mockResolvedValue({ limit: 5, used: 1, remaining: 4, resetAt: 'tomorrow' });
+    cache.getJobs.mockResolvedValue(undefined);
+    cache.getCandidates.mockResolvedValue(undefined);
+    cache.setJobs.mockResolvedValue(undefined);
+    cache.setCandidates.mockResolvedValue(undefined);
+    timer.time.mockImplementation((_step: string, callback: () => Promise<unknown>) => callback());
+    observability.startOperation.mockReturnValue(timer);
   });
 
   it('recommends jobs by sending current user resume and candidate jobs to AI service', async () => {
@@ -103,6 +139,12 @@ describe('RecommendationsService', () => {
       },
     });
     expect(result.content.quota).toMatchObject({ limit: 5, used: 1, remaining: 4 });
+    expect(cache.setJobs).toHaveBeenCalledWith(
+      1,
+      5,
+      25,
+      expect.objectContaining({ data: expect.any(Array), model: 'model', elapsedMs: 10 }),
+    );
   });
 
   it('redacts direct contact details before sending resumes to the AI service', async () => {
@@ -148,7 +190,7 @@ describe('RecommendationsService', () => {
   });
 
   it('returns quota without calling the AI service', async () => {
-    redis.get.mockResolvedValue(2);
+    quota.getQuotaForUser.mockResolvedValue({ limit: 5, used: 2, remaining: 3, resetAt: 'tomorrow' });
 
     const result = await createService().getQuotaForUser(1);
 
@@ -171,9 +213,26 @@ describe('RecommendationsService', () => {
 
     const result = await createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 });
 
-    expect(redis.increment).not.toHaveBeenCalled();
+    expect(quota.consume).not.toHaveBeenCalled();
     expect(result.content.data).toEqual([]);
     expect(result.content.quota).toMatchObject({ limit: 5, used: 0, remaining: 5 });
+  });
+
+  it('returns cached job recommendations without consuming quota or calling AI', async () => {
+    cache.getJobs.mockResolvedValue({
+      data: [{ id: 10, recommendation: { finalScore: 0.9 } }],
+      model: 'cached-model',
+      elapsedMs: 15,
+      generatedAt: '2026-07-11T00:00:00.000Z',
+    });
+
+    const result = await createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 });
+
+    expect(quota.ensureAvailable).not.toHaveBeenCalled();
+    expect(quota.consume).not.toHaveBeenCalled();
+    expect(aiClient.matchJobs).not.toHaveBeenCalled();
+    expect(result.content.cache).toEqual({ hit: true, ttlSeconds: 300 });
+    expect(result.content.data).toEqual([{ id: 10, recommendation: { finalScore: 0.9 } }]);
   });
 
   it('throws service unavailable when AI service cannot be reached', async () => {

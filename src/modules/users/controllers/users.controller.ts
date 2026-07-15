@@ -36,9 +36,10 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { Role } from '../../../common/constants/roles';
 import { imageFileFilter } from '../../../common/image-file-filter';
+import { CandidateDirectoryService } from '../services/candidate-directory.service';
+import { UserUploadsService } from '../services/user-uploads.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -47,7 +48,8 @@ import { imageFileFilter } from '../../../common/image-file-filter';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly candidateDirectoryService: CandidateDirectoryService,
+    private readonly userUploadsService: UserUploadsService,
   ) {}
 
   @Public()
@@ -89,7 +91,7 @@ export class UsersController {
   @Roles(Role.EMPLOYER, Role.ADMIN)
   @ApiOperation({ summary: 'Browse completed worker profiles for recruiters' })
   findCandidates(@Query() query: CandidateDirectoryQueryDto) {
-    return this.usersService.findCandidates(query);
+    return this.candidateDirectoryService.findCandidates(query);
   }
 
   @Get('me/profile')
@@ -144,19 +146,7 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Resume file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadDocument(file, 'resumes');
-
-    return this.usersService.uploadResumeFile(user.id, {
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      url: result.secure_url,
-      publicId: result.public_id,
-    });
+    return this.userUploadsService.uploadResumeFile(user.id, file);
   }
 
   @Get('me/resume')
@@ -259,12 +249,7 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Avatar file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadImage(file, 'avatars');
-    return this.usersService.uploadAvatar(user.id, result.secure_url);
+    return this.userUploadsService.uploadAvatar(user.id, file);
   }
 
   @Post('upload-cover')
@@ -280,11 +265,6 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Cover image file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadImage(file, 'covers');
-    return this.usersService.uploadCover(user.id, result.secure_url);
+    return this.userUploadsService.uploadCover(user.id, file);
   }
 }

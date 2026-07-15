@@ -30,7 +30,7 @@ export const envValidationSchema = Joi.object({
   AI_SERVICE_TIMEOUT_MS: Joi.number().optional(),
 
   // Cloudinary (if used)
-  CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
-  CLOUDINARY_API_KEY: Joi.string().optional(),
-  CLOUDINARY_API_SECRET: Joi.string().optional(),
+  CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
+  CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
+  CLOUDINARY_API_SECRET: Joi.string().empty('').optional(),
 });

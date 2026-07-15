@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -24,10 +24,12 @@ import { SavedItemsModule } from './modules/saved-items/saved-items.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ObservabilityModule } from './common/observability/observability.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { RequestObservabilityInterceptor } from './common/observability/request-observability.interceptor';
 
 @Module({
   imports: [
@@ -45,6 +47,7 @@ import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
     ThrottlerModule.forRoot([
       { name: 'default', ttl: 60_000, limit: 120 },
     ]),
+    ObservabilityModule,
     RedisModule,
     CloudinaryModule,
     AuthModule,
@@ -66,6 +69,7 @@ import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
   controllers: [AppController],
   providers: [
     AppService,
+    { provide: APP_INTERCEPTOR, useClass: RequestObservabilityInterceptor },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: CsrfGuard },

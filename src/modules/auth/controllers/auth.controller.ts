@@ -16,6 +16,8 @@ import * as express from 'express';
 import { AuthService } from '../services/auth.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
+import { GoogleCallbackGuard } from '../guards/google-callback.guard';
+import { GoogleAuthGuard } from '../guards/google-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 
 @Controller('auth')
@@ -112,21 +114,19 @@ export class AuthController {
 
   @Public()
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleAuthGuard)
   async googleAuth() {
     // Guard redirects to Google
   }
 
   @Public()
   @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleCallbackGuard)
   async googleAuthRedirect(
     @Req() req: express.Request,
     @Res() res: express.Response,
   ) {
-    if (!req.user) {
-      throw new UnauthorizedException('User not authenticated');
-    }
+    if (!req.user) return;
     const result = await this.authService.googleLogin(req.user);
 
     this.setAuthCookies(res, result.token, result.refreshToken);
@@ -153,21 +153,27 @@ export class AuthController {
   ) {
     const refreshToken = req.cookies?.refresh_token;
     if (typeof refreshToken !== 'string') {
+      this.clearAuthCookies(res);
       throw new UnauthorizedException('Refresh token not found');
     }
 
-    const payload = this.authService.verifyRefreshToken(refreshToken);
+    try {
+      const payload = this.authService.verifyRefreshToken(refreshToken);
 
-    const tokens = await this.authService.refreshTokens(
-      payload.sub,
-      refreshToken,
-    );
+      const tokens = await this.authService.refreshTokens(
+        payload.sub,
+        refreshToken,
+      );
 
-    this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+      this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
-    return {
-      message: 'Tokens refreshed successfully',
-    };
+      return {
+        message: 'Tokens refreshed successfully',
+      };
+    } catch (error) {
+      this.clearAuthCookies(res);
+      throw error;
+    }
   }
 
   @Public()

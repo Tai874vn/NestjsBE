@@ -39,7 +39,7 @@ export class JobsController {
   ) {}
 
   @Post()
-  @Roles(Role.USER)
+  @Roles(Role.USER, Role.ADMIN)
   create(
     @Body() createDto: CreateJobDto,
     @CurrentUser() user: ValidatedUser,

@@ -1,24 +1,32 @@
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from '../services/chat.service';
-import { PrismaService } from '../../../prisma.service';
+import { ChatPresenceService } from '../services/chat-presence.service';
+import { ChatSocketAuthService } from '../services/chat-socket-auth.service';
 
 describe('ChatGateway socket events', () => {
   const createGateway = () => {
+    const chatService = {
+      getUserRooms: jest.fn(),
+      getUserRoomIds: jest.fn().mockResolvedValue([]),
+      getUserContactIds: jest.fn().mockResolvedValue([]),
+      isRoomMember: jest.fn(),
+      getMessages: jest.fn(),
+      leaveRoom: jest.fn(),
+    } as unknown as jest.Mocked<ChatService>;
+    const presence = {
+      logMode: jest.fn(),
+      addOnlineUser: jest.fn().mockResolvedValue(undefined),
+      getOnlineSockets: jest.fn().mockResolvedValue([]),
+      removeOnlineUser: jest.fn().mockResolvedValue(0),
+      getOnlineUserIds: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<ChatPresenceService>;
+    const socketAuth = {
+      authenticateSocket: jest.fn(),
+    } as unknown as jest.Mocked<ChatSocketAuthService>;
     const gateway = new ChatGateway(
-      {} as JwtService,
-      {} as ConfigService,
-      {} as PrismaService,
-      {
-        getUserRooms: jest.fn(),
-        getUserRoomIds: jest.fn().mockResolvedValue([]),
-        getUserContactIds: jest.fn().mockResolvedValue([]),
-        isRoomMember: jest.fn(),
-        getMessages: jest.fn(),
-        leaveRoom: jest.fn(),
-      } as unknown as ChatService,
-      null,
+      chatService,
+      socketAuth,
+      presence,
     );
 
     gateway.server = {
@@ -27,7 +35,9 @@ describe('ChatGateway socket events', () => {
 
     return {
       gateway,
-      chatService: gateway['chatService'] as jest.Mocked<ChatService>,
+      chatService,
+      presence,
+      socketAuth,
     };
   };
 
@@ -55,13 +65,13 @@ describe('ChatGateway socket events', () => {
   });
 
   it('emits online-users when the frontend asks for online contacts', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, chatService, presence } = createGateway();
     const client = {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
       emit: jest.fn(),
     };
     chatService.getUserContactIds.mockResolvedValue([7]);
-    await gateway['addOnlineUser'](7, 'socket-7');
+    presence.getOnlineUserIds.mockResolvedValue([7]);
 
     await expect(gateway.handleGetOnlineUsers(client as never)).resolves.toEqual({
       status: 'success',
@@ -131,7 +141,7 @@ describe('ChatGateway socket events', () => {
   });
 
   it('does not accept access tokens from socket query strings', () => {
-    const { gateway } = createGateway();
+    const authService = new ChatSocketAuthService({} as never, {} as never, {} as never);
     const socket = {
       handshake: {
         auth: {},
@@ -140,11 +150,11 @@ describe('ChatGateway socket events', () => {
       },
     };
 
-    expect(gateway['extractToken'](socket as never)).toBeNull();
+    expect(authService.extractToken(socket as never)).toBeNull();
   });
 
   it('accepts cookie tokens for socket authentication', () => {
-    const { gateway } = createGateway();
+    const authService = new ChatSocketAuthService({} as never, {} as never, {} as never);
     const socket = {
       handshake: {
         auth: {},
@@ -153,6 +163,6 @@ describe('ChatGateway socket events', () => {
       },
     };
 
-    expect(gateway['extractToken'](socket as never)).toBe('cookie.token');
+    expect(authService.extractToken(socket as never)).toBe('cookie.token');
   });
 });

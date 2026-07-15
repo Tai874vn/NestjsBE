@@ -1,32 +1,15 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
+import {
+  ObservabilityService,
+  OperationTimer,
+} from '../../../common/observability/observability.service';
 import { NotificationsQueryDto } from '../dto/notifications-query.dto';
 import { NotificationsGateway } from '../gateways/notifications.gateway';
-
-const actorSelect = {
-  id: true,
-  name: true,
-  avatar: true,
-  headline: true,
-} as const;
-
-type NotificationWithActor = Prisma.NotificationGetPayload<{
-  include: { actor: { select: typeof actorSelect } };
-}>;
-
-type CreateNotificationInput = {
-  recipientId: number;
-  actorId?: number | null;
-  type: NotificationType;
-  title: string;
-  body: string;
-  entityType?: string;
-  entityId?: number;
-  actionUrl?: string | null;
-  metadata?: Prisma.InputJsonValue;
-  dedupeKey?: string;
-};
+import { NotificationPresenterService } from './notification-presenter.service';
+import { NotificationTemplateService } from './notification-template.service';
+import { CreateNotificationInput, notificationActorSelect } from './notification.types';
 
 @Injectable()
 export class NotificationsService {
@@ -34,23 +17,45 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly templates: NotificationTemplateService,
+    private readonly presenter: NotificationPresenterService,
     @Optional()
     private readonly gateway?: NotificationsGateway,
+    @Optional()
+    private readonly observability?: ObservabilityService,
   ) {}
 
   async list(userId: number, query: NotificationsQueryDto) {
     const limit = query.limit ?? 20;
-    const notifications = await this.prisma.notification.findMany({
-      where: {
-        recipientId: userId,
-        ...(query.cursor ? { id: { lt: query.cursor } } : {}),
-      },
+    const baseWhere: Prisma.NotificationWhereInput = {
+      recipientId: userId,
+      ...(query.cursor ? { id: { lt: query.cursor } } : {}),
+    };
+    const orderBy: Prisma.NotificationOrderByWithRelationInput[] = [
+      { updatedAt: 'desc' },
+      { id: 'desc' },
+    ];
+
+    const unreadNotifications = await this.prisma.notification.findMany({
+      where: { ...baseWhere, readAt: null },
       take: limit + 1,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      include: { actor: { select: actorSelect } },
+      orderBy,
+      include: { actor: { select: notificationActorSelect } },
     });
+    let notifications = unreadNotifications;
+
+    if (notifications.length <= limit) {
+      const readNotifications = await this.prisma.notification.findMany({
+        where: { ...baseWhere, readAt: { not: null } },
+        take: limit + 1 - notifications.length,
+        orderBy,
+        include: { actor: { select: notificationActorSelect } },
+      });
+      notifications = [...notifications, ...readNotifications];
+    }
+
     const hasMore = notifications.length > limit;
-    const data = notifications.slice(0, limit).map((item) => this.format(item));
+    const data = notifications.slice(0, limit).map((item) => this.presenter.format(item));
 
     return {
       message: 'Notifications fetched successfully',
@@ -78,13 +83,13 @@ export class NotificationsService {
 
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },
-      include: { actor: { select: actorSelect } },
+      include: { actor: { select: notificationActorSelect } },
     });
     await this.emitUnreadCount(userId);
 
     return {
       message: 'Notification marked as read',
-      content: notification ? this.format(notification) : null,
+      content: notification ? this.presenter.format(notification) : null,
     };
   }
 
@@ -119,14 +124,14 @@ export class NotificationsService {
               metadata: input.metadata,
               readAt: null,
             },
-            include: { actor: { select: actorSelect } },
+            include: { actor: { select: notificationActorSelect } },
           })
         : await this.prisma.notification.create({
             data,
-            include: { actor: { select: actorSelect } },
+            include: { actor: { select: notificationActorSelect } },
           });
 
-      const formatted = this.format(notification);
+      const formatted = this.presenter.format(notification);
       this.gateway?.emitNotification(input.recipientId, formatted);
       await this.emitUnreadCount(input.recipientId);
       return formatted;
@@ -143,18 +148,7 @@ export class NotificationsService {
     recipientId: number;
     connectionId: number;
   }) {
-    return this.create({
-      recipientId: input.recipientId,
-      actorId: input.requesterId,
-      type: NotificationType.CONNECTION_REQUEST,
-      title: 'New connection request',
-      body: 'sent you a connection request.',
-      entityType: 'connection',
-      entityId: input.connectionId,
-      actionUrl: '/connections',
-      metadata: { connectionId: input.connectionId },
-      dedupeKey: `connection_request:${input.connectionId}`,
-    });
+    return this.create(this.templates.connectionRequest(input));
   }
 
   notifyConnectionAccepted(input: {
@@ -162,37 +156,16 @@ export class NotificationsService {
     requesterId: number;
     connectionId: number;
   }) {
-    return this.create({
-      recipientId: input.requesterId,
-      actorId: input.accepterId,
-      type: NotificationType.CONNECTION_ACCEPTED,
-      title: 'Connection accepted',
-      body: 'accepted your connection request.',
-      entityType: 'connection',
-      entityId: input.connectionId,
-      actionUrl: '/connections',
-      metadata: { connectionId: input.connectionId },
-      dedupeKey: `connection_accepted:${input.connectionId}`,
-    });
+    return this.create(this.templates.connectionAccepted(input));
   }
 
   notifyPostLike(input: {
     actorId: number;
     recipientId: number;
     postId: number;
+    postTitle?: string;
   }) {
-    return this.create({
-      recipientId: input.recipientId,
-      actorId: input.actorId,
-      type: NotificationType.POST_LIKE,
-      title: 'New reaction',
-      body: 'liked your post.',
-      entityType: 'post',
-      entityId: input.postId,
-      actionUrl: `/?postId=${input.postId}`,
-      metadata: { postId: input.postId },
-      dedupeKey: `post_like:${input.postId}:${input.actorId}`,
-    });
+    return this.create(this.templates.postLike(input));
   }
 
   notifyPostComment(input: {
@@ -201,18 +174,9 @@ export class NotificationsService {
     postId: number;
     commentId: number;
     preview: string;
+    postTitle?: string;
   }) {
-    return this.create({
-      recipientId: input.recipientId,
-      actorId: input.actorId,
-      type: NotificationType.POST_COMMENT,
-      title: 'New comment',
-      body: this.preview(input.preview, 'commented on your post.'),
-      entityType: 'post_comment',
-      entityId: input.commentId,
-      actionUrl: `/?postId=${input.postId}`,
-      metadata: { postId: input.postId, commentId: input.commentId },
-    });
+    return this.create(this.templates.postComment(input));
   }
 
   notifyHireCreated(input: {
@@ -222,18 +186,7 @@ export class NotificationsService {
     jobId: number;
     jobTitle: string;
   }) {
-    return this.create({
-      recipientId: input.recipientId,
-      actorId: input.hirerId,
-      type: NotificationType.HIRE_CREATED,
-      title: 'New hire',
-      body: `hired ${input.jobTitle}.`,
-      entityType: 'hire',
-      entityId: input.hireId,
-      actionUrl: `/jobs/${input.jobId}`,
-      metadata: { hireId: input.hireId, jobId: input.jobId },
-      dedupeKey: `hire_created:${input.hireId}`,
-    });
+    return this.create(this.templates.hireCreated(input));
   }
 
   notifyHireCompleted(input: {
@@ -243,18 +196,7 @@ export class NotificationsService {
     jobId: number;
     jobTitle: string;
   }) {
-    return this.create({
-      recipientId: input.recipientId,
-      actorId: input.actorId,
-      type: NotificationType.HIRE_COMPLETED,
-      title: 'Work completed',
-      body: `marked ${input.jobTitle} as complete.`,
-      entityType: 'hire',
-      entityId: input.hireId,
-      actionUrl: `/jobs/${input.jobId}`,
-      metadata: { hireId: input.hireId, jobId: input.jobId },
-      dedupeKey: `hire_completed:${input.hireId}`,
-    });
+    return this.create(this.templates.hireCompleted(input));
   }
 
   async notifyChatMessageRecipients(input: {
@@ -263,26 +205,32 @@ export class NotificationsService {
     roomId: number;
     messageId: number;
   }) {
-    await Promise.all(
-      input.recipients.map(({ recipientId, unreadCount }) =>
-        this.create({
-          recipientId,
-          actorId: input.senderId,
-          type: NotificationType.CHAT_MESSAGE,
-          title: 'New messages',
-          body: this.chatMessageBody(unreadCount),
-          entityType: 'chat_message',
-          entityId: input.messageId,
-          actionUrl: null,
-          metadata: {
-            roomId: input.roomId,
-            messageId: input.messageId,
-            unreadCount,
-          },
-          dedupeKey: `chat_message:${input.roomId}:${recipientId}`,
-        }),
-      ),
-    );
+    const timer = this.observability?.startOperation('notifications.socket.fanout', {
+      senderId: input.senderId,
+      roomId: input.roomId,
+      messageId: input.messageId,
+      recipientCount: input.recipients.length,
+    });
+
+    try {
+      await this.timeStep(timer, 'notification.upsertAndEmit', () =>
+        Promise.all(
+          input.recipients.map(({ recipientId, unreadCount }) =>
+            this.create(this.templates.chatMessage({
+              recipientId,
+              senderId: input.senderId,
+              unreadCount,
+              roomId: input.roomId,
+              messageId: input.messageId,
+            })),
+          ),
+        ),
+      );
+      timer?.end();
+    } catch (error) {
+      timer?.fail(error);
+      throw error;
+    }
   }
 
   private createData(input: CreateNotificationInput) {
@@ -311,33 +259,11 @@ export class NotificationsService {
     });
   }
 
-  private preview(value: string, fallback: string) {
-    const normalized = value.trim().replace(/\s+/g, ' ');
-    if (!normalized) return fallback;
-    return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
-  }
-
-  private chatMessageBody(unreadCount: number) {
-    const safeCount = Math.max(1, unreadCount);
-    return safeCount === 1 ? '1 new message' : `${safeCount} new messages`;
-  }
-
-  private format(notification: NotificationWithActor) {
-    return {
-      id: notification.id,
-      recipientId: notification.recipientId,
-      actorId: notification.actorId,
-      type: notification.type,
-      title: notification.title,
-      body: notification.body,
-      entityType: notification.entityType,
-      entityId: notification.entityId,
-      actionUrl: notification.actionUrl,
-      metadata: notification.metadata,
-      readAt: notification.readAt,
-      createdAt: notification.createdAt,
-      updatedAt: notification.updatedAt,
-      actor: notification.actor,
-    };
+  private timeStep<T>(
+    timer: OperationTimer | undefined,
+    step: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    return timer ? timer.time(step, callback) : callback();
   }
 }
