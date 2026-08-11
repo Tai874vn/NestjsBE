@@ -20,7 +20,7 @@ import { ChatService } from '../services/chat.service';
 import { CreateRoomDto } from '../dto/chat.dto';
 
 @ApiTags('Chat')
-@Controller('api/chat')
+@Controller('chat')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ChatController {
@@ -116,19 +116,10 @@ export class ChatController {
     );
 
     if (existingRoom) {
+      const room = await this.chatService.getRoom(existingRoom.id, user.id);
       return {
         message: 'Private chat found',
-        content: {
-          id: existingRoom.id,
-          name: existingRoom.name,
-          isPrivate: existingRoom.isPrivate,
-          members: existingRoom.members.map((m) => ({
-            id: m.user.id,
-            name: m.user.name,
-            avatar: m.user.avatar,
-          })),
-          createdAt: existingRoom.createdAt,
-        },
+        content: room,
       };
     }
 

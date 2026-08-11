@@ -11,18 +11,24 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JobsService } from '../services/jobs.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
+import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
+import { JobSearchQueryDto } from '../dto/job-search-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Role } from '../../../common/constants/roles';
+import { imageFileFilter } from '../../../common/image-file-filter';
 
 @Controller('jobs')
 @UseGuards(JwtAuthGuard)
@@ -33,10 +39,8 @@ export class JobsController {
   ) {}
 
   @Post()
-  create(
-    @Body() createDto: CreateJobDto,
-    @CurrentUser() user: ValidatedUser,
-  ) {
+  @Roles(Role.USER, Role.ADMIN)
+  create(@Body() createDto: CreateJobDto, @CurrentUser() user: ValidatedUser) {
     return this.jobsService.create(createDto, user.id);
   }
 
@@ -47,9 +51,24 @@ export class JobsController {
   }
 
   @Public()
+  @Get('cursor')
+  findAllWithCursor(@Query() query: JobCursorQueryDto) {
+    return this.jobsService.findAllWithCursor(query);
+  }
+
+  @Public()
   @Get('paginated-search')
-  findAllWithPagination(@Query() paginationDto: PaginationDto) {
-    return this.jobsService.findAllWithPagination(paginationDto);
+  findAllWithPagination(@Query() query: JobSearchQueryDto) {
+    return this.jobsService.findAllWithPagination(query);
+  }
+
+  @Public()
+  @Get('by-creator/:creatorId')
+  findByCreator(
+    @Param('creatorId', ParseIntPipe) creatorId: number,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    return this.jobsService.findByCreator(creatorId, paginationDto);
   }
 
   @Public()
@@ -110,6 +129,7 @@ export class JobsController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadImage(
@@ -117,12 +137,23 @@ export class JobsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
+    if (!file) {
+      throw new BadRequestException('Job image file is required');
+    }
+
+    await this.jobsService.ensureCanManageJob(id, user.id, user.role);
+
     const result = await this.cloudinaryService.uploadImage(file, 'jobs');
-    return this.jobsService.uploadImage(
-      id,
-      result.secure_url,
-      user.id,
-      user.role,
-    );
+    try {
+      return await this.jobsService.uploadImage(
+        id,
+        result.secure_url,
+        user.id,
+        user.role,
+      );
+    } catch (error) {
+      await this.cloudinaryService.deleteImage(result.public_id);
+      throw error;
+    }
   }
 }

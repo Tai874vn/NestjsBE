@@ -13,6 +13,7 @@ describe('JwtAuthGuard', () => {
     ({
       getHandler: jest.fn(),
       getClass: jest.fn(),
+      getType: jest.fn().mockReturnValue('http'),
     }) as unknown as ExecutionContext;
 
   afterEach(() => {
@@ -45,5 +46,19 @@ describe('JwtAuthGuard', () => {
 
     expect(guard.canActivate(createContext())).toBe(true);
     expect(superSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves websocket authentication to the gateway middleware', () => {
+    const reflector: Pick<Reflector, 'getAllAndOverride'> = {
+      getAllAndOverride: jest.fn(),
+    };
+    const superSpy = jest.spyOn(parentPrototype, 'canActivate').mockReturnValue(false);
+    const guard = new JwtAuthGuard(reflector as Reflector);
+    const context = {
+      getType: jest.fn().mockReturnValue('ws'),
+    } as unknown as ExecutionContext;
+
+    expect(guard.canActivate(context)).toBe(true);
+    expect(superSpy).not.toHaveBeenCalled();
   });
 });

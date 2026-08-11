@@ -28,6 +28,7 @@ import {
   UpsertPortfolioItemDto,
 } from '../dto/profile.dto';
 import { ImportResumeDto } from '../dto/import-resume.dto';
+import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -35,8 +36,13 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { Role } from '../../../common/constants/roles';
+import { imageFileFilter } from '../../../common/image-file-filter';
+import { CandidateDirectoryService } from '../services/candidate-directory.service';
+import { UserPortfolioService } from '../services/user-portfolio.service';
+import { UserProfileService } from '../services/user-profile.service';
+import { UserResumeService } from '../services/user-resume.service';
+import { UserUploadsService } from '../services/user-uploads.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -45,14 +51,18 @@ import { Role } from '../../../common/constants/roles';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly candidateDirectoryService: CandidateDirectoryService,
+    private readonly userResumeService: UserResumeService,
+    private readonly userPortfolioService: UserPortfolioService,
+    private readonly userProfileService: UserProfileService,
+    private readonly userUploadsService: UserUploadsService,
   ) {}
 
   @Public()
   @Get('profile/:id')
   @ApiOperation({ summary: 'Get public user profile (like LinkedIn)' })
   getPublicProfile(@Param('id', ParseIntPipe) id: number) {
-    return this.usersService.getPublicProfile(id);
+    return this.userProfileService.getPublicProfile(id);
   }
 
   @Post()
@@ -83,10 +93,17 @@ export class UsersController {
     return this.usersService.searchByName(name);
   }
 
+  @Get('candidates')
+  @Roles(Role.EMPLOYER, Role.ADMIN)
+  @ApiOperation({ summary: 'Browse completed worker profiles for recruiters' })
+  findCandidates(@Query() query: CandidateDirectoryQueryDto) {
+    return this.candidateDirectoryService.findCandidates(query);
+  }
+
   @Get('me/profile')
   @ApiOperation({ summary: 'Get editable profile for current user' })
   getMyProfile(@CurrentUser() user: ValidatedUser) {
-    return this.usersService.getMyProfile(user.id);
+    return this.userProfileService.getMyProfile(user.id);
   }
 
   @Patch('me/profile')
@@ -95,7 +112,7 @@ export class UsersController {
     @Body() updateProfileDto: UpdateMyProfileDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.updateMyProfile(user.id, updateProfileDto);
+    return this.userProfileService.updateMyProfile(user.id, updateProfileDto);
   }
 
   @Put('me/resume')
@@ -104,7 +121,7 @@ export class UsersController {
     @Body() importResumeDto: ImportResumeDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.importResume(user.id, importResumeDto);
+    return this.userResumeService.importResume(user.id, importResumeDto);
   }
 
   @Post('me/resume/file')
@@ -122,7 +139,9 @@ export class UsersController {
 
         if (!allowedMimeTypes.has(file.mimetype)) {
           return callback(
-            new BadRequestException('Only PDF, DOC, and DOCX files are allowed'),
+            new BadRequestException(
+              'Only PDF, DOC, and DOCX files are allowed',
+            ),
             false,
           );
         }
@@ -135,25 +154,19 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Resume file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadDocument(file, 'resumes');
-
-    return this.usersService.uploadResumeFile(user.id, {
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      url: result.secure_url,
-      publicId: result.public_id,
-    });
+    return this.userUploadsService.uploadResumeFile(user.id, file);
   }
 
   @Get('me/resume')
   @ApiOperation({ summary: 'Get imported CV/resume JSON for current user' })
   getMyResume(@CurrentUser() user: ValidatedUser) {
-    return this.usersService.getMyResume(user.id);
+    return this.userResumeService.getMyResume(user.id);
+  }
+
+  @Post('me/resume/seniority')
+  @ApiOperation({ summary: 'Predict and save resume seniority for current user' })
+  predictMyResumeSeniority(@CurrentUser() user: ValidatedUser) {
+    return this.userResumeService.predictResumeSeniority(user.id);
   }
 
   @Put('me/profile/skills')
@@ -162,7 +175,10 @@ export class UsersController {
     @Body() replaceSkillsDto: ReplaceProfileSkillsDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.replaceProfileSkills(user.id, replaceSkillsDto);
+    return this.userProfileService.replaceProfileSkills(
+      user.id,
+      replaceSkillsDto,
+    );
   }
 
   @Put('me/profile/certifications')
@@ -171,7 +187,7 @@ export class UsersController {
     @Body() replaceCertificationsDto: ReplaceProfileCertificationsDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.replaceProfileCertifications(
+    return this.userProfileService.replaceProfileCertifications(
       user.id,
       replaceCertificationsDto,
     );
@@ -183,7 +199,7 @@ export class UsersController {
     @Body() portfolioDto: UpsertPortfolioItemDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.createPortfolioItem(user.id, portfolioDto);
+    return this.userPortfolioService.createPortfolioItem(user.id, portfolioDto);
   }
 
   @Put('me/profile/portfolio/:id')
@@ -193,7 +209,11 @@ export class UsersController {
     @Body() portfolioDto: UpsertPortfolioItemDto,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.updatePortfolioItem(user.id, id, portfolioDto);
+    return this.userPortfolioService.updatePortfolioItem(
+      user.id,
+      id,
+      portfolioDto,
+    );
   }
 
   @Delete('me/profile/portfolio/:id')
@@ -202,7 +222,7 @@ export class UsersController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.usersService.deletePortfolioItem(user.id, id);
+    return this.userPortfolioService.deletePortfolioItem(user.id, id);
   }
 
   @Get(':id')
@@ -243,27 +263,14 @@ export class UsersController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Only image files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadAvatar(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Avatar file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadImage(file, 'avatars');
-    return this.usersService.uploadAvatar(user.id, result.secure_url);
+    return this.userUploadsService.uploadAvatar(user.id, file);
   }
 
   @Post('upload-cover')
@@ -272,26 +279,13 @@ export class UsersController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Only image files are allowed'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
+      fileFilter: imageFileFilter,
     }),
   )
   async uploadCover(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
   ) {
-    if (!file) {
-      throw new BadRequestException('Cover image file is required');
-    }
-
-    const result = await this.cloudinaryService.uploadImage(file, 'covers');
-    return this.usersService.uploadCover(user.id, result.secure_url);
+    return this.userUploadsService.uploadCover(user.id, file);
   }
 }

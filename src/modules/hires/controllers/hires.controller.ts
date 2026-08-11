@@ -17,6 +17,8 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { Role } from '../../../common/constants/roles';
 
 @Controller('hires')
 @UseGuards(JwtAuthGuard)
@@ -24,19 +26,18 @@ export class HiresController {
   constructor(private readonly hiresService: HiresService) {}
 
   @Post()
-  create(
-    @Body() createDto: CreateHireDto,
-    @CurrentUser() user: ValidatedUser,
-  ) {
+  create(@Body() createDto: CreateHireDto, @CurrentUser() user: ValidatedUser) {
     return this.hiresService.create(createDto, user.id);
   }
 
   @Get()
+  @Roles(Role.ADMIN)
   findAll() {
     return this.hiresService.findAll();
   }
 
   @Get('paginated-search')
+  @Roles(Role.ADMIN)
   findAllWithPagination(@Query() paginationDto: PaginationDto) {
     return this.hiresService.findAllWithPagination(paginationDto);
   }
@@ -47,8 +48,11 @@ export class HiresController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.hiresService.findOne(id);
+  findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.hiresService.findOne(id, user.id, user.role);
   }
 
   @Put(':id')

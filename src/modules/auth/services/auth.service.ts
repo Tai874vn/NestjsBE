@@ -39,9 +39,8 @@ export class AuthService {
       refreshToken: string;
     }>
   > {
-    const existingUser: UserType | null = await this.prisma.user.findUnique({
-      where: { email: signUpDto.email },
-    });
+    const email = this.normalizeEmail(signUpDto.email);
+    const existingUser: UserType | null = await this.findUserByEmail(email);
 
     if (existingUser) {
       throw new ConflictException('Email already exists');
@@ -52,7 +51,7 @@ export class AuthService {
     const user: UserType = await this.prisma.user.create({
       data: {
         name: signUpDto.name,
-        email: signUpDto.email,
+        email,
         password: hashedPassword,
         phone: signUpDto.phone,
         birthDay: signUpDto.birthDay,
@@ -63,7 +62,7 @@ export class AuthService {
         bio: signUpDto.bio,
         location: signUpDto.location,
         website: signUpDto.website,
-        role: Role.USER,
+        role: signUpDto.role ?? Role.USER,
       },
     });
 
@@ -91,9 +90,9 @@ export class AuthService {
       refreshToken: string;
     }>
   > {
-    const user: UserType | null = await this.prisma.user.findUnique({
-      where: { email: signInDto.email },
-    });
+    const user: UserType | null = await this.findUserByEmail(
+      this.normalizeEmail(signInDto.email),
+    );
 
     if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
@@ -144,9 +143,7 @@ export class AuthService {
     };
   }
 
-  async getCurrentUser(
-    userId: number,
-  ): Promise<ApiResponse<Omit<UserType, 'password' | 'refreshToken'>>> {
+  async getCurrentUser(userId: number) {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -173,6 +170,15 @@ export class AuthService {
         profileCompleted: true,
         createdAt: true,
         updatedAt: true,
+        profileSkills: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        profileCertifications: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
+        portfolioItems: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        },
       },
     });
 
@@ -180,19 +186,56 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const { skill, certification, ...profile } = user;
+
     return {
       message: 'Get current user successfully',
-      content: user,
+      content: {
+        ...profile,
+        profileSkills: this.withLegacyProfileRows(
+          user.profileSkills,
+          skill,
+          (name, index) => ({
+            id: 0 - index,
+            name,
+            level: null,
+            sortOrder: index,
+            createdAt: null,
+            updatedAt: null,
+          }),
+        ),
+        profileCertifications: this.withLegacyProfileRows(
+          user.profileCertifications,
+          certification,
+          (name, index) => ({
+            id: 0 - index,
+            userId: null,
+            name,
+            issuer: null,
+            issuedAt: null,
+            expiresAt: null,
+            credentialUrl: null,
+            credentialId: null,
+            sortOrder: index,
+            createdAt: null,
+            updatedAt: null,
+          }),
+        ),
+      },
     };
   }
 
   private generateToken(userId: number, email: string): string {
-    const payload: { sub: number; email: string } = { sub: userId, email };
+    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
+      sub: userId,
+      email,
+      type: 'access',
+    };
     return this.jwtService.sign(payload);
   }
 
   private generateRefreshToken(userId: number, email: string): string {
-    const payload: { sub: number; email: string; type: string } = {
+    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
       sub: userId,
       email,
       type: 'refresh',
@@ -246,6 +289,71 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: null },
+    });
+  }
+
+  private withLegacyProfileRows<T extends { name: string }, FallbackRow>(
+    rows: T[],
+    legacyValue: string | null,
+    createFallbackRow: (name: string, index: number) => FallbackRow,
+  ): Array<T | FallbackRow> {
+    const normalizedRows = this.normalizeProfileRows(rows);
+    if (normalizedRows.length > 0) {
+      return normalizedRows;
+    }
+
+    return this.parseStringArrayValue(legacyValue).map(createFallbackRow);
+  }
+
+  private normalizeProfileRows<T extends { name: string }>(rows: T[]): T[] {
+    const seenNames = new Set<string>();
+
+    return rows.flatMap((row) =>
+      this.parseStringArrayValue(row.name).flatMap((name) => {
+        const key = name.toLowerCase();
+        if (seenNames.has(key)) {
+          return [];
+        }
+
+        seenNames.add(key);
+        return [{ ...row, name }];
+      }),
+    );
+  }
+
+  private parseStringArrayValue(value?: string | null): string[] {
+    if (!value) {
+      return [];
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((item) =>
+          typeof item === 'string' ? this.parseStringArrayValue(item) : [],
+        );
+      }
+    } catch {
+      return [trimmed];
+    }
+
+    return [trimmed];
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private findUserByEmail(email: string): Promise<UserType | null> {
+    const normalizedEmail = this.normalizeEmail(email);
+    return this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      orderBy: { id: 'asc' },
     });
   }
 }

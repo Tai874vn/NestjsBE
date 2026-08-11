@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
@@ -10,12 +11,15 @@ import { CreateHireDto } from '../dto/create-hire.dto';
 import { UpdateHireDto } from '../dto/update-hire.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 
 @Injectable()
 export class HiresService {
   constructor(
     private prisma: PrismaService,
     private redisService: RedisService,
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   async create(createDto: CreateHireDto, userId: number) {
@@ -24,9 +28,7 @@ export class HiresService {
     });
 
     if (!job) {
-      throw new NotFoundException(
-        `Job with ID ${createDto.jobId} not found`,
-      );
+      throw new NotFoundException(`Job with ID ${createDto.jobId} not found`);
     }
 
     if (job.creatorId === userId) {
@@ -52,6 +54,13 @@ export class HiresService {
     });
 
     await this.redisService.invalidateUserCaches(job.creatorId);
+    await this.notifications?.notifyHireCreated({
+      hirerId: userId,
+      recipientId: job.creatorId,
+      hireId: hire.id,
+      jobId: job.id,
+      jobTitle: job.title,
+    });
 
     return {
       message: 'Job hired successfully',
@@ -121,7 +130,7 @@ export class HiresService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, userId: number, userRole: Role) {
     const hire = await this.prisma.hire.findUnique({
       where: { id },
       include: {
@@ -139,6 +148,14 @@ export class HiresService {
 
     if (!hire) {
       throw new NotFoundException(`Hired job with ID ${id} not found`);
+    }
+
+    if (
+      hire.hirerId !== userId &&
+      hire.job.creatorId !== userId &&
+      userRole !== Role.ADMIN
+    ) {
+      throw new ForbiddenException('You are not part of this hire');
     }
 
     return {
@@ -189,6 +206,13 @@ export class HiresService {
     });
 
     await this.redisService.invalidateUserCaches(hire.job.creatorId);
+    await this.notifications?.notifyHireCompleted({
+      actorId: userId,
+      recipientId: hire.job.creatorId,
+      hireId: updated.id,
+      jobId: updated.job.id,
+      jobTitle: updated.job.title,
+    });
 
     return {
       message: 'Hired job updated successfully',

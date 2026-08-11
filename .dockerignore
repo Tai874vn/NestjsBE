@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+build
+logs
+*.log
+*.tsbuildinfo
+repomix-output.xml
+docs
+uploads
+database_example.png

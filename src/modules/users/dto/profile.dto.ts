@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -10,20 +10,28 @@ import {
   Matches,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
+import {
+  optionalTrimString,
+  trimString,
+} from '../../../common/dto/string.transforms';
 
 export class UpdateMyProfileDto {
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(100)
   name?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(30)
   phone?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @IsDateString()
@@ -31,26 +39,31 @@ export class UpdateMyProfileDto {
   @MaxLength(30)
   birthDay?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(30)
   gender?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(160)
   headline?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   bio?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(120)
   location?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(300)
@@ -58,10 +71,13 @@ export class UpdateMyProfileDto {
 }
 
 export class ProfileSkillDto {
+  @Transform(trimString)
   @IsString()
+  @MinLength(1)
   @MaxLength(80)
   name: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(40)
@@ -82,10 +98,13 @@ export class ReplaceProfileSkillsDto {
 }
 
 export class ProfileCertificationDto {
+  @Transform(trimString)
   @IsString()
+  @MinLength(1)
   @MaxLength(120)
   name: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -99,11 +118,13 @@ export class ProfileCertificationDto {
   @IsDateString()
   expiresAt?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(300)
   credentialUrl?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -124,20 +145,25 @@ export class ReplaceProfileCertificationsDto {
 }
 
 export class UpsertPortfolioItemDto {
+  @Transform(trimString)
   @IsString()
+  @MinLength(1)
   @MaxLength(160)
   title: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   description?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(300)
   image?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(300)

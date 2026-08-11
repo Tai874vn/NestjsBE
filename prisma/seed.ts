@@ -116,8 +116,7 @@ async function main() {
           },
           {
             name: 'Backend Development',
-            image:
-              'https://images.unsplash.com/photo-1558494949-ef010cbdcc31',
+            image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31',
           },
         ],
       },
@@ -147,8 +146,7 @@ async function main() {
   });
 
   const [logoDesign, uiDesign] = design.subcategories;
-  const [frontendDevelopment, backendDevelopment] =
-    development.subcategories;
+  const [frontendDevelopment, backendDevelopment] = development.subcategories;
   const [seo, contentWriting] = marketing.subcategories;
 
   const jobs = await Promise.all([

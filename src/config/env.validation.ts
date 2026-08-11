@@ -5,7 +5,7 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
 
   // JWT
-  JWT_SECRET: Joi.string().required(),
+  JWT_SECRET: Joi.string().min(64).required(),
   JWT_EXPIRES_IN: Joi.string().required(),
 
   // Google OAuth
@@ -24,8 +24,13 @@ export const envValidationSchema = Joi.object({
   // Redis (optional)
   REDIS_URL: Joi.string().uri().optional(),
 
+  // AI recommendation service
+  AI_SERVICE_URL: Joi.string().uri().required(),
+  AI_SERVICE_API_KEY: Joi.string().min(32).required(),
+  AI_SERVICE_TIMEOUT_MS: Joi.number().optional(),
+
   // Cloudinary (if used)
-  CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
-  CLOUDINARY_API_KEY: Joi.string().optional(),
-  CLOUDINARY_API_SECRET: Joi.string().optional(),
+  CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
+  CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
+  CLOUDINARY_API_SECRET: Joi.string().empty('').optional(),
 });

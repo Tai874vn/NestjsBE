@@ -1,36 +1,42 @@
-import { IsNotEmpty, IsString, IsInt, IsOptional, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsInt,
+  IsOptional,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  optionalTrimString,
+  trimString,
+} from '../../../common/dto/string.transforms';
 
 export class CreateJobDto {
+  @Transform(trimString)
   @IsNotEmpty()
   @IsString()
+  @MinLength(3)
+  @MaxLength(160)
   title: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  reviews?: number;
 
   @IsNotEmpty()
   @IsInt()
   @Min(0)
   price: number;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
-  image?: string;
-
-  @IsOptional()
-  @IsString()
+  @MaxLength(5000)
   description?: string;
 
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   shortDescription?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  rating?: number;
 
   @IsNotEmpty()
   @IsInt()
