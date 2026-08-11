@@ -1,20 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsString,
   IsInt,
   IsOptional,
   IsBoolean,
   IsArray,
+  ArrayMaxSize,
+  ArrayMinSize,
   Min,
   Max,
   MinLength,
   MaxLength,
 } from 'class-validator';
+import {
+  optionalTrimString,
+  trimString,
+} from '../../../common/dto/string.transforms';
 
 export class CreateRoomDto {
   @ApiPropertyOptional({
     description: 'Room name (optional for private chats)',
   })
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -22,7 +30,10 @@ export class CreateRoomDto {
 
   @ApiProperty({ description: 'Array of user IDs to add to the room' })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
   @IsInt({ each: true })
+  @Min(1, { each: true })
   memberIds: number[];
 
   @ApiPropertyOptional({
@@ -41,6 +52,7 @@ export class SendMessageDto {
   roomId: number;
 
   @ApiProperty({ description: 'Message content' })
+  @Transform(trimString)
   @IsString()
   @MinLength(1)
   @MaxLength(5000)

@@ -9,7 +9,11 @@ export type UserForRecommendation = {
   location?: string | null;
   skill?: string | null;
   profileSkills?: Array<{ name: string; level?: string | null }>;
-  resume?: { data: unknown } | null;
+  resume?: {
+    data: unknown;
+    predictedSeniority?: string | null;
+    predictedSeniorityConfidence?: number | null;
+  } | null;
 };
 
 export type JobForRecommendation = {
@@ -35,6 +39,24 @@ export type JobForRecommendation = {
   } | null;
 };
 
+export type HiringPostForRecommendation = {
+  id: number;
+  recruiterId: number;
+  title: string;
+  description: string;
+  requirements?: string | null;
+  location?: string | null;
+  employmentType?: string | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  predictedSeniority?: string | null;
+  predictedSeniorityConfidence?: number | null;
+  predictedSeniorityModel?: string | null;
+  predictedSeniorityMetadata?: unknown;
+  predictedSeniorityAt?: Date | null;
+  status?: string;
+};
+
 @Injectable()
 export class RecommendationPayloadMapperService {
   buildResumePayload(user: UserForRecommendation): Record<string, unknown> {
@@ -45,10 +67,34 @@ export class RecommendationPayloadMapperService {
       this.parseStringArrayValue(user.skill),
       this.parseDelimitedString(sanitizedData.Skills),
     );
+    const role = this.firstString(
+      sanitizedData.Role,
+      sanitizedData.role,
+      sanitizedData.Title,
+      sanitizedData.title,
+      sanitizedData.JobTitle,
+      sanitizedData.jobTitle,
+      sanitizedData.Category,
+      sanitizedData.category,
+      user.headline,
+    );
+    const industry = this.firstString(
+      sanitizedData.Industry,
+      sanitizedData.industry,
+    );
+    const yearsExperience = this.firstString(
+      sanitizedData.YearsExperience,
+      sanitizedData.yearsExperience,
+      sanitizedData.YearsOfExperience,
+      sanitizedData.years_experience,
+    );
     const text = [
       user.headline,
       user.bio,
       user.location,
+      role,
+      industry,
+      yearsExperience ? `${yearsExperience} years experience` : null,
       sanitizedData.Category,
       sanitizedData.Summary,
       sanitizedData.Skills,
@@ -61,11 +107,16 @@ export class RecommendationPayloadMapperService {
 
     return {
       id: user.id,
-      role: user.headline ?? sanitizedData.Category ?? 'Candidate',
-      title: user.headline ?? sanitizedData.Category ?? `Candidate #${user.id}`,
+      seniority: user.resume?.predictedSeniority,
+      seniority_resume: user.resume?.predictedSeniority,
+      seniority_confidence: user.resume?.predictedSeniorityConfidence,
+      role: role ?? 'Candidate',
+      title: role ?? user.headline ?? `Candidate #${user.id}`,
       location: user.location ?? sanitizedData.Location,
       skills,
       summary: user.bio ?? sanitizedData.Summary,
+      industry,
+      years_experience: yearsExperience,
       experience: sanitizedData.Experience,
       education: sanitizedData.Education,
       text: this.redactContactInfo(text),
@@ -73,7 +124,10 @@ export class RecommendationPayloadMapperService {
     };
   }
 
-  buildJobPayload(job: JobForRecommendation, knownSkills: string[] = []): Record<string, unknown> {
+  buildJobPayload(
+    job: JobForRecommendation,
+    knownSkills: string[] = [],
+  ): Record<string, unknown> {
     const jobText = this.jobToText(job);
     return {
       id: job.id,
@@ -86,6 +140,32 @@ export class RecommendationPayloadMapperService {
       text: jobText,
       category: job.subcategory?.category?.name,
       subcategory: job.subcategory?.name,
+    };
+  }
+
+  buildHiringPostPayload(
+    post: HiringPostForRecommendation,
+    knownSkills: string[] = [],
+  ): Record<string, unknown> {
+    const postText = this.hiringPostToText(post);
+    const requiredSkills = this.hiringPostRequiredSkills(post, knownSkills);
+    return {
+      id: post.id,
+      job_title: post.title,
+      title: post.title,
+      seniority: post.predictedSeniority,
+      seniority_job: post.predictedSeniority,
+      seniority_confidence: post.predictedSeniorityConfidence,
+      description: post.description,
+      requirements: post.requirements,
+      must_have_skills: requiredSkills,
+      required_skills: requiredSkills,
+      nice_to_have_skills: post.description,
+      text: postText,
+      location: post.location,
+      employment_type: post.employmentType,
+      salary_min: post.salaryMin,
+      salary_max: post.salaryMax,
     };
   }
 
@@ -102,12 +182,49 @@ export class RecommendationPayloadMapperService {
   }
 
   jobCategoryText(job: JobForRecommendation): string {
-    return [job.subcategory?.name, job.subcategory?.category?.name].filter(Boolean).join(' ');
+    return [job.subcategory?.name, job.subcategory?.category?.name]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  hiringPostToText(post: HiringPostForRecommendation): string {
+    return [
+      post.title,
+      post.description,
+      post.requirements,
+      post.location,
+      post.employmentType,
+      post.salaryMin !== null && post.salaryMin !== undefined
+        ? `salary minimum ${post.salaryMin}`
+        : null,
+      post.salaryMax !== null && post.salaryMax !== undefined
+        ? `salary maximum ${post.salaryMax}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  hiringPostCategoryText(post: HiringPostForRecommendation): string {
+    return [post.employmentType, post.location].filter(Boolean).join(' ');
   }
 
   private skillsMentionedInText(skills: string[], text: string): string[] {
     const normalizedText = text.toLowerCase();
-    return skills.filter((skill) => normalizedText.includes(skill.toLowerCase()));
+    return skills.filter((skill) =>
+      normalizedText.includes(skill.toLowerCase()),
+    );
+  }
+
+  private hiringPostRequiredSkills(
+    post: HiringPostForRecommendation,
+    knownSkills: string[],
+  ): string[] {
+    const explicitSkills = this.parseDelimitedString(post.requirements);
+    if (explicitSkills.length) {
+      return explicitSkills;
+    }
+    return this.skillsMentionedInText(knownSkills, this.hiringPostToText(post));
   }
 
   private mergeSkills(...skillGroups: string[][]): string[] {
@@ -131,7 +248,9 @@ export class RecommendationPayloadMapperService {
     try {
       const parsed: unknown = JSON.parse(value);
       if (Array.isArray(parsed)) {
-        return parsed.flatMap((item) => (typeof item === 'string' ? this.parseDelimitedString(item) : []));
+        return parsed.flatMap((item) =>
+          typeof item === 'string' ? this.parseDelimitedString(item) : [],
+        );
       }
     } catch {
       return this.parseDelimitedString(value);
@@ -150,12 +269,34 @@ export class RecommendationPayloadMapperService {
       .filter(Boolean);
   }
 
-  private asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  private firstString(...values: unknown[]): string | null {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
+    }
+    return null;
   }
 
-  private sanitizeResumeData(data: Record<string, unknown>): Record<string, unknown> {
-    const omittedKeys = new Set(['name', 'email', 'phone', 'resumeid', 'source']);
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private sanitizeResumeData(
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const omittedKeys = new Set([
+      'name',
+      'email',
+      'phone',
+      'resumeid',
+      'source',
+    ]);
     return Object.fromEntries(
       Object.entries(data).flatMap(([key, value]) => {
         if (omittedKeys.has(key.toLowerCase())) {

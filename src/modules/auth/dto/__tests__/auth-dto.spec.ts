@@ -1,4 +1,5 @@
 import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { SignUpDto } from '../signup.dto';
 import { SignInDto } from '../signin.dto';
 import { Role } from '../../../../common/constants/roles';
@@ -52,6 +53,17 @@ describe('Auth DTOs', () => {
       expect(errors[0].property).toBe('password');
     });
 
+    it('should reject oversized signup fields', async () => {
+      const dto = new SignUpDto();
+      dto.name = 'x'.repeat(101);
+      dto.email = 'test@example.com';
+      dto.password = 'x'.repeat(129);
+
+      const errors = await validate(dto);
+      expect(errors.some((error) => error.property === 'name')).toBe(true);
+      expect(errors.some((error) => error.property === 'password')).toBe(true);
+    });
+
     it('should allow optional fields to be undefined', async () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
@@ -60,6 +72,19 @@ describe('Auth DTOs', () => {
 
       const errors = await validate(dto);
       expect(errors.length).toBe(0);
+    });
+
+    it('should trim names and normalize emails before validation', async () => {
+      const dto = plainToInstance(SignUpDto, {
+        name: '  Test User  ',
+        email: '  TEST@Example.COM ',
+        password: 'password123',
+      });
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+      expect(dto.name).toBe('Test User');
+      expect(dto.email).toBe('test@example.com');
     });
 
     it('should allow employer account role', async () => {
@@ -124,6 +149,15 @@ describe('Auth DTOs', () => {
       expect(errors[0].property).toBe('password');
     });
 
+    it('should fail if password is too long', async () => {
+      const dto = new SignInDto();
+      dto.email = 'test@example.com';
+      dto.password = 'x'.repeat(129);
+
+      const errors = await validate(dto);
+      expect(errors.some((error) => error.property === 'password')).toBe(true);
+    });
+
     it('should fail if email format is invalid', async () => {
       const dto = new SignInDto();
       dto.email = 'not-an-email';
@@ -132,6 +166,17 @@ describe('Auth DTOs', () => {
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0].property).toBe('email');
+    });
+
+    it('should normalize signin emails before validation', async () => {
+      const dto = plainToInstance(SignInDto, {
+        email: '  TEST@Example.COM ',
+        password: 'password123',
+      });
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+      expect(dto.email).toBe('test@example.com');
     });
   });
 });

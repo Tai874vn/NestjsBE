@@ -24,12 +24,25 @@ type ObservableRequest = Request & {
 
 const OBSERVED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^\/recommendations\/jobs$/ },
-  { method: 'GET', pattern: /^\/recommendations\/jobs\/\d+\/candidates$/ },
+  {
+    method: 'GET',
+    pattern: /^\/recommendations\/hiring-posts\/\d+\/candidates$/,
+  },
+  { method: 'GET', pattern: /^\/hiring-posts$/ },
+  { method: 'GET', pattern: /^\/hiring-posts\/mine$/ },
+  { method: 'GET', pattern: /^\/hiring-posts\/applications\/me$/ },
+  { method: 'GET', pattern: /^\/hiring-posts\/\d+$/ },
+  { method: 'POST', pattern: /^\/hiring-posts$/ },
+  { method: 'POST', pattern: /^\/hiring-posts\/\d+\/applications$/ },
+  { method: 'GET', pattern: /^\/hiring-posts\/\d+\/applications$/ },
   { method: 'GET', pattern: /^\/users\/me\/resume$/ },
   { method: 'POST', pattern: /^\/users\/me\/resume\/file$/ },
+  { method: 'GET', pattern: /^\/users\/candidates$/ },
   { method: 'GET', pattern: /^\/jobs\/paginated-search$/ },
   { method: 'GET', pattern: /^\/jobs\/details\/\d+$/ },
   { method: 'GET', pattern: /^\/posts\/feed$/ },
+  { method: 'GET', pattern: /^\/notifications$/ },
+  { method: 'GET', pattern: /^\/notifications\/unread-count$/ },
 ];
 
 @Injectable()
@@ -48,7 +61,7 @@ export class RequestObservabilityInterceptor implements NestInterceptor {
     const startedAt = performance.now();
 
     request.requestId = requestId;
-    response.setHeader('X-Request-ID', requestId);
+    this.setRequestIdHeader(response, requestId);
 
     return next.handle().pipe(
       tap(() => this.record(request, response, requestId, startedAt)),
@@ -93,7 +106,19 @@ export class RequestObservabilityInterceptor implements NestInterceptor {
       if (typeof message === 'string') return message;
     }
 
-    return error instanceof Error ? error.message : String(error);
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+
+    return this.stringifyUnknown(error);
+  }
+
+  private stringifyUnknown(value: unknown): string {
+    try {
+      const serialized = JSON.stringify(value);
+      return serialized || 'Unknown error';
+    } catch {
+      return 'Unknown error';
+    }
   }
 
   private requestId(request: Request): string {
@@ -101,13 +126,29 @@ export class RequestObservabilityInterceptor implements NestInterceptor {
     return existing?.trim() || randomUUID();
   }
 
+  private setRequestIdHeader(response: Response, requestId: string): void {
+    if (response.headersSent || response.writableEnded) return;
+    response.setHeader('X-Request-ID', requestId);
+  }
+
   private statusCode(response: Response, error?: unknown): number {
-    const errorWithStatus = error as { status?: number; getStatus?: () => number } | undefined;
-    return errorWithStatus?.status ?? errorWithStatus?.getStatus?.() ?? response.statusCode;
+    const errorWithStatus = error as
+      | { status?: number; getStatus?: () => number }
+      | undefined;
+    return (
+      errorWithStatus?.status ??
+      errorWithStatus?.getStatus?.() ??
+      response.statusCode
+    );
   }
 
   private path(request: Request): string {
-    return request.path || request.originalUrl?.split('?')[0] || request.url.split('?')[0] || '/';
+    return (
+      request.path ||
+      request.originalUrl?.split('?')[0] ||
+      request.url.split('?')[0] ||
+      '/'
+    );
   }
 
   private isObserved(method: string, path: string): boolean {

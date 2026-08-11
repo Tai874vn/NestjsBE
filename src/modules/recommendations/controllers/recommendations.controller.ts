@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -14,28 +21,45 @@ import { RecommendationsService } from '../services/recommendations.service';
 @Controller('recommendations')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RecommendationsController {
-  constructor(private readonly recommendationsService: RecommendationsService) {}
+  constructor(
+    private readonly recommendationsService: RecommendationsService,
+  ) {}
 
   @Get('quota')
   @ApiOperation({ summary: 'Get the current user AI recommendation quota' })
   getQuota(@CurrentUser() user: ValidatedUser) {
-    return this.recommendationsService.getQuotaForUser(user.id);
+    return this.recommendationsService.getQuotaForUser(user.id, user.role);
   }
 
   @Get('jobs')
   @ApiOperation({ summary: 'Recommend jobs for the current user' })
-  recommendJobs(@CurrentUser() user: ValidatedUser, @Query() query: RecommendationQueryDto) {
-    return this.recommendationsService.recommendJobsForUser(user.id, query);
-  }
-
-  @Get('jobs/:jobId/candidates')
-  @Roles(Role.EMPLOYER, Role.ADMIN)
-  @ApiOperation({ summary: 'Recommend candidates for a job owned by the current user' })
-  recommendCandidates(
-    @Param('jobId', ParseIntPipe) jobId: number,
+  recommendJobs(
     @CurrentUser() user: ValidatedUser,
     @Query() query: RecommendationQueryDto,
   ) {
-    return this.recommendationsService.recommendCandidatesForJob(jobId, user.id, user.role, query);
+    return this.recommendationsService.recommendJobsForUser(
+      user.id,
+      query,
+      user.role,
+    );
+  }
+
+  @Get('hiring-posts/:hiringPostId/candidates')
+  @Roles(Role.EMPLOYER, Role.ADMIN)
+  @ApiOperation({
+    summary:
+      'Recommend candidates for a recruiter hiring post owned by the current user',
+  })
+  recommendCandidatesForHiringPost(
+    @Param('hiringPostId', ParseIntPipe) hiringPostId: number,
+    @CurrentUser() user: ValidatedUser,
+    @Query() query: RecommendationQueryDto,
+  ) {
+    return this.recommendationsService.recommendCandidatesForHiringPost(
+      hiringPostId,
+      user.id,
+      user.role,
+      query,
+    );
   }
 }

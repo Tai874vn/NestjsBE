@@ -6,6 +6,7 @@ describe('AuthService current user profile', () => {
     const prisma = {
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -22,7 +23,7 @@ describe('AuthService current user profile', () => {
 
   it('creates employer accounts when signup role is employer', async () => {
     const { service, prisma } = createService();
-    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue({
       id: 11,
       name: 'Hiring Manager',
@@ -46,6 +47,28 @@ describe('AuthService current user profile', () => {
       }),
     );
     expect(result.content?.user).toMatchObject({ role: Role.EMPLOYER });
+  });
+
+  it('rejects duplicate email signup without changing the existing account role', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 11,
+      name: 'Existing Employer',
+      email: 'Hiring@Example.com',
+      role: Role.EMPLOYER,
+    });
+
+    await expect(
+      service.signUp({
+        name: 'Existing Employer',
+        email: 'hiring@example.com',
+        password: 'password123',
+        role: Role.USER,
+      }),
+    ).rejects.toThrow('Email already exists');
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('returns normalized current user profile data without legacy skill strings', async () => {

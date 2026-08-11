@@ -29,6 +29,33 @@ const publicUserSelect = {
   portfolioItems: { select: { id: true } },
 };
 
+type PublicConnectionUser = {
+  id: number;
+  name: string;
+  avatar: string | null;
+  headline: string | null;
+  bio: string | null;
+  location: string | null;
+  profileSkills: Array<{
+    id: number;
+    name: string;
+    level: string | null;
+    sortOrder: number;
+  }>;
+  portfolioItems: Array<{ id: number }>;
+};
+
+type ConnectionWithUsers = {
+  id: number;
+  status: ConnectionStatus;
+  requesterId: number;
+  recipientId: number;
+  createdAt: Date;
+  updatedAt: Date;
+  requester: PublicConnectionUser;
+  recipient: PublicConnectionUser;
+};
+
 @Injectable()
 export class ConnectionsService {
   constructor(
@@ -57,9 +84,17 @@ export class ConnectionsService {
           : 'A connection request already exists',
       );
     }
-    const connection = await this.prisma.connection.create({
-      data: { pairKey, requesterId, recipientId },
-    });
+    let connection: { id: number };
+    try {
+      connection = await this.prisma.connection.create({
+        data: { pairKey, requesterId, recipientId },
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('A connection request already exists');
+      }
+      throw error;
+    }
     await this.notifications?.notifyConnectionRequest({
       requesterId,
       recipientId,
@@ -78,10 +113,21 @@ export class ConnectionsService {
         'Only the request recipient can accept this request',
       );
     }
-    const updated = await this.prisma.connection.update({
-      where: { id: connectionId },
+    const accepted = await this.prisma.connection.updateMany({
+      where: {
+        id: connectionId,
+        recipientId: userId,
+        status: ConnectionStatus.PENDING,
+      },
       data: { status: ConnectionStatus.ACCEPTED },
     });
+    if (accepted.count === 0) {
+      throw new ConflictException('Connection request is not pending');
+    }
+    const updated = await this.prisma.connection.findUnique({
+      where: { id: connectionId },
+    });
+    if (!updated) throw new NotFoundException('Connection not found');
     await this.notifications?.notifyConnectionAccepted({
       accepterId: userId,
       requesterId: connection.requesterId,
@@ -104,7 +150,10 @@ export class ConnectionsService {
 
   async getStatus(userId: number, targetUserId: number) {
     if (userId === targetUserId) {
-      return { message: 'Connection status fetched', content: { state: 'self', connectionId: null } };
+      return {
+        message: 'Connection status fetched',
+        content: { state: 'self', connectionId: null },
+      };
     }
     const connection = await this.prisma.connection.findUnique({
       where: { pairKey: pairKeyFor(userId, targetUserId) },
@@ -137,10 +186,16 @@ export class ConnectionsService {
     });
     const incoming = connections
       .filter((item) => item.recipientId === userId)
-      .map((item) => ({ ...this.mapConnection(item, userId), direction: 'incoming' }));
+      .map((item) => ({
+        ...this.mapConnection(item, userId),
+        direction: 'incoming',
+      }));
     const outgoing = connections
       .filter((item) => item.requesterId === userId)
-      .map((item) => ({ ...this.mapConnection(item, userId), direction: 'outgoing' }));
+      .map((item) => ({
+        ...this.mapConnection(item, userId),
+        direction: 'outgoing',
+      }));
     return {
       message: 'Connection requests fetched',
       content: { incoming, outgoing, incomingCount: incoming.length },
@@ -237,8 +292,8 @@ export class ConnectionsService {
           .map((skill) => skill.name);
         const sameLocation = Boolean(
           viewer.location &&
-            candidate.location &&
-            viewer.location.toLowerCase() === candidate.location.toLowerCase(),
+          candidate.location &&
+          viewer.location.toLowerCase() === candidate.location.toLowerCase(),
         );
         const score =
           sharedSkills.length * 5 +
@@ -274,7 +329,7 @@ export class ConnectionsService {
     return connection;
   }
 
-  private mapConnection(connection: any, userId: number) {
+  private mapConnection(connection: ConnectionWithUsers, userId: number) {
     const other =
       connection.requesterId === userId
         ? connection.recipient
@@ -288,9 +343,16 @@ export class ConnectionsService {
     };
   }
 
-  private publicUser(user: any) {
-    const { portfolioItems: _portfolioItems, ...publicUser } = user;
-    return publicUser;
+  private publicUser(user: PublicConnectionUser) {
+    return {
+      id: user.id,
+      name: user.name,
+      avatar: user.avatar,
+      headline: user.headline,
+      bio: user.bio,
+      location: user.location,
+      profileSkills: user.profileSkills,
+    };
   }
 
   private userKeywordWhere(keyword: string): Prisma.UserWhereInput {
@@ -306,5 +368,12 @@ export class ConnectionsService {
         },
       ],
     };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 }

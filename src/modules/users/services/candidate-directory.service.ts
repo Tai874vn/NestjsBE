@@ -25,14 +25,8 @@ type CandidateDirectoryUser = {
   _count?: {
     profileCertifications?: number;
     portfolioItems?: number;
+    jobs?: number;
   };
-  jobs?: Array<{
-    rating?: number | null;
-    reviews?: number | null;
-    _count?: {
-      hires?: number;
-    };
-  }>;
 };
 
 @Injectable()
@@ -76,17 +70,7 @@ export class CandidateDirectoryService {
             select: {
               profileCertifications: true,
               portfolioItems: true,
-            },
-          },
-          jobs: {
-            select: {
-              rating: true,
-              reviews: true,
-              _count: {
-                select: {
-                  hires: { where: { completed: true } },
-                },
-              },
+              jobs: true,
             },
           },
         },
@@ -194,18 +178,7 @@ export class CandidateDirectoryService {
       user.skill,
     );
     const skills = profileSkills.map((skill) => skill.name);
-    const completedWork =
-      user.jobs?.reduce((total, job) => total + (job._count?.hires ?? 0), 0) ??
-      0;
-    const ratings =
-      user.jobs?.map((job) => job.rating ?? 0).filter((rating) => rating > 0) ??
-      [];
-    const rating = ratings.length
-      ? this.roundScore(
-          ratings.reduce((total, ratingValue) => total + ratingValue, 0) /
-            ratings.length,
-        )
-      : 0;
+    const listedServices = user._count?.jobs ?? 0;
     const match = this.scoreCandidateDirectoryCard(
       {
         name: user.name,
@@ -215,8 +188,7 @@ export class CandidateDirectoryService {
         skills,
         portfolioItems: user._count?.portfolioItems ?? 0,
         certifications: user._count?.profileCertifications ?? 0,
-        completedWork,
-        rating,
+        listedServices,
       },
       query,
     );
@@ -232,8 +204,9 @@ export class CandidateDirectoryService {
       stats: {
         portfolioItems: user._count?.portfolioItems ?? 0,
         certifications: user._count?.profileCertifications ?? 0,
-        completedWork,
-        rating,
+        listedServices,
+        completedWork: 0,
+        rating: 0,
       },
       match,
     };
@@ -248,8 +221,7 @@ export class CandidateDirectoryService {
       skills: string[];
       portfolioItems: number;
       certifications: number;
-      completedWork: number;
-      rating: number;
+      listedServices: number;
     },
     query: CandidateDirectoryQueryDto,
   ) {
@@ -288,8 +260,7 @@ export class CandidateDirectoryService {
       candidate.skills.length * 0.08 +
         candidate.portfolioItems * 0.12 +
         candidate.certifications * 0.08 +
-        Math.min(candidate.completedWork, 10) * 0.05 +
-        (candidate.rating / 5) * 0.2,
+        Math.min(candidate.listedServices, 10) * 0.03,
     );
     const activeFilterCount = [
       keyword,

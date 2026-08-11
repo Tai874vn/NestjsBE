@@ -54,14 +54,7 @@ describe('CandidateDirectoryService', () => {
           { id: 1, name: 'Python', level: 'advanced', sortOrder: 0 },
           { id: 2, name: 'FastAPI', level: null, sortOrder: 1 },
         ],
-        _count: { profileCertifications: 1, portfolioItems: 2 },
-        jobs: [
-          {
-            rating: 5,
-            reviews: 8,
-            _count: { hires: 2 },
-          },
-        ],
+        _count: { profileCertifications: 1, portfolioItems: 2, jobs: 1 },
         resume: { data: { Text: 'Raw private resume text' } },
       },
       {
@@ -78,8 +71,7 @@ describe('CandidateDirectoryService', () => {
         profileCompleted: true,
         updatedAt,
         profileSkills: [{ id: 3, name: 'SQL', level: null, sortOrder: 0 }],
-        _count: { profileCertifications: 0, portfolioItems: 0 },
-        jobs: [],
+        _count: { profileCertifications: 0, portfolioItems: 0, jobs: 0 },
         resume: null,
       },
     ]);
@@ -123,8 +115,9 @@ describe('CandidateDirectoryService', () => {
       stats: {
         portfolioItems: 2,
         certifications: 1,
-        completedWork: 2,
-        rating: 5,
+        listedServices: 1,
+        completedWork: 0,
+        rating: 0,
       },
       match: expect.objectContaining({
         label: 'high_match',

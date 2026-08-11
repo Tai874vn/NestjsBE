@@ -7,6 +7,7 @@ import {
   ConnectionsService,
   pairKeyFor,
 } from './connections.service';
+import { Prisma } from '@prisma/client';
 
 describe('ConnectionsService', () => {
   const createService = () => {
@@ -21,7 +22,7 @@ describe('ConnectionsService', () => {
         findMany: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
-        update: jest.fn(),
+        updateMany: jest.fn(),
         delete: jest.fn(),
       },
     };
@@ -57,23 +58,67 @@ describe('ConnectionsService', () => {
 
   it('allows only the recipient to accept a pending request', async () => {
     const { service, prisma } = createService();
+    prisma.connection.findUnique
+      .mockResolvedValueOnce({
+        id: 12,
+        requesterId: 4,
+        recipientId: 8,
+        status: 'PENDING',
+      })
+      .mockResolvedValueOnce({
+        id: 12,
+        requesterId: 4,
+        recipientId: 8,
+        status: 'PENDING',
+      })
+      .mockResolvedValueOnce({
+        id: 12,
+        requesterId: 4,
+        recipientId: 8,
+        status: 'ACCEPTED',
+      });
+
+    await expect(service.acceptRequest(12, 4)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    prisma.connection.updateMany.mockResolvedValue({ count: 1 });
+    await service.acceptRequest(12, 8);
+    expect(prisma.connection.updateMany).toHaveBeenCalledWith({
+      where: { id: 12, recipientId: 8, status: 'PENDING' },
+      data: { status: 'ACCEPTED' },
+    });
+  });
+
+  it('returns conflict if a concurrent connection request already created the pair', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 8 });
+    prisma.connection.findUnique.mockResolvedValue(null);
+    prisma.connection.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+
+    await expect(service.sendRequest(4, 8)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it('does not accept twice when two accepts race', async () => {
+    const { service, prisma } = createService();
     prisma.connection.findUnique.mockResolvedValue({
       id: 12,
       requesterId: 4,
       recipientId: 8,
       status: 'PENDING',
     });
+    prisma.connection.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(service.acceptRequest(12, 4)).rejects.toBeInstanceOf(
-      ForbiddenException,
+    await expect(service.acceptRequest(12, 8)).rejects.toBeInstanceOf(
+      ConflictException,
     );
-
-    prisma.connection.update.mockResolvedValue({ id: 12 });
-    await service.acceptRequest(12, 8);
-    expect(prisma.connection.update).toHaveBeenCalledWith({
-      where: { id: 12 },
-      data: { status: 'ACCEPTED' },
-    });
   });
 
   it('returns public suggestions without email or phone', async () => {

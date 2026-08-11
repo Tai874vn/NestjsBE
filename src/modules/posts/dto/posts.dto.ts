@@ -1,5 +1,17 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import {
+  optionalTrimString,
+  trimString,
+} from '../../../common/dto/string.transforms';
 
 export class FeedQueryDto {
   @IsOptional()
@@ -30,6 +42,7 @@ export class CommentsQueryDto {
 }
 
 export class CreatePostDto {
+  @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(3000)
@@ -37,6 +50,7 @@ export class CreatePostDto {
 }
 
 export class CreatePostCommentDto {
+  @Transform(trimString)
   @IsString()
   @MinLength(1)
   @MaxLength(1000)
@@ -44,6 +58,7 @@ export class CreatePostCommentDto {
 }
 
 export class UpdatePostCommentDto {
+  @Transform(trimString)
   @IsString()
   @MinLength(1)
   @MaxLength(1000)

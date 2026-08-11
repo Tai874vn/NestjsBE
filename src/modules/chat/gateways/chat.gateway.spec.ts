@@ -5,13 +5,19 @@ import { ChatSocketAuthService } from '../services/chat-socket-auth.service';
 
 describe('ChatGateway socket events', () => {
   const createGateway = () => {
+    const getUserRooms = jest.fn();
+    const getUserRoomIds = jest.fn().mockResolvedValue([]);
+    const getUserContactIds = jest.fn().mockResolvedValue([]);
+    const isRoomMember = jest.fn();
+    const getMessages = jest.fn();
+    const leaveRoom = jest.fn();
     const chatService = {
-      getUserRooms: jest.fn(),
-      getUserRoomIds: jest.fn().mockResolvedValue([]),
-      getUserContactIds: jest.fn().mockResolvedValue([]),
-      isRoomMember: jest.fn(),
-      getMessages: jest.fn(),
-      leaveRoom: jest.fn(),
+      getUserRooms,
+      getUserRoomIds,
+      getUserContactIds,
+      isRoomMember,
+      getMessages,
+      leaveRoom,
     } as unknown as jest.Mocked<ChatService>;
     const presence = {
       logMode: jest.fn(),
@@ -23,82 +29,89 @@ describe('ChatGateway socket events', () => {
     const socketAuth = {
       authenticateSocket: jest.fn(),
     } as unknown as jest.Mocked<ChatSocketAuthService>;
-    const gateway = new ChatGateway(
-      chatService,
-      socketAuth,
-      presence,
-    );
+    const gateway = new ChatGateway(chatService, socketAuth, presence);
+    const serverTo = jest.fn().mockReturnValue({ emit: jest.fn() });
 
     gateway.server = {
-      to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+      to: serverTo,
     } as never;
 
     return {
       gateway,
       chatService,
+      chatMocks: {
+        getUserRooms,
+        getUserRoomIds,
+        getUserContactIds,
+        isRoomMember,
+        getMessages,
+        leaveRoom,
+      },
       presence,
       socketAuth,
+      serverTo,
     };
   };
 
   it('joins room IDs without loading or emitting room responses', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, chatMocks } = createGateway();
+    const join = jest.fn();
+    const emit = jest.fn();
     const client = {
       id: 'socket-1',
       data: { user: { id: 6, name: 'Tai', avatar: null } },
-      join: jest.fn(),
-      emit: jest.fn(),
+      join,
+      emit,
     };
-    chatService.getUserRoomIds.mockResolvedValue([1, 2]);
+    chatMocks.getUserRoomIds.mockResolvedValue([1, 2]);
 
     await gateway.handleConnection(client as never);
 
-    expect(chatService.getUserRooms).not.toHaveBeenCalled();
-    expect(client.join).toHaveBeenCalledTimes(2);
-    expect(client.join).toHaveBeenNthCalledWith(1, 'room:1');
-    expect(client.join).toHaveBeenNthCalledWith(2, 'room:2');
-    expect(client.emit).not.toHaveBeenCalledWith('rooms', expect.anything());
-    expect(client.emit).not.toHaveBeenCalledWith(
-      'rooms-list',
-      expect.anything(),
-    );
+    expect(chatMocks.getUserRooms).not.toHaveBeenCalled();
+    expect(join).toHaveBeenCalledTimes(2);
+    expect(join).toHaveBeenNthCalledWith(1, 'room:1');
+    expect(join).toHaveBeenNthCalledWith(2, 'room:2');
+    expect(emit).not.toHaveBeenCalledWith('rooms', expect.anything());
+    expect(emit).not.toHaveBeenCalledWith('rooms-list', expect.anything());
   });
 
   it('emits online-users when the frontend asks for online contacts', async () => {
-    const { gateway, chatService, presence } = createGateway();
+    const { gateway, chatMocks, presence } = createGateway();
+    const emit = jest.fn();
     const client = {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
-      emit: jest.fn(),
+      emit,
     };
-    chatService.getUserContactIds.mockResolvedValue([7]);
+    chatMocks.getUserContactIds.mockResolvedValue([7]);
     presence.getOnlineUserIds.mockResolvedValue([7]);
 
     await expect(gateway.handleGetOnlineUsers(client as never)).resolves.toEqual({
       status: 'success',
       onlineUsers: [7],
     });
-    expect(chatService.getUserRooms).not.toHaveBeenCalled();
-    expect(client.emit).toHaveBeenCalledWith('online-users', [7]);
+    expect(chatMocks.getUserRooms).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('online-users', [7]);
   });
 
   it('joins an authorized room without loading message history', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, chatMocks } = createGateway();
+    const join = jest.fn();
     const client = {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
-      join: jest.fn(),
+      join,
     };
-    chatService.isRoomMember.mockResolvedValue(true);
+    chatMocks.isRoomMember.mockResolvedValue(true);
 
     await expect(
       gateway.handleJoinRoom({ roomId: 9 }, client as never),
     ).resolves.toEqual({ status: 'success', roomId: 9 });
 
-    expect(client.join).toHaveBeenCalledWith('room:9');
-    expect(chatService.getMessages).not.toHaveBeenCalled();
+    expect(join).toHaveBeenCalledWith('room:9');
+    expect(chatMocks.getMessages).not.toHaveBeenCalled();
   });
 
   it('does not broadcast typing events for sockets outside a room', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, chatMocks } = createGateway();
     const emit = jest.fn();
     const client = {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
@@ -106,7 +119,7 @@ describe('ChatGateway socket events', () => {
       join: jest.fn(),
       to: jest.fn().mockReturnValue({ emit }),
     };
-    chatService.isRoomMember.mockResolvedValue(false);
+    chatMocks.isRoomMember.mockResolvedValue(false);
 
     await expect(
       gateway.handleTyping({ roomId: 9, isTyping: true }, client as never),
@@ -120,14 +133,14 @@ describe('ChatGateway socket events', () => {
   });
 
   it('does not emit leave-room events for non-members', async () => {
-    const { gateway, chatService } = createGateway();
+    const { gateway, chatMocks, serverTo } = createGateway();
     const client = {
       data: { user: { id: 6, name: 'Tai', avatar: null } },
       rooms: new Set(['socket-1']),
       join: jest.fn(),
       leave: jest.fn(),
     };
-    chatService.isRoomMember.mockResolvedValue(false);
+    chatMocks.isRoomMember.mockResolvedValue(false);
 
     await expect(
       gateway.handleLeaveRoom({ roomId: 9 }, client as never),
@@ -136,8 +149,8 @@ describe('ChatGateway socket events', () => {
       message: 'Failed to leave room',
     });
 
-    expect(chatService.leaveRoom).not.toHaveBeenCalled();
-    expect(gateway.server.to).not.toHaveBeenCalled();
+    expect(chatMocks.leaveRoom).not.toHaveBeenCalled();
+    expect(serverTo).not.toHaveBeenCalled();
   });
 
   it('does not accept access tokens from socket query strings', () => {

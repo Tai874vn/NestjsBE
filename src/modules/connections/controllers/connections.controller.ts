@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
@@ -21,6 +22,7 @@ export class ConnectionsController {
   constructor(private readonly connectionsService: ConnectionsService) {}
 
   @Get()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   getConnections(
     @CurrentUser() user: ValidatedUser,
     @Query() query: ConnectionsQueryDto,
@@ -34,6 +36,7 @@ export class ConnectionsController {
   }
 
   @Get('suggestions')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   getSuggestions(
     @CurrentUser() user: ValidatedUser,
     @Query() query: ConnectionsQueryDto,

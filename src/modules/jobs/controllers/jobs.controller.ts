@@ -40,10 +40,7 @@ export class JobsController {
 
   @Post()
   @Roles(Role.USER, Role.ADMIN)
-  create(
-    @Body() createDto: CreateJobDto,
-    @CurrentUser() user: ValidatedUser,
-  ) {
+  create(@Body() createDto: CreateJobDto, @CurrentUser() user: ValidatedUser) {
     return this.jobsService.create(createDto, user.id);
   }
 

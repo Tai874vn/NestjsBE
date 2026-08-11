@@ -16,7 +16,8 @@ describe('AiRecommendationClient', () => {
     jest.restoreAllMocks();
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({ matches: [], model: 'test-model', elapsed_ms: 1 }),
+      json: () =>
+        Promise.resolve({ matches: [], model: 'test-model', elapsed_ms: 1 }),
     } as Response);
   });
 
@@ -32,6 +33,71 @@ describe('AiRecommendationClient', () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:8001/api/v1/match/candidates',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Service-Key': configValues.AI_SERVICE_API_KEY,
+        },
+        body: JSON.stringify(payload),
+      }),
+    );
+  });
+
+  it('calls the recruiter classifier endpoint for recruiter candidate matching', async () => {
+    const client = new AiRecommendationClient(configService as any);
+    const payload = {
+      job: { id: 7, job_title: 'Security Analyst' },
+      candidates: [{ id: 2, role: 'SOC analyst' }],
+      top_k: 5,
+    };
+
+    await client.matchRecruiterCandidates(payload);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:8001/api/v1/recruiter/match/candidates',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Service-Key': configValues.AI_SERVICE_API_KEY,
+        },
+        body: JSON.stringify(payload),
+      }),
+    );
+  });
+
+  it('calls the resume seniority prediction endpoint', async () => {
+    const client = new AiRecommendationClient(configService as any);
+    const payload = {
+      resume: { role: 'Backend Engineer', skills: ['Python'] },
+    };
+
+    await client.predictResumeSeniority(payload);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:8001/api/v1/predict/resume-seniority',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Service-Key': configValues.AI_SERVICE_API_KEY,
+        },
+        body: JSON.stringify(payload),
+      }),
+    );
+  });
+
+  it('calls the job seniority prediction endpoint', async () => {
+    const client = new AiRecommendationClient(configService as any);
+    const payload = {
+      job: { job_title: 'Frontend Developer', must_have_skills: ['React'] },
+    };
+
+    await client.predictJobSeniority(payload);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:8001/api/v1/predict/job-seniority',
       expect.objectContaining({
         method: 'POST',
         headers: {

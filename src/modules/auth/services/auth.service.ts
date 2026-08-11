@@ -39,9 +39,8 @@ export class AuthService {
       refreshToken: string;
     }>
   > {
-    const existingUser: UserType | null = await this.prisma.user.findUnique({
-      where: { email: signUpDto.email },
-    });
+    const email = this.normalizeEmail(signUpDto.email);
+    const existingUser: UserType | null = await this.findUserByEmail(email);
 
     if (existingUser) {
       throw new ConflictException('Email already exists');
@@ -52,7 +51,7 @@ export class AuthService {
     const user: UserType = await this.prisma.user.create({
       data: {
         name: signUpDto.name,
-        email: signUpDto.email,
+        email,
         password: hashedPassword,
         phone: signUpDto.phone,
         birthDay: signUpDto.birthDay,
@@ -91,9 +90,9 @@ export class AuthService {
       refreshToken: string;
     }>
   > {
-    const user: UserType | null = await this.prisma.user.findUnique({
-      where: { email: signInDto.email },
-    });
+    const user: UserType | null = await this.findUserByEmail(
+      this.normalizeEmail(signInDto.email),
+    );
 
     if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
@@ -344,5 +343,17 @@ export class AuthService {
     }
 
     return [trimmed];
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private findUserByEmail(email: string): Promise<UserType | null> {
+    const normalizedEmail = this.normalizeEmail(email);
+    return this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      orderBy: { id: 'asc' },
+    });
   }
 }

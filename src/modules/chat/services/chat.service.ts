@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -13,6 +14,36 @@ import {
   RoomResponse,
 } from '../dto/chat.dto';
 
+type ChatUserSource = {
+  id: number;
+  name: string;
+  avatar: string | null;
+};
+
+type ChatMemberSource = {
+  userId?: number;
+  lastReadAt?: Date | null;
+  user: ChatUserSource;
+};
+
+type ChatMessageSource = {
+  id: number;
+  content: string;
+  roomId: number;
+  createdAt: Date;
+  sender: ChatUserSource;
+};
+
+type ChatRoomSource = {
+  id: number;
+  name: string | null;
+  isPrivate: boolean;
+  members: ChatMemberSource[];
+  messages?: ChatMessageSource[];
+  updatedAt: Date;
+  createdAt: Date;
+};
+
 @Injectable()
 export class ChatService {
   constructor(private prisma: PrismaService) {}
@@ -25,9 +56,20 @@ export class ChatService {
 
     // Ensure creator is included in members
     const allMemberIds = [...new Set([creatorId, ...memberIds])];
+    if (allMemberIds.length < 2) {
+      throw new BadRequestException(
+        'A chat room needs at least one other member',
+      );
+    }
+    await this.ensureUsersExist(allMemberIds);
+
+    const directKey =
+      isPrivate && allMemberIds.length === 2
+        ? this.directRoomKeyFor(allMemberIds[0], allMemberIds[1])
+        : null;
 
     // For private 1-on-1 chat, check if room already exists
-    if (isPrivate && allMemberIds.length === 2) {
+    if (directKey) {
       const existingRoom = await this.findPrivateRoom(
         allMemberIds[0],
         allMemberIds[1],
@@ -37,33 +79,48 @@ export class ChatService {
       }
     }
 
-    const room = await this.prisma.chatRoom.create({
-      data: {
-        name,
-        isPrivate,
-        creatorId,
-        members: {
-          create: allMemberIds.map((userId) => ({ userId })),
+    try {
+      const room = await this.prisma.chatRoom.create({
+        data: {
+          name,
+          isPrivate,
+          directKey,
+          creatorId,
+          members: {
+            create: allMemberIds.map((userId) => ({ userId })),
+          },
         },
-      },
-      include: {
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, avatar: true },
+        include: {
+          members: {
+            include: {
+              user: {
+                select: { id: true, name: true, avatar: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    return this.formatRoomResponse(room);
+      return this.formatRoomResponse(room);
+    } catch (error) {
+      if (directKey && this.isUniqueConstraintError(error)) {
+        const existingRoom = await this.findPrivateRoom(
+          allMemberIds[0],
+          allMemberIds[1],
+        );
+        if (existingRoom) {
+          return this.formatRoomResponse(existingRoom);
+        }
+      }
+      throw error;
+    }
   }
 
   async findPrivateRoom(userId1: number, userId2: number) {
     const room = await this.prisma.chatRoom.findFirst({
       where: {
         isPrivate: true,
+        directKey: this.directRoomKeyFor(userId1, userId2),
         members: {
           every: {
             userId: { in: [userId1, userId2] },
@@ -184,9 +241,7 @@ export class ChatService {
       GROUP BY members."roomId"
     `);
 
-    return new Map(
-      counts.map((item) => [item.roomId, Number(item.count)]),
-    );
+    return new Map(counts.map((item) => [item.roomId, Number(item.count)]));
   }
 
   async getRoom(roomId: number, userId: number): Promise<RoomResponse> {
@@ -240,6 +295,10 @@ export class ChatService {
     messageDto: SendMessageDto,
   ): Promise<MessageResponse> {
     const { roomId, content } = messageDto;
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+      throw new BadRequestException('Message content is required');
+    }
 
     // Verify sender is a member of the room
     const isMember = await this.isRoomMember(roomId, senderId);
@@ -247,23 +306,26 @@ export class ChatService {
       throw new ForbiddenException('You are not a member of this room');
     }
 
-    const message = await this.prisma.chatMessage.create({
-      data: {
-        roomId,
-        senderId,
-        content,
-      },
-      include: {
-        sender: {
-          select: { id: true, name: true, avatar: true },
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.chatMessage.create({
+        data: {
+          roomId,
+          senderId,
+          content: normalizedContent,
         },
-      },
-    });
+        include: {
+          sender: {
+            select: { id: true, name: true, avatar: true },
+          },
+        },
+      });
 
-    // Update room's updatedAt timestamp
-    await this.prisma.chatRoom.update({
-      where: { id: roomId },
-      data: { updatedAt: new Date() },
+      await tx.chatRoom.update({
+        where: { id: roomId },
+        data: { updatedAt: new Date() },
+      });
+
+      return created;
     });
 
     return this.formatMessageResponse(message);
@@ -352,32 +414,37 @@ export class ChatService {
   }
 
   async leaveRoom(roomId: number, userId: number): Promise<void> {
-    await this.prisma.chatRoomMember.deleteMany({
-      where: { roomId, userId },
-    });
-
-    // If no members left, delete the room
-    const remainingMembers = await this.prisma.chatRoomMember.count({
-      where: { roomId },
-    });
-
-    if (remainingMembers === 0) {
-      await this.prisma.chatRoom.delete({
-        where: { id: roomId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.chatRoomMember.deleteMany({
+        where: { roomId, userId },
       });
-    }
+
+      // If no members left, delete the room
+      const remainingMembers = await tx.chatRoomMember.count({
+        where: { roomId },
+      });
+
+      if (remainingMembers === 0) {
+        await tx.chatRoom.delete({
+          where: { id: roomId },
+        });
+      }
+    });
   }
 
-  private formatRoomResponse(room: any, unreadCount = 0): RoomResponse {
+  private formatRoomResponse(
+    room: ChatRoomSource,
+    unreadCount = 0,
+  ): RoomResponse {
     return {
       id: room.id,
       name: room.name,
       isPrivate: room.isPrivate,
-      members: room.members.map((m: any) => ({
+      members: room.members.map((m) => ({
         id: m.user.id,
         name: m.user.name,
         avatar: m.user.avatar,
-        lastReadAt: m.lastReadAt,
+        lastReadAt: m.lastReadAt ?? undefined,
       })),
       lastMessage: room.messages?.[0]
         ? this.formatMessageResponse(room.messages[0])
@@ -388,7 +455,7 @@ export class ChatService {
     };
   }
 
-  private formatMessageResponse(message: any): MessageResponse {
+  private formatMessageResponse(message: ChatMessageSource): MessageResponse {
     return {
       id: message.id,
       content: message.content,
@@ -400,5 +467,25 @@ export class ChatService {
       },
       createdAt: message.createdAt,
     };
+  }
+
+  private directRoomKeyFor(firstUserId: number, secondUserId: number): string {
+    return [firstUserId, secondUserId].sort((a, b) => a - b).join(':');
+  }
+
+  private async ensureUsersExist(userIds: number[]): Promise<void> {
+    const count = await this.prisma.user.count({
+      where: { id: { in: userIds } },
+    });
+    if (count !== userIds.length) {
+      throw new BadRequestException('One or more chat members do not exist');
+    }
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 }

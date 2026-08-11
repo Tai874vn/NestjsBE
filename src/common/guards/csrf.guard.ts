@@ -47,13 +47,19 @@ export class CsrfGuard implements CanActivate {
     }
 
     const cookies = request.cookies ?? {};
-    const hasAuthCookie = Boolean(cookies.access_token || cookies.refresh_token);
+    const hasAuthCookie = Boolean(
+      cookies.access_token || cookies.refresh_token,
+    );
     if (!hasAuthCookie) return true;
 
     this.requireTrustedOrigin(origin);
     const cookieToken = cookies.csrf_token;
     const headerToken = this.header(headers['x-csrf-token']);
-    if (!cookieToken || !headerToken || !this.tokensMatch(cookieToken, headerToken)) {
+    if (
+      !cookieToken ||
+      !headerToken ||
+      !this.tokensMatch(cookieToken, headerToken)
+    ) {
       throw new ForbiddenException('Invalid CSRF token');
     }
     return true;
@@ -68,7 +74,10 @@ export class CsrfGuard implements CanActivate {
   private tokensMatch(left: string, right: string): boolean {
     const leftBuffer = Buffer.from(left);
     const rightBuffer = Buffer.from(right);
-    return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+    return (
+      leftBuffer.length === rightBuffer.length &&
+      timingSafeEqual(leftBuffer, rightBuffer)
+    );
   }
 
   private header(value: string | string[] | undefined): string | undefined {

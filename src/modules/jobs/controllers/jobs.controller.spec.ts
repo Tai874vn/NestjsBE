@@ -4,7 +4,15 @@ import { JobsController } from './jobs.controller';
 
 describe('JobsController service publishing policy', () => {
   it('allows worker and admin accounts to create new freelance services', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, JobsController.prototype.create)).toEqual([Role.USER, Role.ADMIN]);
+    const createHandler = Object.getOwnPropertyDescriptor(
+      JobsController.prototype,
+      'create',
+    )?.value;
+
+    expect(Reflect.getMetadata(ROLES_KEY, createHandler)).toEqual([
+      Role.USER,
+      Role.ADMIN,
+    ]);
   });
 
   it('checks job ownership before uploading images to Cloudinary', async () => {

@@ -1,5 +1,13 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { optionalTrimString } from '../../../common/dto/string.transforms';
 
 export class ConnectionsQueryDto {
   @IsOptional()
@@ -16,6 +24,8 @@ export class ConnectionsQueryDto {
   pageSize: number = 12;
 
   @IsOptional()
+  @Transform(optionalTrimString)
   @IsString()
+  @MaxLength(80)
   keyword?: string;
 }

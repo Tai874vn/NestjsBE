@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
 import { Role } from '../../../common/constants/roles';
@@ -13,6 +20,31 @@ import {
 
 type UploadedPostImage = { url: string; publicId: string };
 type FeedCursor = { phase: 'connections' | 'global'; id: number };
+type FeedPostAuthor = {
+  id: number;
+  name: string;
+  avatar: string | null;
+  headline: string | null;
+};
+type FeedPostComment = {
+  id: number;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  author: FeedPostAuthor;
+};
+type FeedPostSource = {
+  id: number;
+  content: string;
+  imageUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  author: FeedPostAuthor;
+  likes: Array<{ userId: number }>;
+  savedBy: Array<{ userId: number }>;
+  comments: FeedPostComment[];
+  _count: { likes: number; comments: number };
+};
 
 @Injectable()
 export class PostsService {
@@ -23,7 +55,11 @@ export class PostsService {
     private readonly notifications?: NotificationsService,
   ) {}
 
-  async createPost(authorId: number, dto: CreatePostDto, image?: UploadedPostImage) {
+  async createPost(
+    authorId: number,
+    dto: CreatePostDto,
+    image?: UploadedPostImage,
+  ) {
     const content = dto.content?.trim() ?? '';
     if (!content && !image) {
       throw new BadRequestException('Post content or image is required');
@@ -39,7 +75,10 @@ export class PostsService {
       include: this.postInclude(authorId),
     });
 
-    return { message: 'Post created successfully', content: this.formatPost(post) };
+    return {
+      message: 'Post created successfully',
+      content: this.formatPost(post),
+    };
   }
 
   async getFeed(userId: number, query: FeedQueryDto) {
@@ -61,7 +100,7 @@ export class PostsService {
       ),
     ].filter((id, index, values) => values.indexOf(id) === index);
 
-    let page: any[] = [];
+    let page: FeedPostSource[] = [];
     let nextCursor: string | null = null;
 
     if (!cursor || cursor.phase === 'connections') {
@@ -150,17 +189,23 @@ export class PostsService {
     }
 
     await this.prisma.post.delete({ where: { id: postId } });
-    if (post.imagePublicId) await this.cloudinary.deleteImage(post.imagePublicId);
+    if (post.imagePublicId)
+      await this.cloudinary.deleteImage(post.imagePublicId);
     return { message: 'Post deleted successfully' };
   }
 
   async likePost(postId: number, userId: number) {
     const post = await this.ensurePost(postId);
-    await this.prisma.postLike.upsert({
-      where: { postId_userId: { postId, userId } },
-      create: { postId, userId },
-      update: {},
-    });
+    try {
+      await this.prisma.postLike.create({
+        data: { postId, userId },
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        return { message: 'Post liked successfully' };
+      }
+      throw error;
+    }
     await this.notifications?.notifyPostLike({
       actorId: userId,
       recipientId: post.authorId,
@@ -186,7 +231,11 @@ export class PostsService {
       },
       take: limit + 1,
       orderBy: { id: 'desc' },
-      include: { author: { select: { id: true, name: true, avatar: true, headline: true } } },
+      include: {
+        author: {
+          select: { id: true, name: true, avatar: true, headline: true },
+        },
+      },
     });
     const hasMore = comments.length > limit;
     const data = comments.slice(0, limit);
@@ -199,11 +248,19 @@ export class PostsService {
     };
   }
 
-  async createComment(postId: number, authorId: number, dto: CreatePostCommentDto) {
+  async createComment(
+    postId: number,
+    authorId: number,
+    dto: CreatePostCommentDto,
+  ) {
     const post = await this.ensurePost(postId);
     const comment = await this.prisma.postComment.create({
       data: { postId, authorId, content: dto.content.trim() },
-      include: { author: { select: { id: true, name: true, avatar: true, headline: true } } },
+      include: {
+        author: {
+          select: { id: true, name: true, avatar: true, headline: true },
+        },
+      },
     });
     await this.notifications?.notifyPostComment({
       actorId: authorId,
@@ -216,30 +273,47 @@ export class PostsService {
     return { message: 'Comment created successfully', content: comment };
   }
 
-  async updateComment(postId: number, commentId: number, userId: number, dto: UpdatePostCommentDto) {
+  async updateComment(
+    postId: number,
+    commentId: number,
+    userId: number,
+    dto: UpdatePostCommentDto,
+  ) {
     const comment = await this.prisma.postComment.findUnique({
       where: { id: commentId },
       select: { postId: true, authorId: true },
     });
-    if (!comment || comment.postId !== postId) throw new NotFoundException('Comment not found');
-    if (comment.authorId !== userId) throw new ForbiddenException('You can only edit your own comments');
+    if (!comment || comment.postId !== postId)
+      throw new NotFoundException('Comment not found');
+    if (comment.authorId !== userId)
+      throw new ForbiddenException('You can only edit your own comments');
 
     const content = dto.content.trim();
     if (!content) throw new BadRequestException('Comment content is required');
     const updated = await this.prisma.postComment.update({
       where: { id: commentId },
       data: { content },
-      include: { author: { select: { id: true, name: true, avatar: true, headline: true } } },
+      include: {
+        author: {
+          select: { id: true, name: true, avatar: true, headline: true },
+        },
+      },
     });
     return { message: 'Comment updated successfully', content: updated };
   }
 
-  async deleteComment(postId: number, commentId: number, userId: number, role: Role) {
+  async deleteComment(
+    postId: number,
+    commentId: number,
+    userId: number,
+    role: Role,
+  ) {
     const comment = await this.prisma.postComment.findUnique({
       where: { id: commentId },
       select: { postId: true, authorId: true },
     });
-    if (!comment || comment.postId !== postId) throw new NotFoundException('Comment not found');
+    if (!comment || comment.postId !== postId)
+      throw new NotFoundException('Comment not found');
     if (comment.authorId !== userId && role !== Role.ADMIN) {
       throw new ForbiddenException('You can only delete your own comments');
     }
@@ -258,19 +332,25 @@ export class PostsService {
 
   private postInclude(userId: number) {
     return {
-      author: { select: { id: true, name: true, avatar: true, headline: true } },
+      author: {
+        select: { id: true, name: true, avatar: true, headline: true },
+      },
       likes: { where: { userId }, select: { userId: true } },
       savedBy: { where: { userId }, select: { userId: true } },
       comments: {
         take: 5,
         orderBy: { id: 'desc' as const },
-        include: { author: { select: { id: true, name: true, avatar: true, headline: true } } },
+        include: {
+          author: {
+            select: { id: true, name: true, avatar: true, headline: true },
+          },
+        },
       },
       _count: { select: { likes: true, comments: true } },
     };
   }
 
-  private formatPost(post: any) {
+  private formatPost(post: FeedPostSource) {
     return {
       id: post.id,
       content: post.content,
@@ -334,5 +414,12 @@ export class PostsService {
     } catch {
       throw new BadRequestException('Invalid feed cursor');
     }
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    );
   }
 }

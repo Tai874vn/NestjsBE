@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { SavedItemsService } from './saved-items.service';
 
 describe('SavedItemsService', () => {
@@ -83,5 +83,19 @@ describe('SavedItemsService', () => {
       likeCount: 2,
       commentCount: 1,
     });
+  });
+
+  it('rejects saved item cursors with invalid target ids', async () => {
+    const { service } = createService();
+    const cursor = Buffer.from(
+      JSON.stringify({
+        createdAt: '2026-06-19T10:00:00.000Z',
+        targetId: 0,
+      }),
+    ).toString('base64url');
+
+    await expect(service.getSavedPosts(4, { cursor })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });

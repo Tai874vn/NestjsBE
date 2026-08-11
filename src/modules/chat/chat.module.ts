@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ChatGateway } from './gateways/chat.gateway';
+import { ChatMessageFanoutService } from './services/chat-message-fanout.service';
 import { ChatPresenceService } from './services/chat-presence.service';
 import { ChatService } from './services/chat.service';
 import { ChatSocketAuthService } from './services/chat-socket-auth.service';
+import { ChatSocketRateLimitService } from './services/chat-socket-rate-limit.service';
 import { ChatController } from './controllers/chat.controller';
 import { PrismaService } from '../../prisma.service';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -23,7 +25,15 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
     }),
   ],
   controllers: [ChatController],
-  providers: [ChatGateway, ChatPresenceService, ChatService, ChatSocketAuthService, PrismaService],
+  providers: [
+    ChatGateway,
+    ChatMessageFanoutService,
+    ChatPresenceService,
+    ChatService,
+    ChatSocketAuthService,
+    ChatSocketRateLimitService,
+    PrismaService,
+  ],
   exports: [ChatService],
 })
 export class ChatModule {}

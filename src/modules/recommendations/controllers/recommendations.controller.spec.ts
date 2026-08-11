@@ -4,9 +4,13 @@ import { RecommendationsController } from './recommendations.controller';
 
 describe('RecommendationsController candidate recommendations', () => {
   it('limits candidate recommendations to employers and admins', () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      RecommendationsController.prototype,
+      'recommendCandidatesForHiringPost',
+    )?.value;
     const roles = Reflect.getMetadata(
       ROLES_KEY,
-      RecommendationsController.prototype.recommendCandidates,
+      handler,
     );
 
     expect(roles).toEqual([Role.EMPLOYER, Role.ADMIN]);

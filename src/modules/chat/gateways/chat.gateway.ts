@@ -22,12 +22,14 @@ import {
   OperationTimer,
 } from '../../../common/observability/observability.service';
 import { ChatService } from '../services/chat.service';
-import { NotificationsService } from '../../notifications/services/notifications.service';
+import { ChatMessageFanoutService } from '../services/chat-message-fanout.service';
 import { ChatPresenceService } from '../services/chat-presence.service';
 import { ChatSocketAuthService } from '../services/chat-socket-auth.service';
+import { ChatSocketRateLimitService } from '../services/chat-socket-rate-limit.service';
 import type { AuthenticatedSocket } from '../services/authenticated-socket.type';
 import {
   SendMessageDto,
+  GetMessagesDto,
   JoinRoomDto,
   TypingDto,
   CreateRoomDto,
@@ -41,7 +43,13 @@ import {
   },
   namespace: '/chat',
 })
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+@UsePipes(
+  new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }),
+)
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -55,18 +63,17 @@ export class ChatGateway
     private readonly socketAuth: ChatSocketAuthService,
     private readonly presence: ChatPresenceService,
     @Optional()
-    private readonly notifications?: NotificationsService,
+    private readonly messageFanout?: ChatMessageFanoutService,
     @Optional()
     private readonly observability?: ObservabilityService,
+    @Optional()
+    private readonly rateLimit?: ChatSocketRateLimitService,
   ) {}
 
   afterInit(server: Server) {
     this.logger.log('WebSocket Gateway initialized');
 
     this.presence.logMode();
-    if (false) {
-      this.logger.log('No Redis client — using in-memory online tracking');
-    }
 
     // Authentication middleware
     server.use((socket: AuthenticatedSocket, next) => {
@@ -91,9 +98,11 @@ export class ChatGateway
       this.chatService.getUserRoomIds(user.id),
       this.chatService.getUserContactIds(user.id),
     ]);
-    await Promise.all(roomIds.map((roomId) => client.join(`room:${roomId}`)));
+    for (const roomId of roomIds) {
+      await client.join(`room:${roomId}`);
+    }
 
-    // Broadcast online status — deduplicate so each user receives it once
+    // Broadcast online status once per online contact.
     for (const contactId of contactIds) {
       const memberSockets = await this.presence.getOnlineSockets(contactId);
       for (const socketId of memberSockets) {
@@ -115,7 +124,10 @@ export class ChatGateway
     );
 
     // Remove socket from tracking
-    const remainingSockets = await this.presence.removeOnlineUser(user.id, client.id);
+    const remainingSockets = await this.presence.removeOnlineUser(
+      user.id,
+      client.id,
+    );
     if (remainingSockets === 0) {
       try {
         const roomIds = await this.chatService.getUserRoomIds(user.id);
@@ -139,6 +151,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'create-room',
+        10,
+        60_000,
+      );
+      if (limited) return limited;
       const room = await this.chatService.createRoom(user.id, data);
 
       // Join creator to the room
@@ -170,6 +189,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'join-room',
+        60,
+        60_000,
+      );
+      if (limited) return limited;
       const isMember = await this.chatService.isRoomMember(
         data.roomId,
         user.id,
@@ -200,6 +226,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'leave-room',
+        30,
+        60_000,
+      );
+      if (limited) return limited;
       const roomName = await this.ensureSocketRoomMember(client, data.roomId);
 
       await client.leave(roomName);
@@ -226,38 +259,29 @@ export class ChatGateway
     let timer: OperationTimer | undefined;
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'send-message',
+        20,
+        60_000,
+      );
+      if (limited) return limited;
       timer = this.observability?.startOperation('chat.socket.send-message', {
         userId: user.id,
         roomId: data.roomId,
       });
-      const message = await this.timeSocketStep(timer, 'db.saveMessage', () =>
-        this.chatService.saveMessage(user.id, data),
-      );
+      const { message, recipientCount } = this.messageFanout
+        ? await this.messageFanout.saveMessageAndNotify(user.id, data, timer)
+        : {
+            message: await this.timeSocketStep(timer, 'db.saveMessage', () =>
+              this.chatService.saveMessage(user.id, data),
+            ),
+            recipientCount: 0,
+          };
 
       // Broadcast to all room members
       this.server.to(`room:${data.roomId}`).emit('new-message', message);
-
-      const recipientIds = (await this.timeSocketStep(timer, 'db.roomMembers', () =>
-        this.chatService.getRoomMemberIds(data.roomId),
-      ))
-        .filter((memberId) => memberId !== user.id);
-      const recipients = await this.timeSocketStep(timer, 'db.unreadCounts', () =>
-        Promise.all(
-          recipientIds.map(async (recipientId) => ({
-            recipientId,
-            unreadCount: await this.chatService.getUnreadCount(data.roomId, recipientId),
-          })),
-        ),
-      );
-      await this.timeSocketStep(timer, 'notifications.fanout', async () => {
-        await this.notifications?.notifyChatMessageRecipients({
-          senderId: user.id,
-          recipients,
-          roomId: data.roomId,
-          messageId: message.id,
-        });
-      });
-      timer?.end({ recipientCount: recipients.length, messageId: message.id });
+      timer?.end({ recipientCount, messageId: message.id });
 
       return { status: 'success', message };
     } catch (error) {
@@ -269,14 +293,21 @@ export class ChatGateway
 
   @SubscribeMessage('get-messages')
   async handleGetMessages(
-    @MessageBody() data: { roomId: number; limit?: number; before?: number },
+    @MessageBody() data: GetMessagesDto,
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'get-messages',
+        60,
+        60_000,
+      );
+      if (limited) return limited;
       const messages = await this.chatService.getMessages(user.id, {
         roomId: data.roomId,
-        limit: data.limit || 50,
+        limit: data.limit ?? 50,
         before: data.before,
       });
 
@@ -294,6 +325,13 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'mark-as-read',
+        60,
+        60_000,
+      );
+      if (limited) return limited;
       const updated = await this.chatService.markAsRead(data.roomId, user.id);
 
       if (updated) {
@@ -318,6 +356,8 @@ export class ChatGateway
   ) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(client, 'typing', 40, 10_000);
+      if (limited) return limited;
       const roomName = await this.ensureSocketRoomMember(client, data.roomId);
 
       // Broadcast to room except sender
@@ -339,6 +379,13 @@ export class ChatGateway
   async handleGetOnlineUsers(@ConnectedSocket() client: AuthenticatedSocket) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'get-online-users',
+        30,
+        30_000,
+      );
+      if (limited) return limited;
       const contactIds = await this.chatService.getUserContactIds(user.id);
       const onlineUsers = await this.presence.getOnlineUserIds(contactIds);
       client.emit('online-users', onlineUsers);
@@ -353,6 +400,13 @@ export class ChatGateway
   async handleGetRooms(@ConnectedSocket() client: AuthenticatedSocket) {
     try {
       const user = client.data.user!;
+      const limited = await this.checkRateLimit(
+        client,
+        'get-rooms',
+        30,
+        30_000,
+      );
+      if (limited) return limited;
       const rooms = await this.chatService.getUserRooms(user.id);
       return { status: 'success', rooms };
     } catch (error) {
@@ -400,6 +454,34 @@ export class ChatGateway
     return timer ? timer.time(step, callback) : callback();
   }
 
-  // ─── Token extraction ───
+  private async checkRateLimit(
+    client: AuthenticatedSocket,
+    event: string,
+    limit: number,
+    windowMs: number,
+  ) {
+    const user = client.data.user;
+    if (!user || !this.rateLimit) return null;
 
+    const result = await this.rateLimit.consume(
+      user.id,
+      event,
+      limit,
+      windowMs,
+    );
+    if (result.allowed) return null;
+
+    const payload = {
+      event,
+      retryAfterMs: result.retryAfterMs,
+    };
+    client.emit('rate-limited', payload);
+    return {
+      status: 'error',
+      message: 'Too many chat requests. Please slow down.',
+      ...payload,
+    };
+  }
+
+  // ─── Token extraction ───
 }

@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
 import { NotificationsGateway } from '../gateways/notifications.gateway';
 import { NotificationPresenterService } from './notification-presenter.service';
@@ -5,6 +6,25 @@ import { NotificationTemplateService } from './notification-template.service';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService', () => {
+  const notification = (overrides: Record<string, unknown> = {}) => ({
+    id: 9,
+    recipientId: 6,
+    actorId: 7,
+    type: NotificationType.POST_COMMENT,
+    title: 'New comment',
+    body: 'Looks great.',
+    entityType: 'post_comment',
+    entityId: 4,
+    actionUrl: '/?postId=3',
+    metadata: { postId: 3, commentId: 4 },
+    dedupeKey: null,
+    readAt: null,
+    createdAt: new Date('2026-07-01T02:00:00.000Z'),
+    updatedAt: new Date('2026-07-01T02:00:00.000Z'),
+    actor: { id: 7, name: 'Lina', avatar: null, headline: null },
+    ...overrides,
+  });
+
   function createService() {
     const prisma = {
       notification: {
@@ -53,6 +73,41 @@ describe('NotificationsService', () => {
         take: 9,
       }),
     );
+  });
+
+  it('returns an opaque compound cursor when unread notifications fill the page', async () => {
+    const { service, prisma } = createService();
+    prisma.notification.findMany.mockResolvedValueOnce([
+      notification({
+        id: 11,
+        updatedAt: new Date('2026-07-03T02:00:00.000Z'),
+      }),
+      notification({
+        id: 10,
+        updatedAt: new Date('2026-07-02T02:00:00.000Z'),
+      }),
+    ]);
+
+    const result = await service.list(6, { limit: 1 });
+    const cursor = result.content.nextCursor;
+
+    expect(cursor).toEqual(expect.any(String));
+    expect(
+      JSON.parse(Buffer.from(cursor!, 'base64url').toString('utf8')),
+    ).toMatchObject({
+      phase: 'unread',
+      id: 11,
+      updatedAt: '2026-07-03T02:00:00.000Z',
+    });
+  });
+
+  it('rejects invalid notification cursors before querying', async () => {
+    const { service, prisma } = createService();
+
+    await expect(service.list(6, { cursor: 'not-base64-json' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.notification.findMany).not.toHaveBeenCalled();
   });
 
   it('skips notifications for self actions', async () => {

@@ -5,9 +5,11 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
 import { RecommendationsController } from './controllers/recommendations.controller';
 import { AiRecommendationClient } from './services/ai-recommendation.client';
 import { RecommendationCacheService } from './services/recommendation-cache.service';
+import { RecommendationDataLoaderService } from './services/recommendation-data-loader.service';
 import { RecommendationPayloadMapperService } from './services/recommendation-payload-mapper.service';
 import { RecommendationQuotaService } from './services/recommendation-quota.service';
 import { RecommendationScoringService } from './services/recommendation-scoring.service';
+import { RecommendationSnapshotService } from './services/recommendation-snapshot.service';
 import { RecommendationsService } from './services/recommendations.service';
 
 @Module({
@@ -16,12 +18,18 @@ import { RecommendationsService } from './services/recommendations.service';
   providers: [
     AiRecommendationClient,
     RecommendationCacheService,
+    RecommendationDataLoaderService,
     RecommendationPayloadMapperService,
     RecommendationQuotaService,
     RecommendationScoringService,
+    RecommendationSnapshotService,
     RecommendationsService,
     PrismaService,
   ],
-  exports: [RecommendationsService],
+  exports: [
+    AiRecommendationClient,
+    RecommendationPayloadMapperService,
+    RecommendationsService,
+  ],
 })
 export class RecommendationsModule {}

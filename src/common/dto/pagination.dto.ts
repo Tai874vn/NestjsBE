@@ -1,5 +1,13 @@
-import { IsOptional, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { optionalTrimString } from './string.transforms';
 
 export class PaginationDto {
   @IsOptional()
@@ -16,5 +24,8 @@ export class PaginationDto {
   pageSize?: number = 10;
 
   @IsOptional()
+  @Transform(optionalTrimString)
+  @IsString()
+  @MaxLength(80)
   keyword?: string;
 }

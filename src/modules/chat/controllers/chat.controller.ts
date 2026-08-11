@@ -116,20 +116,10 @@ export class ChatController {
     );
 
     if (existingRoom) {
+      const room = await this.chatService.getRoom(existingRoom.id, user.id);
       return {
         message: 'Private chat found',
-        content: {
-          id: existingRoom.id,
-          name: existingRoom.name,
-          isPrivate: existingRoom.isPrivate,
-          members: existingRoom.members.map((m) => ({
-            id: m.user.id,
-            name: m.user.name,
-            avatar: m.user.avatar,
-            lastReadAt: m.lastReadAt,
-          })),
-          createdAt: existingRoom.createdAt,
-        },
+        content: room,
       };
     }
 

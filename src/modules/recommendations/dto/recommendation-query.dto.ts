@@ -1,5 +1,5 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class RecommendationQueryDto {
   @IsOptional()
@@ -15,4 +15,24 @@ export class RecommendationQueryDto {
   @Min(1)
   @Max(500)
   poolSize?: number = 100;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  cacheOnly?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true' || value === '1') return true;
+    if (value === false || value === 'false' || value === '0') return false;
+    return value;
+  })
+  @IsBoolean()
+  forceRefresh?: boolean = false;
 }

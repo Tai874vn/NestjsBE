@@ -35,7 +35,9 @@ export class CommentsService {
       select: { id: true },
     });
     if (!completedHire) {
-      throw new ForbiddenException('Complete a hire before reviewing this service');
+      throw new ForbiddenException(
+        'Complete a hire before reviewing this service',
+      );
     }
 
     const existingReview = await this.prisma.comment.findFirst({

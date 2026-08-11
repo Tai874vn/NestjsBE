@@ -113,13 +113,43 @@ export const FEED_POSTS = [
 ] as const;
 
 const FEED_COMMENTS = [
-  { postIndex: 0, authorOffset: 1, content: 'Reducing steps is usually the hardest and most valuable design work.' },
-  { postIndex: 0, authorOffset: 2, content: 'The dashboard looks clear. Strong hierarchy.' },
-  { postIndex: 1, authorOffset: 1, content: 'Real error responses save a lot of integration time.' },
-  { postIndex: 2, authorOffset: 1, content: 'Showing work early has improved every project I have tried it on.' },
-  { postIndex: 3, authorOffset: 2, content: 'Clear weekly deliverables make collaboration much easier.' },
-  { postIndex: 4, authorOffset: 1, content: 'Decision context is what makes a case study credible.' },
-  { postIndex: 5, authorOffset: 2, content: 'Repeat work is a strong signal. Congratulations.' },
+  {
+    postIndex: 0,
+    authorOffset: 1,
+    content:
+      'Reducing steps is usually the hardest and most valuable design work.',
+  },
+  {
+    postIndex: 0,
+    authorOffset: 2,
+    content: 'The dashboard looks clear. Strong hierarchy.',
+  },
+  {
+    postIndex: 1,
+    authorOffset: 1,
+    content: 'Real error responses save a lot of integration time.',
+  },
+  {
+    postIndex: 2,
+    authorOffset: 1,
+    content:
+      'Showing work early has improved every project I have tried it on.',
+  },
+  {
+    postIndex: 3,
+    authorOffset: 2,
+    content: 'Clear weekly deliverables make collaboration much easier.',
+  },
+  {
+    postIndex: 4,
+    authorOffset: 1,
+    content: 'Decision context is what makes a case study credible.',
+  },
+  {
+    postIndex: 5,
+    authorOffset: 2,
+    content: 'Repeat work is a strong signal. Congratulations.',
+  },
 ] as const;
 
 const FEED_LIKES = [

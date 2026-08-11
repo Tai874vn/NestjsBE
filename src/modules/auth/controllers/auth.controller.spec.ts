@@ -2,9 +2,11 @@ import { AuthController } from './auth.controller';
 
 describe('AuthController logout', () => {
   const authService = {
+    signIn: jest.fn(),
     verifyRefreshToken: jest.fn(),
     refreshTokens: jest.fn(),
     logout: jest.fn(),
+    googleLogin: jest.fn(),
   };
 
   function createController() {
@@ -15,12 +17,16 @@ describe('AuthController logout', () => {
     return {
       cookie: jest.fn(),
       clearCookie: jest.fn(),
+      redirect: jest.fn(),
+      headersSent: false,
+      writableEnded: false,
     };
   }
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.NODE_ENV = 'test';
+    process.env.JWT_EXPIRES_IN = '15m';
   });
 
   it('revokes the refresh token and clears auth cookies without requiring an access-token user', async () => {
@@ -92,5 +98,80 @@ describe('AuthController logout', () => {
     expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
     expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
     expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  });
+
+  it('does not set Google auth cookies after a guard already committed the response', async () => {
+    const response = {
+      ...createResponse(),
+      headersSent: true,
+    };
+
+    await createController().googleAuthRedirect(
+      { user: { id: 7, email: 'user@example.com' } } as any,
+      response as any,
+    );
+
+    expect(authService.googleLogin).not.toHaveBeenCalled();
+    expect(response.cookie).not.toHaveBeenCalled();
+    expect(response.redirect).not.toHaveBeenCalled();
+  });
+
+  it('sets Google auth cookies and redirects when the callback succeeds', async () => {
+    const response = createResponse();
+    authService.googleLogin.mockResolvedValue({
+      token: 'access-token',
+      refreshToken: 'refresh-token',
+    });
+    process.env.FRONTEND_URL = 'https://example.test';
+
+    await createController().googleAuthRedirect(
+      { user: { id: 7, email: 'user@example.com' } } as any,
+      response as any,
+    );
+
+    expect(authService.googleLogin).toHaveBeenCalledWith({
+      id: 7,
+      email: 'user@example.com',
+    });
+    expect(response.cookie).toHaveBeenCalledWith(
+      'access_token',
+      'access-token',
+      expect.any(Object),
+    );
+    expect(response.cookie).toHaveBeenCalledWith(
+      'refresh_token',
+      'refresh-token',
+      expect.any(Object),
+    );
+    expect(response.cookie).toHaveBeenCalledWith(
+      'csrf_token',
+      expect.any(String),
+      expect.any(Object),
+    );
+    expect(response.redirect).toHaveBeenCalledWith('https://example.test/auth/callback');
+  });
+
+  it('uses JWT_EXPIRES_IN for the access-token cookie lifetime', async () => {
+    const response = createResponse();
+    process.env.JWT_EXPIRES_IN = '2h';
+    authService.signIn.mockResolvedValue({
+      message: 'Login successful',
+      content: {
+        token: 'access-token',
+        refreshToken: 'refresh-token',
+        user: { id: 7, email: 'user@example.com' },
+      },
+    });
+
+    await createController().signIn(
+      { email: 'user@example.com', password: 'password123' } as any,
+      response as any,
+    );
+
+    expect(response.cookie).toHaveBeenCalledWith(
+      'access_token',
+      'access-token',
+      expect.objectContaining({ maxAge: 2 * 60 * 60 * 1000 }),
+    );
   });
 });

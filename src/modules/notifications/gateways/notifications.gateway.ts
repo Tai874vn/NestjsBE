@@ -64,7 +64,9 @@ export class NotificationsGateway
     }
 
     await client.join(this.userRoom(user.id));
-    this.logger.log(`User ${user.name} (${user.id}) connected to notifications`);
+    this.logger.log(
+      `User ${user.name} (${user.id}) connected to notifications`,
+    );
   }
 
   emitNotification(recipientId: number, notification: NotificationPayload) {
@@ -120,7 +122,8 @@ export class NotificationsGateway
     if (typeof authToken === 'string' && authToken) return authToken;
 
     const authHeader = socket.handshake.headers.authorization;
-    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) return authHeader.slice(7);
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer '))
+      return authHeader.slice(7);
 
     const cookies = socket.handshake.headers.cookie;
     if (!cookies) return null;

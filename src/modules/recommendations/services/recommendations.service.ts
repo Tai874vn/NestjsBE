@@ -1,14 +1,16 @@
 import {
   ForbiddenException,
   Injectable,
-  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PrismaService } from '../../../prisma.service';
 import { Role } from '../../../common/constants/roles';
 import { ObservabilityService } from '../../../common/observability/observability.service';
 import { RecommendationQueryDto } from '../dto/recommendation-query.dto';
-import { AiMatchItem, AiRecommendationClient } from './ai-recommendation.client';
+import {
+  AiMatchItem,
+  AiRecommendationClient,
+} from './ai-recommendation.client';
+import { RecommendationDataLoaderService } from './recommendation-data-loader.service';
 import {
   CachedRecommendationResult,
   RecommendationCacheService,
@@ -18,6 +20,7 @@ import {
   RecommendationScore,
   RecommendationScoringService,
 } from './recommendation-scoring.service';
+import { RecommendationSnapshotService } from './recommendation-snapshot.service';
 import {
   JobForRecommendation,
   RecommendationPayloadMapperService,
@@ -27,43 +30,50 @@ import {
 @Injectable()
 export class RecommendationsService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly aiClient: AiRecommendationClient,
     private readonly scoringService: RecommendationScoringService,
     private readonly payloadMapper: RecommendationPayloadMapperService,
+    private readonly dataLoader: RecommendationDataLoaderService,
     private readonly quotaService: RecommendationQuotaService,
     private readonly cacheService: RecommendationCacheService,
+    private readonly snapshotService: RecommendationSnapshotService,
     private readonly observability: ObservabilityService,
   ) {}
 
-  async getQuotaForUser(userId: number) {
+  async getQuotaForUser(userId: number, userRole?: Role | string | null) {
     return {
       message: 'Get AI recommendation quota successfully',
-      content: await this.quotaService.getQuotaForUser(userId),
+      content: await this.quotaService.getQuotaForUser(userId, userRole),
     };
   }
 
-  async recommendJobsForUser(userId: number, query: RecommendationQueryDto) {
+  async recommendJobsForUser(
+    userId: number,
+    query: RecommendationQueryDto,
+    userRole?: Role | string | null,
+  ) {
     const topK = query.topK ?? 10;
     const poolSize = query.poolSize ?? 100;
     const timer = this.observability.startOperation('recommendations.jobs', {
       userId,
       topK,
       poolSize,
+      cacheOnly: query.cacheOnly === true,
+      forceRefresh: query.forceRefresh === true,
     });
+    let shouldRefundQuota = false;
 
     try {
-      const cached = await timer.time('cache.get', () =>
-        this.cacheService.getJobs<unknown>(
-          userId,
-          topK,
-          poolSize,
-        ),
-      );
+      const shouldReadSaved = query.forceRefresh !== true;
+      const cached = shouldReadSaved
+        ? await timer.time('cache.get', () =>
+            this.cacheService.getJobs<unknown>(userId, topK, poolSize),
+          )
+        : undefined;
 
       if (cached) {
         const quota = await timer.time('quota.read', () =>
-          this.quotaService.getQuotaForUser(userId),
+          this.quotaService.getQuotaForUser(userId, userRole),
         );
         timer.end({ cache: 'hit', resultCount: cached.data.length });
         return {
@@ -71,20 +81,77 @@ export class RecommendationsService {
           content: {
             ...cached,
             quota,
-            cache: { hit: true, ttlSeconds: this.cacheService.ttlSeconds },
+            cache: {
+              hit: true,
+              ttlSeconds: this.cacheService.ttlSeconds,
+              source: 'redis',
+            },
           },
         };
       }
 
-      timer.annotate({ cache: 'miss' });
-      await timer.time('quota.ensure', () => this.quotaService.ensureAvailable(userId));
-      const user = await timer.time('db.user', () => this.loadUserForRecommendation(userId));
+      const snapshot = shouldReadSaved
+        ? await timer.time('snapshot.get', () =>
+            this.snapshotService.getJobs<unknown>(userId, topK, poolSize),
+          )
+        : undefined;
+
+      if (snapshot) {
+        await timer.time('cache.set', () =>
+          this.cacheService.setJobs(userId, topK, poolSize, snapshot),
+        );
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId, userRole),
+        );
+        timer.end({ cache: 'database', resultCount: snapshot.data.length });
+        return {
+          message: 'Get saved recommended jobs successfully',
+          content: {
+            ...snapshot,
+            quota,
+            cache: {
+              hit: true,
+              ttlSeconds: this.cacheService.ttlSeconds,
+              source: 'database',
+            },
+          },
+        };
+      }
+
+      if (query.cacheOnly === true) {
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId, userRole),
+        );
+        timer.end({ cache: 'miss', cacheOnly: true, resultCount: 0 });
+        return {
+          message: 'No cached recommended jobs found',
+          content: {
+            data: [],
+            model: '',
+            elapsedMs: 0,
+            generatedAt: null,
+            quota,
+            cache: { hit: false, ttlSeconds: this.cacheService.ttlSeconds },
+          },
+        };
+      }
+
+      timer.annotate({ cache: shouldReadSaved ? 'miss' : 'bypassed' });
+      const reservedQuota = await timer.time('quota.reserve', () =>
+        this.quotaService.reserve(userId, userRole),
+      );
+      shouldRefundQuota = true;
+      const user = await timer.time('db.user', () =>
+        this.dataLoader.loadUser(userId),
+      );
       const jobs = await timer.time('db.jobs', () =>
-        this.loadJobsForRecommendation(userId, poolSize),
+        this.dataLoader.loadJobs(userId, poolSize),
       );
       const resumePayload = this.payloadMapper.buildResumePayload(user);
       const knownSkills = resumePayload.skills as string[];
-      const jobPayloads = jobs.map((job) => this.payloadMapper.buildJobPayload(job, knownSkills));
+      const jobPayloads = jobs.map((job) =>
+        this.payloadMapper.buildJobPayload(job, knownSkills),
+      );
 
       const aiResponse = await timer.time('aiService', () =>
         this.callAi(() =>
@@ -106,7 +173,7 @@ export class RecommendationsService {
           const score = this.scoringService.scoreJobMatch({
             aiScore: match.score,
             resumeSkills: knownSkills,
-            resumeText: String(resumePayload.text ?? ''),
+            resumeText: this.payloadText(resumePayload),
             jobText: this.payloadMapper.jobToText(job),
             jobCategoryText: this.payloadMapper.jobCategoryText(job),
           });
@@ -121,13 +188,25 @@ export class RecommendationsService {
         generatedAt: new Date().toISOString(),
       };
       const quota = matches.length
-        ? await timer.time('quota.consume', () => this.quotaService.consume(userId))
-        : await timer.time('quota.read', () => this.quotaService.getQuotaForUser(userId));
+        ? reservedQuota
+        : await timer.time('quota.refund', () =>
+            this.quotaService.refund(userId, userRole),
+          );
+      if (!matches.length) {
+        shouldRefundQuota = false;
+      }
 
+      await timer.time('snapshot.save', () =>
+        this.snapshotService.saveJobs(userId, topK, poolSize, result),
+      );
       await timer.time('cache.set', () =>
         this.cacheService.setJobs(userId, topK, poolSize, result),
       );
-      timer.end({ resultCount: matches.length, aiElapsedMs: aiResponse.elapsed_ms });
+      shouldRefundQuota = false;
+      timer.end({
+        resultCount: matches.length,
+        aiElapsedMs: aiResponse.elapsed_ms,
+      });
 
       return {
         message: 'Get recommended jobs successfully',
@@ -138,13 +217,16 @@ export class RecommendationsService {
         },
       };
     } catch (error) {
+      if (shouldRefundQuota) {
+        await this.refundQuotaAfterFailure(userId, userRole);
+      }
       timer.fail(error);
       throw error;
     }
   }
 
-  async recommendCandidatesForJob(
-    jobId: number,
+  async recommendCandidatesForHiringPost(
+    hiringPostId: number,
     userId: number,
     userRole: Role,
     query: RecommendationQueryDto,
@@ -153,37 +235,50 @@ export class RecommendationsService {
     const poolSize = query.poolSize ?? 100;
 
     if (userRole !== Role.EMPLOYER && userRole !== Role.ADMIN) {
-      throw new ForbiddenException('Only employers can view candidate recommendations');
+      throw new ForbiddenException(
+        'Only employers can view candidate recommendations',
+      );
     }
 
-    const timer = this.observability.startOperation('recommendations.candidates', {
-      userId,
-      jobId,
-      topK,
-      poolSize,
-    });
+    const timer = this.observability.startOperation(
+      'recommendations.hiring-post-candidates',
+      {
+        userId,
+        hiringPostId,
+        topK,
+        poolSize,
+        cacheOnly: query.cacheOnly === true,
+        forceRefresh: query.forceRefresh === true,
+      },
+    );
+    let shouldRefundQuota = false;
 
     try {
-      const job = await timer.time('db.job', () =>
-        this.loadJobForCandidateRecommendation(jobId),
+      const hiringPost = await timer.time('db.hiringPost', () =>
+        this.dataLoader.loadHiringPost(hiringPostId),
       );
 
-      if (job.creatorId !== userId && userRole !== Role.ADMIN) {
-        throw new ForbiddenException('You can only view candidate recommendations for your own jobs');
+      if (hiringPost.recruiterId !== userId && userRole !== Role.ADMIN) {
+        throw new ForbiddenException(
+          'You can only view candidate recommendations for your own hiring posts',
+        );
       }
 
-      const cached = await timer.time('cache.get', () =>
-        this.cacheService.getCandidates<unknown>(
-          userId,
-          jobId,
-          topK,
-          poolSize,
-        ),
-      );
+      const shouldReadSaved = query.forceRefresh !== true;
+      const cached = shouldReadSaved
+        ? await timer.time('cache.get', () =>
+            this.cacheService.getHiringPostCandidates<unknown>(
+              userId,
+              hiringPostId,
+              topK,
+              poolSize,
+            ),
+          )
+        : undefined;
 
       if (cached) {
         const quota = await timer.time('quota.read', () =>
-          this.quotaService.getQuotaForUser(userId),
+          this.quotaService.getQuotaForUser(userId, userRole),
         );
         timer.end({ cache: 'hit', resultCount: cached.data.length });
         return {
@@ -191,22 +286,88 @@ export class RecommendationsService {
           content: {
             ...cached,
             quota,
-            cache: { hit: true, ttlSeconds: this.cacheService.ttlSeconds },
+            cache: {
+              hit: true,
+              ttlSeconds: this.cacheService.ttlSeconds,
+              source: 'redis',
+            },
           },
         };
       }
 
-      timer.annotate({ cache: 'miss' });
-      await timer.time('quota.ensure', () => this.quotaService.ensureAvailable(userId));
-      const candidates = await timer.time('db.candidates', () =>
-        this.loadCandidatesForRecommendation(poolSize),
+      const snapshot = shouldReadSaved
+        ? await timer.time('snapshot.get', () =>
+            this.snapshotService.getHiringPostCandidates<unknown>(
+              userId,
+              hiringPostId,
+              topK,
+              poolSize,
+            ),
+          )
+        : undefined;
+
+      if (snapshot) {
+        await timer.time('cache.set', () =>
+          this.cacheService.setHiringPostCandidates(
+            userId,
+            hiringPostId,
+            topK,
+            poolSize,
+            snapshot,
+          ),
+        );
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId, userRole),
+        );
+        timer.end({ cache: 'database', resultCount: snapshot.data.length });
+        return {
+          message: 'Get saved recommended candidates successfully',
+          content: {
+            ...snapshot,
+            quota,
+            cache: {
+              hit: true,
+              ttlSeconds: this.cacheService.ttlSeconds,
+              source: 'database',
+            },
+          },
+        };
+      }
+
+      if (query.cacheOnly === true) {
+        const quota = await timer.time('quota.read', () =>
+          this.quotaService.getQuotaForUser(userId, userRole),
+        );
+        timer.end({ cache: 'miss', cacheOnly: true, resultCount: 0 });
+        return {
+          message: 'No cached recommended candidates found',
+          content: {
+            data: [],
+            model: '',
+            elapsedMs: 0,
+            generatedAt: null,
+            quota,
+            cache: { hit: false, ttlSeconds: this.cacheService.ttlSeconds },
+          },
+        };
+      }
+
+      timer.annotate({ cache: shouldReadSaved ? 'miss' : 'bypassed' });
+      const reservedQuota = await timer.time('quota.reserve', () =>
+        this.quotaService.reserve(userId, userRole),
       );
-      const jobPayload = this.payloadMapper.buildJobPayload(job);
-      const candidatePayloads = candidates.map((candidate) => this.payloadMapper.buildResumePayload(candidate));
+      shouldRefundQuota = true;
+      const candidates = await timer.time('db.candidates', () =>
+        this.dataLoader.loadCandidates(poolSize),
+      );
+      const jobPayload = this.payloadMapper.buildHiringPostPayload(hiringPost);
+      const candidatePayloads = candidates.map((candidate) =>
+        this.payloadMapper.buildResumePayload(candidate),
+      );
 
       const aiResponse = await timer.time('aiService', () =>
         this.callAi(() =>
-          this.aiClient.matchCandidates({
+          this.aiClient.matchRecruiterCandidates({
             job: jobPayload,
             candidates: candidatePayloads,
             top_k: topK,
@@ -214,22 +375,19 @@ export class RecommendationsService {
         ),
       );
 
-      const candidatesById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]));
-      const jobText = this.payloadMapper.jobToText(job);
+      const candidatesById = new Map(
+        candidates.map((candidate) => [String(candidate.id), candidate]),
+      );
       const matches = aiResponse.matches
         .map((match) => {
           const candidate = candidatesById.get(String(match.id));
           if (!candidate) {
             return null;
           }
-          const resumePayload = this.payloadMapper.buildResumePayload(candidate);
-          const score = this.scoringService.scoreCandidateMatch({
-            aiScore: match.score,
-            resumeSkills: resumePayload.skills as string[],
-            resumeText: String(resumePayload.text ?? ''),
-            jobText,
-            jobCategoryText: this.payloadMapper.jobCategoryText(job),
-          });
+          const score = this.scoringService.scoreRecruiterClassifierMatch(
+            match.score,
+            match.metadata,
+          );
           return this.safeCandidate(candidate, match, score);
         })
         .filter((match): match is NonNullable<typeof match> => Boolean(match));
@@ -241,13 +399,37 @@ export class RecommendationsService {
         generatedAt: new Date().toISOString(),
       };
       const quota = matches.length
-        ? await timer.time('quota.consume', () => this.quotaService.consume(userId))
-        : await timer.time('quota.read', () => this.quotaService.getQuotaForUser(userId));
+        ? reservedQuota
+        : await timer.time('quota.refund', () =>
+            this.quotaService.refund(userId, userRole),
+          );
+      if (!matches.length) {
+        shouldRefundQuota = false;
+      }
 
-      await timer.time('cache.set', () =>
-        this.cacheService.setCandidates(userId, jobId, topK, poolSize, result),
+      await timer.time('snapshot.save', () =>
+        this.snapshotService.saveHiringPostCandidates(
+          userId,
+          hiringPostId,
+          topK,
+          poolSize,
+          result,
+        ),
       );
-      timer.end({ resultCount: matches.length, aiElapsedMs: aiResponse.elapsed_ms });
+      await timer.time('cache.set', () =>
+        this.cacheService.setHiringPostCandidates(
+          userId,
+          hiringPostId,
+          topK,
+          poolSize,
+          result,
+        ),
+      );
+      shouldRefundQuota = false;
+      timer.end({
+        resultCount: matches.length,
+        aiElapsedMs: aiResponse.elapsed_ms,
+      });
 
       return {
         message: 'Get recommended candidates successfully',
@@ -258,107 +440,30 @@ export class RecommendationsService {
         },
       };
     } catch (error) {
+      if (shouldRefundQuota) {
+        await this.refundQuotaAfterFailure(userId, userRole);
+      }
       timer.fail(error);
       throw error;
     }
   }
 
-  private async loadUserForRecommendation(userId: number): Promise<UserForRecommendation> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        headline: true,
-        bio: true,
-        location: true,
-        skill: true,
-        profileSkills: {
-          select: { name: true, level: true },
-          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
-        },
-        resume: {
-          select: { data: true },
-        },
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-
-    return user;
-  }
-
-  private loadJobsForRecommendation(userId: number, poolSize: number): Promise<JobForRecommendation[]> {
-    return this.prisma.job.findMany({
-      where: { creatorId: { not: userId } },
-      take: poolSize,
-      orderBy: [{ rating: 'desc' }, { id: 'desc' }],
-      include: {
-        user: { select: { id: true, name: true, avatar: true } },
-        subcategory: { include: { category: true } },
-      },
-    });
-  }
-
-  private async loadJobForCandidateRecommendation(jobId: number): Promise<JobForRecommendation> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: jobId },
-      include: {
-        user: { select: { id: true, name: true, avatar: true } },
-        subcategory: { include: { category: true } },
-      },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Job with ID ${jobId} not found`);
-    }
-
-    return job;
-  }
-
-  private loadCandidatesForRecommendation(poolSize: number): Promise<UserForRecommendation[]> {
-    return this.prisma.user.findMany({
-      where: {
-        OR: [{ resume: { isNot: null } }, { profileSkills: { some: {} } }, { skill: { not: null } }],
-      },
-      take: poolSize,
-      orderBy: { id: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        avatar: true,
-        headline: true,
-        bio: true,
-        location: true,
-        skill: true,
-        profileSkills: {
-          select: { name: true, level: true },
-          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
-        },
-        resume: {
-          select: { data: true },
-        },
-      },
-    });
-  }
-
-  private withRecommendation(job: JobForRecommendation, match: AiMatchItem, score: RecommendationScore) {
+  private withRecommendation(
+    job: JobForRecommendation,
+    match: AiMatchItem,
+    score: RecommendationScore,
+  ) {
     return {
       ...job,
-      recommendation: {
-        rank: match.rank,
-        aiScore: score.aiScore,
-        finalScore: score.finalScore,
-        label: score.label,
-        skillScore: score.skillScore,
-        seniorityScore: score.seniorityScore,
-        categoryScore: score.categoryScore,
-      },
+      recommendation: this.toRecommendationPayload(match, score),
     };
   }
 
-  private safeCandidate(candidate: UserForRecommendation, match: AiMatchItem, score: RecommendationScore) {
+  private safeCandidate(
+    candidate: UserForRecommendation,
+    match: AiMatchItem,
+    score: RecommendationScore,
+  ) {
     return {
       id: candidate.id,
       name: candidate.name,
@@ -367,16 +472,36 @@ export class RecommendationsService {
       bio: candidate.bio,
       location: candidate.location,
       profileSkills: candidate.profileSkills ?? [],
-      recommendation: {
-        rank: match.rank,
-        aiScore: score.aiScore,
-        finalScore: score.finalScore,
-        label: score.label,
-        skillScore: score.skillScore,
-        seniorityScore: score.seniorityScore,
-        categoryScore: score.categoryScore,
-      },
+      recommendation: this.toRecommendationPayload(match, score),
     };
+  }
+
+  private toRecommendationPayload(
+    match: AiMatchItem,
+    score: RecommendationScore,
+  ) {
+    return {
+      rank: match.rank,
+      aiScore: score.aiScore,
+      finalScore: score.finalScore,
+      label: score.label,
+      isMatch: score.isMatch,
+      matchLabel: score.matchLabel,
+      decision: score.matchLabel,
+      threshold: score.threshold,
+      source: score.source,
+      skillScore: score.skillScore,
+      seniorityScore: score.seniorityScore,
+      categoryScore: score.categoryScore,
+      requiredSkills: score.requiredSkills,
+      matchedSkills: score.matchedSkills,
+      missingSkills: score.missingSkills,
+      improvementTips: score.improvementTips,
+    };
+  }
+
+  private payloadText(payload: Record<string, unknown>): string {
+    return typeof payload.text === 'string' ? payload.text : '';
   }
 
   private async callAi<T>(callback: () => Promise<T>): Promise<T> {
@@ -386,7 +511,20 @@ export class RecommendationsService {
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
-      throw new ServiceUnavailableException('AI recommendation service is unavailable');
+      throw new ServiceUnavailableException(
+        'AI recommendation service is unavailable',
+      );
+    }
+  }
+
+  private async refundQuotaAfterFailure(
+    userId: number,
+    userRole?: Role | string | null,
+  ): Promise<void> {
+    try {
+      await this.quotaService.refund(userId, userRole);
+    } catch {
+      // The original request failure is more useful to callers; quota repair can be retried operationally.
     }
   }
 }

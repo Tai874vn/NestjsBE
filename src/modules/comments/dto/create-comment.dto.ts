@@ -6,12 +6,15 @@ import {
   Min,
   Max,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { trimString } from '../../../common/dto/string.transforms';
 
 export class CreateCommentDto {
   @IsNotEmpty()
   @IsInt()
   jobId: number;
 
+  @Transform(trimString)
   @IsNotEmpty()
   @IsString()
   @MaxLength(2000)

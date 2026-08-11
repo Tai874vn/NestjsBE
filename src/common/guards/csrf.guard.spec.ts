@@ -3,24 +3,31 @@ import { ConfigService } from '@nestjs/config';
 import { CsrfGuard } from './csrf.guard';
 
 describe('CsrfGuard', () => {
-  const guard = new CsrfGuard({ getOrThrow: () => 'http://localhost:3001' } as unknown as ConfigService);
+  const guard = new CsrfGuard({
+    getOrThrow: () => 'http://localhost:3001',
+  } as unknown as ConfigService);
 
-  const context = (request: Record<string, unknown>) => ({
-    getType: () => 'http',
-    switchToHttp: () => ({ getRequest: () => request }),
-  }) as unknown as ExecutionContext;
+  const context = (request: Record<string, unknown>) =>
+    ({
+      getType: () => 'http',
+      switchToHttp: () => ({ getRequest: () => request }),
+    }) as unknown as ExecutionContext;
 
   it('allows safe requests', () => {
     expect(guard.canActivate(context({ method: 'GET' }))).toBe(true);
   });
 
   it('allows bearer-token API requests without a CSRF token', () => {
-    expect(guard.canActivate(context({
-      method: 'POST',
-      headers: { authorization: 'Bearer access-token' },
-      cookies: {},
-      originalUrl: '/api/posts',
-    }))).toBe(true);
+    expect(
+      guard.canActivate(
+        context({
+          method: 'POST',
+          headers: { authorization: 'Bearer access-token' },
+          cookies: {},
+          originalUrl: '/api/posts',
+        }),
+      ),
+    ).toBe(true);
   });
 
   it('rejects cookie-authenticated mutations without matching origin and CSRF token', () => {
@@ -31,7 +38,9 @@ describe('CsrfGuard', () => {
       originalUrl: '/api/posts',
     };
 
-    expect(() => guard.canActivate(context(request))).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(context(request))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows cookie-authenticated mutations with exact origin and matching token', () => {
@@ -53,6 +62,8 @@ describe('CsrfGuard', () => {
       originalUrl: '/api/auth/signin',
     };
 
-    expect(() => guard.canActivate(context(request))).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(context(request))).toThrow(
+      ForbiddenException,
+    );
   });
 });

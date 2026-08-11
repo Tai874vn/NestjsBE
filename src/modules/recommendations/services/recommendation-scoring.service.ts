@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 export type RecommendationLabel = 'high_match' | 'medium_match' | 'low_match';
+export type RecruiterMatchDecision = 'match' | 'no_match';
 
 export interface RecommendationScoreInput {
   aiScore: number;
@@ -14,6 +15,10 @@ export interface RecommendationScore {
   aiScore: number;
   finalScore: number;
   label: RecommendationLabel;
+  isMatch?: boolean;
+  matchLabel?: RecruiterMatchDecision;
+  threshold?: number;
+  source?: 'embedding_rerank' | 'classifier';
   skillScore: number;
   seniorityScore: number;
   categoryScore: number;
@@ -73,7 +78,10 @@ const SKILL_TERMS: Array<{ name: string; aliases: string[] }> = [
   { name: 'Splunk', aliases: ['splunk'] },
   { name: 'Incident Response', aliases: ['incident response'] },
   { name: 'Penetration Testing', aliases: ['penetration testing', 'pentest'] },
-  { name: 'Vulnerability Assessment', aliases: ['vulnerability assessment', 'vulnerability scanning'] },
+  {
+    name: 'Vulnerability Assessment',
+    aliases: ['vulnerability assessment', 'vulnerability scanning'],
+  },
   { name: 'SOC', aliases: ['soc', 'security operations center'] },
   { name: 'IAM', aliases: ['iam', 'identity and access management'] },
 ];
@@ -88,6 +96,48 @@ export class RecommendationScoringService {
     return this.score(input);
   }
 
+  scoreAiOnlyMatch(aiScore: number): RecommendationScore {
+    const score = this.round(this.clamp(aiScore));
+    return {
+      aiScore: score,
+      finalScore: score,
+      label: this.label(score),
+      skillScore: 0,
+      seniorityScore: 0,
+      categoryScore: 0,
+      requiredSkills: [],
+      matchedSkills: [],
+      missingSkills: [],
+      improvementTips: [],
+    };
+  }
+
+  scoreRecruiterClassifierMatch(
+    aiScore: number,
+    metadata?: Record<string, unknown>,
+  ): RecommendationScore {
+    const score = this.round(this.clamp(aiScore));
+    const threshold = this.classifierThreshold(metadata);
+    const isMatch = this.classifierDecision(score, threshold, metadata);
+
+    return {
+      aiScore: score,
+      finalScore: score,
+      label: isMatch ? this.label(score) : 'low_match',
+      isMatch,
+      matchLabel: isMatch ? 'match' : 'no_match',
+      threshold,
+      source: 'classifier',
+      skillScore: 0,
+      seniorityScore: 0,
+      categoryScore: 0,
+      requiredSkills: [],
+      matchedSkills: [],
+      missingSkills: [],
+      improvementTips: [],
+    };
+  }
+
   private score(input: RecommendationScoreInput): RecommendationScore {
     const aiScore = this.clamp(input.aiScore);
     const skillInsight = this.skillInsight(input);
@@ -95,9 +145,15 @@ export class RecommendationScoringService {
       ? skillInsight.matchedSkills.length / skillInsight.requiredSkills.length
       : this.skillOverlapScore(input.resumeSkills, input.jobText);
     const seniorityScore = this.seniorityScore(input.resumeText, input.jobText);
-    const categoryScore = this.categoryScore(input.resumeText, input.jobCategoryText);
+    const categoryScore = this.categoryScore(
+      input.resumeText,
+      input.jobCategoryText,
+    );
     const finalScore = this.clamp(
-      aiScore * 0.65 + skillScore * 0.2 + seniorityScore * 0.1 + categoryScore * 0.05,
+      aiScore * 0.65 +
+        skillScore * 0.2 +
+        seniorityScore * 0.1 +
+        categoryScore * 0.05,
     );
 
     return {
@@ -110,15 +166,24 @@ export class RecommendationScoringService {
       requiredSkills: skillInsight.requiredSkills,
       matchedSkills: skillInsight.matchedSkills,
       missingSkills: skillInsight.missingSkills,
-      improvementTips: this.improvementTips(skillInsight.missingSkills, this.round(skillScore)),
+      improvementTips: this.improvementTips(
+        skillInsight.missingSkills,
+        this.round(skillScore),
+      ),
     };
   }
 
   private skillInsight(input: RecommendationScoreInput) {
     const requiredSkills = this.extractSkills(input.jobText);
-    const candidateText = this.normalize([input.resumeText, ...input.resumeSkills].join(' '));
-    const matchedSkills = requiredSkills.filter((skill) => this.skillMatchesCandidate(skill, candidateText));
-    const missingSkills = requiredSkills.filter((skill) => !matchedSkills.includes(skill));
+    const candidateText = this.normalize(
+      [input.resumeText, ...input.resumeSkills].join(' '),
+    );
+    const matchedSkills = requiredSkills.filter((skill) =>
+      this.skillMatchesCandidate(skill, candidateText),
+    );
+    const missingSkills = requiredSkills.filter(
+      (skill) => !matchedSkills.includes(skill),
+    );
 
     return { requiredSkills, matchedSkills, missingSkills };
   }
@@ -126,19 +191,31 @@ export class RecommendationScoringService {
   private extractSkills(text: string): string[] {
     const normalizedText = this.normalize(text);
     return SKILL_TERMS.flatMap((skill) =>
-      skill.aliases.some((alias) => this.includesTerm(normalizedText, this.normalize(alias))) ? [skill.name] : [],
+      skill.aliases.some((alias) =>
+        this.includesTerm(normalizedText, this.normalize(alias)),
+      )
+        ? [skill.name]
+        : [],
     );
   }
 
-  private skillMatchesCandidate(skillName: string, candidateText: string): boolean {
+  private skillMatchesCandidate(
+    skillName: string,
+    candidateText: string,
+  ): boolean {
     const skill = SKILL_TERMS.find((item) => item.name === skillName);
     if (!skill) {
       return this.includesTerm(candidateText, this.normalize(skillName));
     }
-    return skill.aliases.some((alias) => this.includesTerm(candidateText, this.normalize(alias)));
+    return skill.aliases.some((alias) =>
+      this.includesTerm(candidateText, this.normalize(alias)),
+    );
   }
 
-  private improvementTips(missingSkills: string[], skillScore: number): string[] {
+  private improvementTips(
+    missingSkills: string[],
+    skillScore: number,
+  ): string[] {
     if (missingSkills.length) {
       const visibleSkills = missingSkills.slice(0, 4).join(', ');
       return [
@@ -148,20 +225,28 @@ export class RecommendationScoringService {
     }
 
     if (skillScore < 0.5) {
-      return ['Make your profile skills more explicit so matching can read your strongest tools.'];
+      return [
+        'Make your profile skills more explicit so matching can read your strongest tools.',
+      ];
     }
 
-    return ['Your listed skills cover the main detected requirements for this job.'];
+    return [
+      'Your listed skills cover the main detected requirements for this job.',
+    ];
   }
 
   private skillOverlapScore(skills: string[], targetText: string): number {
     const normalizedText = this.normalize(targetText);
-    const uniqueSkills = [...new Set(skills.map((skill) => skill.trim()).filter(Boolean))];
+    const uniqueSkills = [
+      ...new Set(skills.map((skill) => skill.trim()).filter(Boolean)),
+    ];
     if (!uniqueSkills.length) {
       return 0;
     }
 
-    const matches = uniqueSkills.filter((skill) => normalizedText.includes(this.normalize(skill)));
+    const matches = uniqueSkills.filter((skill) =>
+      normalizedText.includes(this.normalize(skill)),
+    );
     return matches.length / uniqueSkills.length;
   }
 
@@ -178,18 +263,32 @@ export class RecommendationScoringService {
     if (!categoryText?.trim()) {
       return 0;
     }
-    return this.normalize(profileText).includes(this.normalize(categoryText)) ? 1 : 0;
+    return this.normalize(profileText).includes(this.normalize(categoryText))
+      ? 1
+      : 0;
   }
 
   private detectSeniority(text: string): string | null {
     const normalized = this.normalize(text);
-    if (normalized.includes('senior') || normalized.includes('lead') || normalized.includes('principal')) {
+    if (
+      normalized.includes('senior') ||
+      normalized.includes('lead') ||
+      normalized.includes('principal')
+    ) {
       return 'senior';
     }
-    if (normalized.includes('junior') || normalized.includes('entry level') || normalized.includes('intern')) {
+    if (
+      normalized.includes('junior') ||
+      normalized.includes('entry level') ||
+      normalized.includes('intern')
+    ) {
       return 'junior';
     }
-    if (normalized.includes('middle') || normalized.includes('mid level') || normalized.includes('mid-level')) {
+    if (
+      normalized.includes('middle') ||
+      normalized.includes('mid level') ||
+      normalized.includes('mid-level')
+    ) {
       return 'mid';
     }
     return null;
@@ -205,11 +304,44 @@ export class RecommendationScoringService {
     return 'low_match';
   }
 
-  private normalize(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim();
+  private classifierDecision(
+    score: number,
+    threshold: number,
+    metadata?: Record<string, unknown>,
+  ): boolean {
+    if (typeof metadata?.matching === 'boolean') {
+      return metadata.matching;
+    }
+    if (metadata?.match_label === 'match' || metadata?.matchLabel === 'match') {
+      return true;
+    }
+    if (
+      metadata?.match_label === 'no_match' ||
+      metadata?.matchLabel === 'no_match'
+    ) {
+      return false;
+    }
+    return score >= threshold;
   }
 
-  private includesTerm(normalizedText: string, normalizedTerm: string): boolean {
+  private classifierThreshold(metadata?: Record<string, unknown>): number {
+    const value = metadata?.threshold;
+    return typeof value === 'number' && Number.isFinite(value)
+      ? this.round(this.clamp(value))
+      : 0.5;
+  }
+
+  private normalize(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9+#.]+/g, ' ')
+      .trim();
+  }
+
+  private includesTerm(
+    normalizedText: string,
+    normalizedTerm: string,
+  ): boolean {
     if (!normalizedTerm) {
       return false;
     }

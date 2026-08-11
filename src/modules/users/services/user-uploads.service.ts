@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary/cloudinary.service';
-import { UsersService } from './users.service';
+import { UserProfileService } from './user-profile.service';
+import { UserResumeService } from './user-resume.service';
 
 @Injectable()
 export class UserUploadsService {
   constructor(
     private readonly cloudinaryService: CloudinaryService,
-    private readonly usersService: UsersService,
+    private readonly userProfileService: UserProfileService,
+    private readonly userResumeService: UserResumeService,
   ) {}
 
   async uploadResumeFile(userId: number, file?: Express.Multer.File) {
@@ -15,13 +17,18 @@ export class UserUploadsService {
     }
 
     const result = await this.cloudinaryService.uploadDocument(file, 'resumes');
-    return this.usersService.uploadResumeFile(userId, {
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      url: result.secure_url,
-      publicId: result.public_id,
-    });
+    try {
+      return await this.userResumeService.uploadResumeFile(userId, {
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        url: result.secure_url,
+        publicId: result.public_id,
+      });
+    } catch (error) {
+      await this.cloudinaryService.deleteDocument(result.public_id);
+      throw error;
+    }
   }
 
   async uploadAvatar(userId: number, file?: Express.Multer.File) {
@@ -30,7 +37,15 @@ export class UserUploadsService {
     }
 
     const result = await this.cloudinaryService.uploadImage(file, 'avatars');
-    return this.usersService.uploadAvatar(userId, result.secure_url);
+    try {
+      return await this.userProfileService.uploadAvatar(
+        userId,
+        result.secure_url,
+      );
+    } catch (error) {
+      await this.cloudinaryService.deleteImage(result.public_id);
+      throw error;
+    }
   }
 
   async uploadCover(userId: number, file?: Express.Multer.File) {
@@ -39,6 +54,14 @@ export class UserUploadsService {
     }
 
     const result = await this.cloudinaryService.uploadImage(file, 'covers');
-    return this.usersService.uploadCover(userId, result.secure_url);
+    try {
+      return await this.userProfileService.uploadCover(
+        userId,
+        result.secure_url,
+      );
+    } catch (error) {
+      await this.cloudinaryService.deleteImage(result.public_id);
+      throw error;
+    }
   }
 }

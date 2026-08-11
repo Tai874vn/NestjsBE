@@ -101,7 +101,12 @@ export class SubcategoriesController {
       file,
       'subcategories',
     );
-    return this.subcategoriesService.uploadImage(id, result.secure_url);
+    try {
+      return await this.subcategoriesService.uploadImage(id, result.secure_url);
+    } catch (error) {
+      await this.cloudinaryService.deleteImage(result.public_id);
+      throw error;
+    }
   }
 
   @Put('update-group/:id')

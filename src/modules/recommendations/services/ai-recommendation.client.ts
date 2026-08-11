@@ -28,6 +28,23 @@ export interface AiCandidateMatchRequest {
   top_k: number;
 }
 
+export interface AiResumeSeniorityRequest {
+  resume: Record<string, unknown>;
+}
+
+export interface AiJobSeniorityRequest {
+  job: Record<string, unknown>;
+}
+
+export interface AiSeniorityPredictionResponse {
+  label: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+  features: Record<string, unknown>;
+  model: string;
+  elapsed_ms: number;
+}
+
 @Injectable()
 export class AiRecommendationClient {
   private readonly baseUrl: string;
@@ -35,20 +52,52 @@ export class AiRecommendationClient {
   private readonly serviceApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.baseUrl = this.configService.getOrThrow<string>('AI_SERVICE_URL').replace(/\/+$/, '');
-    this.timeoutMs = Number(this.configService.get<string>('AI_SERVICE_TIMEOUT_MS') ?? 10000);
-    this.serviceApiKey = this.configService.getOrThrow<string>('AI_SERVICE_API_KEY');
+    this.baseUrl = this.configService
+      .getOrThrow<string>('AI_SERVICE_URL')
+      .replace(/\/+$/, '');
+    this.timeoutMs = Number(
+      this.configService.get<string>('AI_SERVICE_TIMEOUT_MS') ?? 10000,
+    );
+    this.serviceApiKey =
+      this.configService.getOrThrow<string>('AI_SERVICE_API_KEY');
   }
 
   matchJobs(payload: AiJobMatchRequest): Promise<AiMatchResponse> {
-    return this.post('/api/v1/match/jobs', payload);
+    return this.post<AiMatchResponse>('/api/v1/match/jobs', payload);
   }
 
   matchCandidates(payload: AiCandidateMatchRequest): Promise<AiMatchResponse> {
-    return this.post('/api/v1/match/candidates', payload);
+    return this.post<AiMatchResponse>('/api/v1/match/candidates', payload);
   }
 
-  private async post(path: string, payload: unknown): Promise<AiMatchResponse> {
+  matchRecruiterCandidates(
+    payload: AiCandidateMatchRequest,
+  ): Promise<AiMatchResponse> {
+    return this.post<AiMatchResponse>(
+      '/api/v1/recruiter/match/candidates',
+      payload,
+    );
+  }
+
+  predictResumeSeniority(
+    payload: AiResumeSeniorityRequest,
+  ): Promise<AiSeniorityPredictionResponse> {
+    return this.post<AiSeniorityPredictionResponse>(
+      '/api/v1/predict/resume-seniority',
+      payload,
+    );
+  }
+
+  predictJobSeniority(
+    payload: AiJobSeniorityRequest,
+  ): Promise<AiSeniorityPredictionResponse> {
+    return this.post<AiSeniorityPredictionResponse>(
+      '/api/v1/predict/job-seniority',
+      payload,
+    );
+  }
+
+  private async post<T>(path: string, payload: unknown): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -64,15 +113,19 @@ export class AiRecommendationClient {
       });
 
       if (!response.ok) {
-        throw new ServiceUnavailableException(`AI service returned ${response.status}`);
+        throw new ServiceUnavailableException(
+          `AI service returned ${response.status}`,
+        );
       }
 
-      return (await response.json()) as AiMatchResponse;
+      return (await response.json()) as T;
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
-      throw new ServiceUnavailableException('AI recommendation service is unavailable');
+      throw new ServiceUnavailableException(
+        'AI recommendation service is unavailable',
+      );
     } finally {
       clearTimeout(timeout);
     }

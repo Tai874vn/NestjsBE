@@ -74,22 +74,34 @@ export class PostsController {
   }
 
   @Delete(':id')
-  deletePost(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: ValidatedUser) {
+  deletePost(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
     return this.postsService.deletePost(id, user.id, user.role);
   }
 
   @Put(':id/like')
-  likePost(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: ValidatedUser) {
+  likePost(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
     return this.postsService.likePost(id, user.id);
   }
 
   @Delete(':id/like')
-  unlikePost(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: ValidatedUser) {
+  unlikePost(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
     return this.postsService.unlikePost(id, user.id);
   }
 
   @Get(':id/comments')
-  getComments(@Param('id', ParseIntPipe) id: number, @Query() query: CommentsQueryDto) {
+  getComments(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: CommentsQueryDto,
+  ) {
     return this.postsService.getComments(id, query);
   }
 
@@ -99,7 +111,8 @@ export class PostsController {
     @CurrentUser() user: ValidatedUser,
     @Body() dto: CreatePostCommentDto,
   ) {
-    if (!dto.content.trim()) throw new BadRequestException('Comment content is required');
+    if (!dto.content.trim())
+      throw new BadRequestException('Comment content is required');
     return this.postsService.createComment(id, user.id, dto);
   }
 
@@ -109,7 +122,12 @@ export class PostsController {
     @Param('commentId', ParseIntPipe) commentId: number,
     @CurrentUser() user: ValidatedUser,
   ) {
-    return this.postsService.deleteComment(postId, commentId, user.id, user.role);
+    return this.postsService.deleteComment(
+      postId,
+      commentId,
+      user.id,
+      user.role,
+    );
   }
 
   @Put(':postId/comments/:commentId')
@@ -119,7 +137,8 @@ export class PostsController {
     @CurrentUser() user: ValidatedUser,
     @Body() dto: UpdatePostCommentDto,
   ) {
-    if (!dto.content.trim()) throw new BadRequestException('Comment content is required');
+    if (!dto.content.trim())
+      throw new BadRequestException('Comment content is required');
     return this.postsService.updateComment(postId, commentId, user.id, dto);
   }
 }

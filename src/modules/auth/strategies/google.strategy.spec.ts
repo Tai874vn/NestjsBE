@@ -6,6 +6,7 @@ describe('GoogleStrategy', () => {
     const prisma = {
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
       },
@@ -38,16 +39,15 @@ describe('GoogleStrategy', () => {
   it('creates new Google accounts with the selected employer role', async () => {
     const { prisma, strategy } = createStrategy();
     const createdUser = { id: 17, email: 'hiring@example.com', role: Role.EMPLOYER };
-    prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(null);
     prisma.user.create.mockResolvedValue(createdUser);
-    const done = jest.fn();
 
-    await strategy.validate(
+    const result = await strategy.validate(
       { query: { state: Role.EMPLOYER } } as any,
       'access-token',
       'refresh-token',
       profile as any,
-      done,
     );
 
     expect(prisma.user.create).toHaveBeenCalledWith({
@@ -56,46 +56,103 @@ describe('GoogleStrategy', () => {
         role: Role.EMPLOYER,
       }),
     });
-    expect(done).toHaveBeenCalledWith(null, createdUser);
+    expect(result).toBe(createdUser);
   });
 
   it('does not allow Google state to create admin accounts', async () => {
     const { prisma, strategy } = createStrategy();
-    prisma.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-    const done = jest.fn();
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(null);
 
-    await strategy.validate(
-      { query: { state: Role.ADMIN } } as any,
-      'access-token',
-      'refresh-token',
-      profile as any,
-      done,
-    );
+    await expect(
+      strategy.validate(
+        { query: { state: Role.ADMIN } } as any,
+        'access-token',
+        'refresh-token',
+        profile as any,
+      ),
+    ).rejects.toThrow('Account type is required for Google signup');
 
     expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(done).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Account type is required for Google signup',
-      }),
-      false,
-    );
   });
 
   it('allows existing users to sign in with Google without a signup role', async () => {
     const { prisma, strategy } = createStrategy();
     const existingUser = { id: 19, email: 'hiring@example.com', role: Role.EMPLOYER };
     prisma.user.findUnique.mockResolvedValueOnce(existingUser);
-    const done = jest.fn();
+
+    const result = await strategy.validate(
+      { query: {} } as any,
+      'access-token',
+      'refresh-token',
+      profile as any,
+    );
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(result).toBe(existingUser);
+  });
+
+  it('does not overwrite an existing Google user role when signup sends a different role', async () => {
+    const { prisma, strategy } = createStrategy();
+    const existingUser = { id: 19, email: 'hiring@example.com', role: Role.EMPLOYER };
+    prisma.user.findUnique.mockResolvedValueOnce(existingUser);
+
+    const result = await strategy.validate(
+      { query: { state: Role.USER } } as any,
+      'access-token',
+      'refresh-token',
+      profile as any,
+    );
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(result).toBe(existingUser);
+  });
+
+  it('links Google to an existing email account without changing its role', async () => {
+    const { prisma, strategy } = createStrategy();
+    const existingEmailUser = { id: 21, email: 'hiring@example.com', role: Role.EMPLOYER };
+    const linkedUser = { ...existingEmailUser, googleId: 'google-user-id' };
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(existingEmailUser);
+    prisma.user.update.mockResolvedValue(linkedUser);
+
+    const result = await strategy.validate(
+      { query: { state: Role.USER } } as any,
+      'access-token',
+      'refresh-token',
+      profile as any,
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: existingEmailUser.id },
+      data: { googleId: 'google-user-id' },
+    });
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(result).toBe(linkedUser);
+  });
+
+  it('normalizes Google email before linking or creating users', async () => {
+    const { prisma, strategy } = createStrategy();
+    const upperCaseProfile = {
+      ...profile,
+      emails: [{ value: '  Hiring@Example.COM ' }],
+    };
+    const existingEmailUser = { id: 21, email: 'hiring@example.com', role: Role.EMPLOYER };
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(existingEmailUser);
+    prisma.user.update.mockResolvedValue({ ...existingEmailUser, googleId: 'google-user-id' });
 
     await strategy.validate(
       { query: {} } as any,
       'access-token',
       'refresh-token',
-      profile as any,
-      done,
+      upperCaseProfile as any,
     );
 
-    expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(done).toHaveBeenCalledWith(null, existingUser);
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: { equals: 'hiring@example.com', mode: 'insensitive' } },
+      orderBy: { id: 'asc' },
+    });
   });
 });

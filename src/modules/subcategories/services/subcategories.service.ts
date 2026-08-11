@@ -30,14 +30,11 @@ export class SubcategoriesService {
   }
 
   async findAll() {
-    const subcategories = await this.prisma.subcategory.findMany(
-      {
-        include: {
-          category: true,
-          jobs: true,
-        },
+    const subcategories = await this.prisma.subcategory.findMany({
+      include: {
+        category: true,
       },
-    );
+    });
 
     return {
       message: 'Get job detail types successfully',
@@ -62,7 +59,7 @@ export class SubcategoriesService {
         take: pageSize,
         include: {
           category: true,
-          jobs: true,
+          _count: { select: { jobs: true } },
         },
         orderBy: { id: 'desc' },
       }),
@@ -82,14 +79,13 @@ export class SubcategoriesService {
   }
 
   async findOne(id: number) {
-    const subcategory =
-      await this.prisma.subcategory.findUnique({
-        where: { id },
-        include: {
-          category: true,
-          jobs: true,
-        },
-      });
+    const subcategory = await this.prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        _count: { select: { jobs: true } },
+      },
+    });
 
     if (!subcategory) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -102,10 +98,9 @@ export class SubcategoriesService {
   }
 
   async update(id: number, updateDto: UpdateSubcategoryDto) {
-    const subcategory =
-      await this.prisma.subcategory.findUnique({
-        where: { id },
-      });
+    const subcategory = await this.prisma.subcategory.findUnique({
+      where: { id },
+    });
 
     if (!subcategory) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -116,14 +111,12 @@ export class SubcategoriesService {
       data: updateDto,
       include: {
         category: true,
-        jobs: true,
+        _count: { select: { jobs: true } },
       },
     });
 
     // Invalidate category caches
-    await this.redisService.invalidateCategoryCaches(
-      subcategory.categoryId,
-    );
+    await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
 
     return {
       message: 'Job detail type updated successfully',
@@ -132,10 +125,9 @@ export class SubcategoriesService {
   }
 
   async remove(id: number) {
-    const subcategory =
-      await this.prisma.subcategory.findUnique({
-        where: { id },
-      });
+    const subcategory = await this.prisma.subcategory.findUnique({
+      where: { id },
+    });
 
     if (!subcategory) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -146,9 +138,7 @@ export class SubcategoriesService {
     });
 
     // Invalidate category caches
-    await this.redisService.invalidateCategoryCaches(
-      subcategory.categoryId,
-    );
+    await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
 
     return {
       message: 'Job detail type deleted successfully',
@@ -156,10 +146,9 @@ export class SubcategoriesService {
   }
 
   async uploadImage(id: number, filename: string) {
-    const subcategory =
-      await this.prisma.subcategory.findUnique({
-        where: { id },
-      });
+    const subcategory = await this.prisma.subcategory.findUnique({
+      where: { id },
+    });
 
     if (!subcategory) {
       throw new NotFoundException(`Job detail type with ID ${id} not found`);
@@ -171,9 +160,7 @@ export class SubcategoriesService {
     });
 
     // Invalidate category caches
-    await this.redisService.invalidateCategoryCaches(
-      subcategory.categoryId,
-    );
+    await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
 
     return {
       message: 'Image uploaded successfully',

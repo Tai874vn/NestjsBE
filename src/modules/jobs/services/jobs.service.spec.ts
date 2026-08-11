@@ -1,6 +1,19 @@
 import { JobsService } from './jobs.service';
+import { JobCacheInvalidationService } from './job-cache-invalidation.service';
+import { JobCatalogService } from './job-catalog.service';
+import { JobMutationService } from './job-mutation.service';
+import { JobSearchService } from './job-search.service';
 
 describe('JobsService bounded queries', () => {
+  function createService(prisma: any, redis: any = {}) {
+    const cacheInvalidation = new JobCacheInvalidationService(redis);
+    return new JobsService(
+      new JobMutationService(prisma, cacheInvalidation),
+      new JobSearchService(prisma, redis),
+      new JobCatalogService(prisma, redis),
+    );
+  }
+
   it('returns one database page for a creator', async () => {
     const prisma = {
       job: {
@@ -8,7 +21,7 @@ describe('JobsService bounded queries', () => {
         count: jest.fn().mockResolvedValue(0),
       },
     };
-    const service = new JobsService(prisma as never, {} as never);
+    const service = createService(prisma);
 
     const result = await service.findByCreator(8, { page: 2, pageSize: 20 });
 
@@ -35,7 +48,7 @@ describe('JobsService bounded queries', () => {
     const redis = {
       getOrSet: jest.fn((_key, loader) => loader()),
     };
-    const service = new JobsService(prisma as never, redis as never);
+    const service = createService(prisma, redis);
 
     await service.findAllWithPagination({ page: 1, pageSize: 12 });
 
@@ -62,7 +75,7 @@ describe('JobsService bounded queries', () => {
     const redis = {
       getOrSet: jest.fn((_key, loader) => loader()),
     };
-    const service = new JobsService(prisma as never, redis as never);
+    const service = createService(prisma, redis);
 
     const result = await service.findAllWithCursor({ limit: 2 });
 

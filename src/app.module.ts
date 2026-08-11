@@ -12,6 +12,7 @@ import { UsersModule } from './modules/users/users.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SubcategoriesModule } from './modules/subcategories/subcategories.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { HiringPostsModule } from './modules/hiring-posts/hiring-posts.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { HiresModule } from './modules/hires/hires.module';
 import { SkillModule } from './modules/skill/skill.module';
@@ -44,9 +45,7 @@ import { RequestObservabilityInterceptor } from './common/observability/request-
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
-    ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 120 },
-    ]),
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     ObservabilityModule,
     RedisModule,
     CloudinaryModule,
@@ -55,6 +54,7 @@ import { RequestObservabilityInterceptor } from './common/observability/request-
     CategoriesModule,
     SubcategoriesModule,
     JobsModule,
+    HiringPostsModule,
     CommentsModule,
     HiresModule,
     SkillModule,

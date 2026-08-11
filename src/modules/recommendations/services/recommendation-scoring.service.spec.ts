@@ -53,4 +53,52 @@ describe('RecommendationScoringService', () => {
     expect(result.finalScore).toBeLessThan(0.75);
     expect(result.label).toBe('low_match');
   });
+
+  it('can format AI-only classifier scores without backend reranking', () => {
+    const result = service.scoreAiOnlyMatch(0.86);
+
+    expect(result).toMatchObject({
+      aiScore: 0.86,
+      finalScore: 0.86,
+      label: 'high_match',
+      skillScore: 0,
+      seniorityScore: 0,
+      categoryScore: 0,
+      requiredSkills: [],
+      matchedSkills: [],
+      missingSkills: [],
+      improvementTips: [],
+    });
+  });
+
+  it('keeps recruiter classifier match and no-match decisions from AI metadata', () => {
+    const match = service.scoreRecruiterClassifierMatch(0.42, {
+      matching: true,
+      match_label: 'match',
+      threshold: 0.5,
+    });
+    const noMatch = service.scoreRecruiterClassifierMatch(0.91, {
+      matching: false,
+      match_label: 'no_match',
+      threshold: 0.5,
+    });
+
+    expect(match).toMatchObject({
+      aiScore: 0.42,
+      finalScore: 0.42,
+      isMatch: true,
+      matchLabel: 'match',
+      source: 'classifier',
+      threshold: 0.5,
+    });
+    expect(noMatch).toMatchObject({
+      aiScore: 0.91,
+      finalScore: 0.91,
+      label: 'low_match',
+      isMatch: false,
+      matchLabel: 'no_match',
+      source: 'classifier',
+      threshold: 0.5,
+    });
+  });
 });

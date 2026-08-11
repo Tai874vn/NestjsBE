@@ -40,4 +40,39 @@ describe('RequestObservabilityInterceptor', () => {
       }),
     );
   });
+
+  it('does not set the request ID header after a guard already sent the response', async () => {
+    const observability = { recordHttp: jest.fn() };
+    const interceptor = new RequestObservabilityInterceptor(observability as any);
+    const request = {
+      method: 'GET',
+      path: '/api/auth/google/callback',
+      header: jest.fn(),
+    };
+    const response = {
+      statusCode: 302,
+      headersSent: true,
+      writableEnded: false,
+      setHeader: jest.fn(),
+    };
+    const context = {
+      getType: () => 'http',
+      switchToHttp: () => ({
+        getRequest: () => request,
+        getResponse: () => response,
+      }),
+    } as unknown as ExecutionContext;
+
+    await lastValueFrom(interceptor.intercept(context, { handle: () => of(undefined) }));
+
+    expect(response.setHeader).not.toHaveBeenCalled();
+    expect(request).toHaveProperty('requestId');
+    expect(observability.recordHttp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/api/auth/google/callback',
+        statusCode: 302,
+      }),
+    );
+  });
 });

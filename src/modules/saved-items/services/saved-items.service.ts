@@ -7,6 +7,30 @@ import { PrismaService } from '../../../prisma.service';
 import { SavedItemsQueryDto } from '../dto/saved-items-query.dto';
 
 type SavedCursor = { createdAt: string; targetId: number };
+type SavedPostAuthor = {
+  id: number;
+  name: string;
+  avatar: string | null;
+  headline: string | null;
+};
+type SavedPostComment = {
+  id: number;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  author: SavedPostAuthor;
+};
+type SavedPostSource = {
+  id: number;
+  content: string;
+  imageUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  author: SavedPostAuthor;
+  likes: Array<{ userId: number }>;
+  comments: SavedPostComment[];
+  _count: { likes: number; comments: number };
+};
 
 @Injectable()
 export class SavedItemsService {
@@ -164,7 +188,7 @@ export class SavedItemsService {
     };
   }
 
-  private formatPost(post: any) {
+  private formatPost(post: SavedPostSource) {
     return {
       id: post.id,
       content: post.content,
@@ -193,6 +217,7 @@ export class SavedItemsService {
       if (
         !parsed.createdAt ||
         !Number.isInteger(parsed.targetId) ||
+        parsed.targetId < 1 ||
         Number.isNaN(new Date(parsed.createdAt).getTime())
       ) {
         throw new Error('invalid');

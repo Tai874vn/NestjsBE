@@ -64,6 +64,31 @@ export class RecommendationCacheService {
     );
   }
 
+  getHiringPostCandidates<T>(
+    userId: number,
+    hiringPostId: number,
+    topK: number,
+    poolSize: number,
+  ): Promise<CachedRecommendationResult<T> | undefined> {
+    return this.redisService.get<CachedRecommendationResult<T>>(
+      this.hiringPostCandidatesKey(userId, hiringPostId, topK, poolSize),
+    );
+  }
+
+  setHiringPostCandidates<T>(
+    userId: number,
+    hiringPostId: number,
+    topK: number,
+    poolSize: number,
+    value: CachedRecommendationResult<T>,
+  ): Promise<void> {
+    return this.redisService.set(
+      this.hiringPostCandidatesKey(userId, hiringPostId, topK, poolSize),
+      value,
+      RECOMMENDATION_CACHE_TTL_MS,
+    );
+  }
+
   private jobsKey(userId: number, topK: number, poolSize: number): string {
     return `ai:recommendations:jobs:${userId}:${topK}:${poolSize}`;
   }
@@ -75,5 +100,14 @@ export class RecommendationCacheService {
     poolSize: number,
   ): string {
     return `ai:recommendations:candidates:${userId}:${jobId}:${topK}:${poolSize}`;
+  }
+
+  private hiringPostCandidatesKey(
+    userId: number,
+    hiringPostId: number,
+    topK: number,
+    poolSize: number,
+  ): string {
+    return `ai:recommendations:hiring-post-candidates:${userId}:${hiringPostId}:${topK}:${poolSize}`;
   }
 }

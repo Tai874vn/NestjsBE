@@ -1,4 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { PostsService } from './posts.service';
 
@@ -16,7 +17,7 @@ describe('PostsService social feed', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       postLike: {
-        upsert: jest.fn(),
+        create: jest.fn(),
         deleteMany: jest.fn(),
         count: jest.fn(),
       },
@@ -32,8 +33,16 @@ describe('PostsService social feed', () => {
       },
     };
     const cloudinary = { deleteImage: jest.fn() };
-    const service = new PostsService(prisma as never, cloudinary as never);
-    return { service, prisma, cloudinary };
+    const notifications = {
+      notifyPostLike: jest.fn(),
+      notifyPostComment: jest.fn(),
+    };
+    const service = new PostsService(
+      prisma as never,
+      cloudinary as never,
+      notifications as never,
+    );
+    return { service, prisma, cloudinary, notifications };
   };
 
   it('returns newest posts with a stable next cursor and viewer like state', async () => {
@@ -113,20 +122,40 @@ describe('PostsService social feed', () => {
   });
 
   it('creates and removes an idempotent like', async () => {
-    const { service, prisma } = createService();
-    prisma.post.findUnique.mockResolvedValue({ id: 10 });
-    prisma.postLike.upsert.mockResolvedValue({ postId: 10, userId: 6 });
+    const { service, prisma, notifications } = createService();
+    prisma.post.findUnique.mockResolvedValue({ id: 10, authorId: 4, content: 'Post 10' });
+    prisma.postLike.create.mockResolvedValue({ postId: 10, userId: 6 });
     prisma.postLike.deleteMany.mockResolvedValue({ count: 1 });
 
     await service.likePost(10, 6);
     await service.unlikePost(10, 6);
 
-    expect(prisma.postLike.upsert).toHaveBeenCalledWith({
-      where: { postId_userId: { postId: 10, userId: 6 } },
-      create: { postId: 10, userId: 6 },
-      update: {},
+    expect(prisma.postLike.create).toHaveBeenCalledWith({
+      data: { postId: 10, userId: 6 },
+    });
+    expect(notifications.notifyPostLike).toHaveBeenCalledWith({
+      actorId: 6,
+      recipientId: 4,
+      postId: 10,
+      postTitle: 'Post 10',
     });
     expect(prisma.postLike.deleteMany).toHaveBeenCalledWith({ where: { postId: 10, userId: 6 } });
+  });
+
+  it('does not send another notification when a like already exists', async () => {
+    const { service, prisma, notifications } = createService();
+    prisma.post.findUnique.mockResolvedValue({ id: 10, authorId: 4, content: 'Post 10' });
+    prisma.postLike.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+
+    await expect(service.likePost(10, 6)).resolves.toEqual({
+      message: 'Post liked successfully',
+    });
+    expect(notifications.notifyPostLike).not.toHaveBeenCalled();
   });
 
   it('only lets the author or admin delete a post and cleans up its image', async () => {

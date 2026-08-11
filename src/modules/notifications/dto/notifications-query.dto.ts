@@ -1,12 +1,18 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class NotificationsQueryDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  cursor?: number;
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
 
   @IsOptional()
   @Type(() => Number)

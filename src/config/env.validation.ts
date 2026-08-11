@@ -5,7 +5,7 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
 
   // JWT
-  JWT_SECRET: Joi.string().required(),
+  JWT_SECRET: Joi.string().min(64).required(),
   JWT_EXPIRES_IN: Joi.string().required(),
 
   // Google OAuth

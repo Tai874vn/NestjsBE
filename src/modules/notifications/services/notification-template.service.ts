@@ -160,7 +160,9 @@ export class NotificationTemplateService {
   private preview(value: string, fallback: string) {
     const normalized = value.trim().replace(/\s+/g, ' ');
     if (!normalized) return fallback;
-    return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+    return normalized.length > 120
+      ? `${normalized.slice(0, 117)}...`
+      : normalized;
   }
 
   private chatMessageBody(unreadCount: number) {
