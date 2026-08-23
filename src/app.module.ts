@@ -31,6 +31,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 import { RequestObservabilityInterceptor } from './common/observability/request-observability.interceptor';
+import { DatabaseModule } from './database/database.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { RequestObservabilityInterceptor } from './common/observability/request-
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     ObservabilityModule,
+    DatabaseModule,
     RedisModule,
     CloudinaryModule,
     AuthModule,

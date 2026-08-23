@@ -33,11 +33,8 @@ describe('English naming contract', () => {
       title: 'Build landing page',
       price: 500,
       subcategoryId: 1,
-      reviews: 0,
-      image: 'https://example.test/job.png',
       description: 'Full responsive landing page',
       shortDescription: 'Responsive landing page',
-      rating: 5,
     };
     const category: CreateCategoryDto = { name: 'Design' };
     const subcategory: CreateSubcategoryDto = {

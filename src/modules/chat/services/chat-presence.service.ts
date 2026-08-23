@@ -41,6 +41,15 @@ export class ChatPresenceService {
     this.onlineUsers.get(userId)!.add(socketId);
   }
 
+  async refreshOnlineUser(userId: number): Promise<void> {
+    if (this.redisClient) {
+      await this.redisClient.expire(
+        `${ONLINE_KEY_PREFIX}${userId}`,
+        ONLINE_TTL,
+      );
+    }
+  }
+
   async removeOnlineUser(userId: number, socketId: string): Promise<number> {
     if (this.redisClient) {
       const key = `${ONLINE_KEY_PREFIX}${userId}`;

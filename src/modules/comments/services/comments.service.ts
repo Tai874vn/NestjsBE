@@ -10,6 +10,7 @@ import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateCommentDto } from '../dto/create-comment.dto';
 import { UpdateCommentDto } from '../dto/update-comment.dto';
 import { Role } from '../../../common/constants/roles';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CommentsService {
@@ -48,22 +49,7 @@ export class CommentsService {
       throw new ConflictException('You have already reviewed this service');
     }
 
-    const comment = await this.prisma.comment.create({
-      data: {
-        ...createDto,
-        commenterId: userId,
-      },
-      include: {
-        job: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true,
-          },
-        },
-      },
-    });
+    const comment = await this.createReview(createDto, userId);
 
     // Invalidate comment caches for the job
     await this.redisService.invalidateCommentCaches(createDto.jobId);
@@ -77,6 +63,7 @@ export class CommentsService {
 
   async findAll() {
     const comments = await this.prisma.comment.findMany({
+      take: 100,
       include: {
         job: true,
         user: {
@@ -96,6 +83,35 @@ export class CommentsService {
       message: 'Get comments successfully',
       content: comments,
     };
+  }
+
+  private async createReview(createDto: CreateCommentDto, userId: number) {
+    try {
+      return await this.prisma.comment.create({
+        data: {
+          ...createDto,
+          commenterId: userId,
+        },
+        include: {
+          job: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('You have already reviewed this service');
+      }
+      throw error;
+    }
   }
 
   async findOne(id: number) {
@@ -226,6 +242,7 @@ export class CommentsService {
           orderBy: {
             commentedAt: 'desc',
           },
+          take: 50,
         });
 
         return {

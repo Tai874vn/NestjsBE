@@ -27,17 +27,13 @@ export class ChatMessageFanoutService {
       )
     ).filter((memberId) => memberId !== senderId);
 
-    const recipients = await this.timeStep(timer, 'db.unreadCounts', () =>
-      Promise.all(
-        recipientIds.map(async (recipientId) => ({
-          recipientId,
-          unreadCount: await this.chatService.getUnreadCount(
-            dto.roomId,
-            recipientId,
-          ),
-        })),
-      ),
+    const unreadCounts = await this.timeStep(timer, 'db.unreadCounts', () =>
+      this.chatService.getUnreadCounts(dto.roomId, recipientIds),
     );
+    const recipients = recipientIds.map((recipientId) => ({
+      recipientId,
+      unreadCount: unreadCounts.get(recipientId) ?? 0,
+    }));
 
     await this.timeStep(timer, 'notifications.fanout', async () => {
       await this.notifications?.notifyChatMessageRecipients({

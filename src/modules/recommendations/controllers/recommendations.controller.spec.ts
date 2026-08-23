@@ -6,7 +6,7 @@ describe('RecommendationsController candidate recommendations', () => {
   it('limits candidate recommendations to employers and admins', () => {
     const handler = Object.getOwnPropertyDescriptor(
       RecommendationsController.prototype,
-      'recommendCandidatesForHiringPost',
+      'runRecommendedCandidatesForHiringPost',
     )?.value;
     const roles = Reflect.getMetadata(
       ROLES_KEY,

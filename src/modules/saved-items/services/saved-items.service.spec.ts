@@ -94,8 +94,8 @@ describe('SavedItemsService', () => {
       }),
     ).toString('base64url');
 
-    await expect(service.getSavedPosts(4, { cursor })).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.getSavedPosts(4, { cursor, limit: 20 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

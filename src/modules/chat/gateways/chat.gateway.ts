@@ -57,6 +57,7 @@ export class ChatGateway
   server: Server;
 
   private logger = new Logger('ChatGateway');
+  private readonly presenceRefreshTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly chatService: ChatService,
@@ -92,6 +93,7 @@ export class ChatGateway
 
     // Track online status
     await this.presence.addOnlineUser(user.id, client.id);
+    this.startPresenceRefresh(client.id, user.id);
 
     // Auto-join user's rooms
     const [roomIds, contactIds] = await Promise.all([
@@ -119,6 +121,8 @@ export class ChatGateway
     const user = client.data.user;
     if (!user) return;
 
+    this.stopPresenceRefresh(client.id);
+
     this.logger.log(
       `User ${user.name} (${user.id}) disconnected: ${client.id}`,
     );
@@ -142,6 +146,24 @@ export class ChatGateway
         );
       }
     }
+  }
+
+  private startPresenceRefresh(socketId: string, userId: number): void {
+    this.stopPresenceRefresh(socketId);
+    const timer = setInterval(
+      () => {
+        void this.presence.refreshOnlineUser(userId);
+      },
+      20 * 60 * 1000,
+    );
+    timer.unref();
+    this.presenceRefreshTimers.set(socketId, timer);
+  }
+
+  private stopPresenceRefresh(socketId: string): void {
+    const timer = this.presenceRefreshTimers.get(socketId);
+    if (timer) clearInterval(timer);
+    this.presenceRefreshTimers.delete(socketId);
   }
 
   @SubscribeMessage('create-room')

@@ -24,10 +24,10 @@ describe('RecommendationCacheService', () => {
       generatedAt: '2026-07-11T00:00:00.000Z',
     };
 
-    await service.setJobs(7, 10, 100, result);
+    await service.setJobs(7, 10, 100, 'fingerprint', result);
 
     expect(redis.set).toHaveBeenCalledWith(
-      'ai:recommendations:jobs:7:10:100',
+      'ai:recommendations:jobs:7:10:100:fingerprint',
       result,
       RECOMMENDATION_CACHE_TTL_MS,
     );

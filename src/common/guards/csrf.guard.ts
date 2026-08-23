@@ -36,9 +36,6 @@ export class CsrfGuard implements CanActivate {
     if (SAFE_METHODS.has(method)) return true;
 
     const headers = request.headers ?? {};
-    const authorization = this.header(headers.authorization);
-    if (authorization?.startsWith('Bearer ')) return true;
-
     const path = request.originalUrl ?? request.url ?? '';
     const origin = this.header(headers.origin);
     if (COOKIE_ISSUING_PATHS.some((item) => path.endsWith(item))) {
@@ -50,6 +47,8 @@ export class CsrfGuard implements CanActivate {
     const hasAuthCookie = Boolean(
       cookies.access_token || cookies.refresh_token,
     );
+    const authorization = this.header(headers.authorization);
+    if (!hasAuthCookie && authorization?.startsWith('Bearer ')) return true;
     if (!hasAuthCookie) return true;
 
     this.requireTrustedOrigin(origin);

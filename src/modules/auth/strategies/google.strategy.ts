@@ -1,12 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Request } from 'express';
 import { Strategy } from 'passport-google-oauth20';
 import { User } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { GoogleProfile } from '../../../types';
-import { Role } from '../../../common/constants/roles';
+import { GoogleOAuthRequest } from '../services/google-oauth-state.service';
 
 type UserType = User;
 
@@ -26,7 +25,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   async validate(
-    req: Request,
+    req: GoogleOAuthRequest,
     accessToken: string,
     refreshToken: string,
     profile: GoogleProfile,
@@ -37,7 +36,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       throw new UnauthorizedException('Google account email is required');
     }
 
-    const signupRole = this.getSignupRole(req.query.state);
+    const signupRole = req.googleSignupRole;
 
     let user: UserType | null = await this.prisma.user.findUnique({
       where: { googleId: id },
@@ -71,11 +70,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     }
 
     return user;
-  }
-
-  private getSignupRole(state: unknown): Role.USER | Role.EMPLOYER | undefined {
-    if (state === Role.USER || state === Role.EMPLOYER) return state;
-    return undefined;
   }
 
   private normalizeEmail(value?: string): string | undefined {

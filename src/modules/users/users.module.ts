@@ -9,7 +9,6 @@ import { UserProfileNormalizerService } from './services/user-profile-normalizer
 import { UserResumeService } from './services/user-resume.service';
 import { UserUploadsService } from './services/user-uploads.service';
 import { UsersController } from './controllers/users.controller';
-import { PrismaService } from '../../prisma.service';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { RecommendationsModule } from '../recommendations/recommendations.module';
 
@@ -26,7 +25,6 @@ import { RecommendationsModule } from '../recommendations/recommendations.module
     UserProfileNormalizerService,
     UserResumeService,
     UserUploadsService,
-    PrismaService,
   ],
   exports: [UsersService],
 })

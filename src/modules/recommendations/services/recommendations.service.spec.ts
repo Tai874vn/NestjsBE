@@ -5,6 +5,7 @@ import { PrismaService } from '../../../prisma.service';
 import { AiRecommendationClient } from './ai-recommendation.client';
 import { RecommendationCacheService } from './recommendation-cache.service';
 import { RecommendationDataLoaderService } from './recommendation-data-loader.service';
+import { RecommendationFingerprintService } from './recommendation-fingerprint.service';
 import { RecommendationPayloadMapperService } from './recommendation-payload-mapper.service';
 import { RecommendationQuotaService } from './recommendation-quota.service';
 import { RecommendationScoringService } from './recommendation-scoring.service';
@@ -54,6 +55,13 @@ const cache = {
   setCandidates: jest.fn(),
   getHiringPostCandidates: jest.fn(),
   setHiringPostCandidates: jest.fn(),
+  acquireRunLock: jest.fn(),
+  releaseRunLock: jest.fn(),
+};
+
+const fingerprints = {
+  jobs: jest.fn(),
+  hiringPostCandidates: jest.fn(),
 };
 
 const snapshots = {
@@ -87,6 +95,7 @@ function createService() {
     scoring as unknown as RecommendationScoringService,
     payloadMapper,
     dataLoader,
+    fingerprints as unknown as RecommendationFingerprintService,
     quota as unknown as RecommendationQuotaService,
     cache as unknown as RecommendationCacheService,
     snapshots as unknown as RecommendationSnapshotService,
@@ -108,6 +117,12 @@ describe('RecommendationsService', () => {
     cache.setJobs.mockResolvedValue(undefined);
     cache.setCandidates.mockResolvedValue(undefined);
     cache.setHiringPostCandidates.mockResolvedValue(undefined);
+    cache.acquireRunLock.mockResolvedValue('lock-token');
+    cache.releaseRunLock.mockResolvedValue(undefined);
+    fingerprints.jobs.mockResolvedValue('jobs-fingerprint');
+    fingerprints.hiringPostCandidates.mockResolvedValue(
+      'candidates-fingerprint',
+    );
     snapshots.getJobs.mockResolvedValue(undefined);
     snapshots.getCandidates.mockResolvedValue(undefined);
     snapshots.getHiringPostCandidates.mockResolvedValue(undefined);
@@ -184,12 +199,14 @@ describe('RecommendationsService', () => {
       1,
       5,
       25,
+      'jobs-fingerprint',
       expect.objectContaining({ data: expect.any(Array), model: 'model', elapsedMs: 10 }),
     );
     expect(snapshots.saveJobs).toHaveBeenCalledWith(
       1,
       5,
       25,
+      'jobs-fingerprint',
       expect.objectContaining({ data: expect.any(Array), model: 'model', elapsedMs: 10 }),
     );
     expect(snapshots.saveJobs.mock.invocationCallOrder[0]).toBeLessThan(
@@ -298,12 +315,13 @@ describe('RecommendationsService', () => {
 
     const result = await createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 });
 
-    expect(cache.getJobs).toHaveBeenCalledWith(1, 5, 25);
-    expect(snapshots.getJobs).toHaveBeenCalledWith(1, 5, 25);
+    expect(cache.getJobs).toHaveBeenCalledWith(1, 5, 25, 'jobs-fingerprint');
+    expect(snapshots.getJobs).toHaveBeenCalledWith(1, 5, 25, 'jobs-fingerprint');
     expect(cache.setJobs).toHaveBeenCalledWith(
       1,
       5,
       25,
+      'jobs-fingerprint',
       expect.objectContaining({ model: 'saved-model' }),
     );
     expect(quota.ensureAvailable).not.toHaveBeenCalled();
@@ -321,7 +339,7 @@ describe('RecommendationsService', () => {
       cacheOnly: true,
     });
 
-    expect(cache.getJobs).toHaveBeenCalledWith(1, 5, 25);
+    expect(cache.getJobs).toHaveBeenCalledWith(1, 5, 25, 'jobs-fingerprint');
     expect(quota.getQuotaForUser).toHaveBeenCalledWith(1, undefined);
     expect(quota.ensureAvailable).not.toHaveBeenCalled();
     expect(quota.consume).not.toHaveBeenCalled();
@@ -363,6 +381,7 @@ describe('RecommendationsService', () => {
       1,
       5,
       25,
+      'jobs-fingerprint',
       expect.objectContaining({ model: 'fresh-model' }),
     );
   });
@@ -485,6 +504,7 @@ describe('RecommendationsService', () => {
       20,
       5,
       25,
+      'candidates-fingerprint',
       expect.objectContaining({ data: expect.any(Array), model: 'model', elapsedMs: 12 }),
     );
     expect(cache.setHiringPostCandidates).toHaveBeenCalledWith(
@@ -492,6 +512,7 @@ describe('RecommendationsService', () => {
       20,
       5,
       25,
+      'candidates-fingerprint',
       expect.objectContaining({ data: expect.any(Array), model: 'model', elapsedMs: 12 }),
     );
   });
@@ -529,7 +550,13 @@ describe('RecommendationsService', () => {
       { topK: 5, poolSize: 25, cacheOnly: true },
     );
 
-    expect(cache.getHiringPostCandidates).toHaveBeenCalledWith(2, 20, 5, 25);
+    expect(cache.getHiringPostCandidates).toHaveBeenCalledWith(
+      2,
+      20,
+      5,
+      25,
+      'candidates-fingerprint',
+    );
     expect(quota.getQuotaForUser).toHaveBeenCalledWith(2, 'employer');
     expect(quota.ensureAvailable).not.toHaveBeenCalled();
     expect(quota.consume).not.toHaveBeenCalled();
@@ -563,13 +590,26 @@ describe('RecommendationsService', () => {
       { topK: 5, poolSize: 25 },
     );
 
-    expect(cache.getHiringPostCandidates).toHaveBeenCalledWith(2, 20, 5, 25);
-    expect(snapshots.getHiringPostCandidates).toHaveBeenCalledWith(2, 20, 5, 25);
+    expect(cache.getHiringPostCandidates).toHaveBeenCalledWith(
+      2,
+      20,
+      5,
+      25,
+      'candidates-fingerprint',
+    );
+    expect(snapshots.getHiringPostCandidates).toHaveBeenCalledWith(
+      2,
+      20,
+      5,
+      25,
+      'candidates-fingerprint',
+    );
     expect(cache.setHiringPostCandidates).toHaveBeenCalledWith(
       2,
       20,
       5,
       25,
+      'candidates-fingerprint',
       expect.objectContaining({ model: 'saved-model' }),
     );
     expect(quota.ensureAvailable).not.toHaveBeenCalled();

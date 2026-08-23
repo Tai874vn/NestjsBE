@@ -6,6 +6,8 @@ import { PrismaService } from '../../../prisma.service';
 import { JwtPayload, ValidatedUser } from '../../../types';
 import { Role } from '../../../common/constants/roles';
 
+type JwtRequest = Request & { validatedJwtUser?: ValidatedUser };
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
@@ -19,6 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
+      passReqToCallback: true,
       secretOrKey: (() => {
         const secret = process.env.JWT_SECRET;
         if (!secret) {
@@ -29,9 +32,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<ValidatedUser> {
+  async validate(
+    request: JwtRequest,
+    payload: JwtPayload,
+  ): Promise<ValidatedUser> {
     if (payload.type !== 'access') {
       throw new UnauthorizedException('Invalid access token');
+    }
+
+    if (request.validatedJwtUser?.id === payload.sub) {
+      return request.validatedJwtUser;
     }
 
     const user = await this.prisma.user.findUnique({
@@ -51,9 +61,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    return {
+    const validatedUser = {
       ...user,
       role: user.role as Role,
     };
+    request.validatedJwtUser = validatedUser;
+    return validatedUser;
   }
 }

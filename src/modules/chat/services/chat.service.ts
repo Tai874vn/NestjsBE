@@ -208,6 +208,7 @@ export class ChatService {
         },
       },
       orderBy: { updatedAt: 'desc' },
+      take: 100,
     });
 
     // Batch unread counts in a single query
@@ -411,6 +412,29 @@ export class ChatService {
         senderId: { not: userId },
       },
     });
+  }
+
+  async getUnreadCounts(
+    roomId: number,
+    userIds: number[],
+  ): Promise<Map<number, number>> {
+    if (!userIds.length) return new Map();
+
+    const counts = await this.prisma.$queryRaw<
+      Array<{ userId: number; count: bigint | number }>
+    >(Prisma.sql`
+      SELECT members."userId" AS "userId", COUNT(messages.id) AS "count"
+      FROM "chat_room_members" AS members
+      LEFT JOIN "chat_messages" AS messages
+        ON messages."roomId" = members."roomId"
+        AND messages."createdAt" > members."lastReadAt"
+        AND messages."senderId" <> members."userId"
+      WHERE members."roomId" = ${roomId}
+        AND members."userId" IN (${Prisma.join(userIds)})
+      GROUP BY members."userId"
+    `);
+
+    return new Map(counts.map((item) => [item.userId, Number(item.count)]));
   }
 
   async leaveRoom(roomId: number, userId: number): Promise<void> {

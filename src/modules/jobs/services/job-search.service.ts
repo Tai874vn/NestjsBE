@@ -29,6 +29,8 @@ export class JobSearchService {
       cacheKey,
       async () => {
         const jobs = await this.prisma.job.findMany({
+          take: 100,
+          orderBy: { id: 'desc' },
           include: {
             subcategory: {
               include: {
@@ -205,6 +207,8 @@ export class JobSearchService {
           },
         },
         comments: {
+          take: 5,
+          orderBy: { commentedAt: 'desc' },
           include: {
             user: {
               select: {
@@ -258,6 +262,7 @@ export class JobSearchService {
           },
         },
         comments: {
+          take: 5,
           include: {
             user: {
               select: {
@@ -307,6 +312,7 @@ export class JobSearchService {
               },
             },
           },
+          take: 50,
         });
 
         return {

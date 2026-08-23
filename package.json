@@ -50,10 +50,10 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "scripts": {
-    "db:seed": "npx prisma db seed",
+    "db:seed": "prisma db seed",
     "db:seed:feed": "ts-node prisma/seed-feed.ts",
     "db:seed:professional": "node ./node_modules/ts-node/dist/bin.js prisma/seed-professional.ts",
-    "build": "npx prisma generate && npx nest build",
+    "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",

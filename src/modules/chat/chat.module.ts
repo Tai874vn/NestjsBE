@@ -8,7 +8,6 @@ import { ChatService } from './services/chat.service';
 import { ChatSocketAuthService } from './services/chat-socket-auth.service';
 import { ChatSocketRateLimitService } from './services/chat-socket-rate-limit.service';
 import { ChatController } from './controllers/chat.controller';
-import { PrismaService } from '../../prisma.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ObservabilityModule } from '../../common/observability/observability.module';
 
@@ -32,7 +31,6 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
     ChatService,
     ChatSocketAuthService,
     ChatSocketRateLimitService,
-    PrismaService,
   ],
   exports: [ChatService],
 })

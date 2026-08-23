@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   ServiceUnavailableException,
@@ -16,6 +17,7 @@ import {
   RecommendationCacheService,
 } from './recommendation-cache.service';
 import { RecommendationQuotaService } from './recommendation-quota.service';
+import { RecommendationFingerprintService } from './recommendation-fingerprint.service';
 import {
   RecommendationScore,
   RecommendationScoringService,
@@ -34,6 +36,7 @@ export class RecommendationsService {
     private readonly scoringService: RecommendationScoringService,
     private readonly payloadMapper: RecommendationPayloadMapperService,
     private readonly dataLoader: RecommendationDataLoaderService,
+    private readonly fingerprintService: RecommendationFingerprintService,
     private readonly quotaService: RecommendationQuotaService,
     private readonly cacheService: RecommendationCacheService,
     private readonly snapshotService: RecommendationSnapshotService,
@@ -62,12 +65,21 @@ export class RecommendationsService {
       forceRefresh: query.forceRefresh === true,
     });
     let shouldRefundQuota = false;
+    let runLock: { scope: string; token: string } | undefined;
 
     try {
+      const fingerprint = await timer.time('fingerprint', () =>
+        this.fingerprintService.jobs(userId),
+      );
       const shouldReadSaved = query.forceRefresh !== true;
       const cached = shouldReadSaved
         ? await timer.time('cache.get', () =>
-            this.cacheService.getJobs<unknown>(userId, topK, poolSize),
+            this.cacheService.getJobs<unknown>(
+              userId,
+              topK,
+              poolSize,
+              fingerprint,
+            ),
           )
         : undefined;
 
@@ -92,13 +104,24 @@ export class RecommendationsService {
 
       const snapshot = shouldReadSaved
         ? await timer.time('snapshot.get', () =>
-            this.snapshotService.getJobs<unknown>(userId, topK, poolSize),
+            this.snapshotService.getJobs<unknown>(
+              userId,
+              topK,
+              poolSize,
+              fingerprint,
+            ),
           )
         : undefined;
 
       if (snapshot) {
         await timer.time('cache.set', () =>
-          this.cacheService.setJobs(userId, topK, poolSize, snapshot),
+          this.cacheService.setJobs(
+            userId,
+            topK,
+            poolSize,
+            fingerprint,
+            snapshot,
+          ),
         );
         const quota = await timer.time('quota.read', () =>
           this.quotaService.getQuotaForUser(userId, userRole),
@@ -137,6 +160,14 @@ export class RecommendationsService {
       }
 
       timer.annotate({ cache: shouldReadSaved ? 'miss' : 'bypassed' });
+      const lockScope = `jobs:${userId}`;
+      const lockToken = await this.cacheService.acquireRunLock(lockScope);
+      if (!lockToken) {
+        throw new ConflictException(
+          'A job recommendation request is already running',
+        );
+      }
+      runLock = { scope: lockScope, token: lockToken };
       const reservedQuota = await timer.time('quota.reserve', () =>
         this.quotaService.reserve(userId, userRole),
       );
@@ -197,10 +228,16 @@ export class RecommendationsService {
       }
 
       await timer.time('snapshot.save', () =>
-        this.snapshotService.saveJobs(userId, topK, poolSize, result),
+        this.snapshotService.saveJobs(
+          userId,
+          topK,
+          poolSize,
+          fingerprint,
+          result,
+        ),
       );
       await timer.time('cache.set', () =>
-        this.cacheService.setJobs(userId, topK, poolSize, result),
+        this.cacheService.setJobs(userId, topK, poolSize, fingerprint, result),
       );
       shouldRefundQuota = false;
       timer.end({
@@ -222,6 +259,10 @@ export class RecommendationsService {
       }
       timer.fail(error);
       throw error;
+    } finally {
+      if (runLock) {
+        await this.releaseRunLock(runLock);
+      }
     }
   }
 
@@ -252,6 +293,7 @@ export class RecommendationsService {
       },
     );
     let shouldRefundQuota = false;
+    let runLock: { scope: string; token: string } | undefined;
 
     try {
       const hiringPost = await timer.time('db.hiringPost', () =>
@@ -264,6 +306,13 @@ export class RecommendationsService {
         );
       }
 
+      const fingerprint = await timer.time('fingerprint', () =>
+        this.fingerprintService.hiringPostCandidates(
+          hiringPostId,
+          hiringPost.updatedAt,
+        ),
+      );
+
       const shouldReadSaved = query.forceRefresh !== true;
       const cached = shouldReadSaved
         ? await timer.time('cache.get', () =>
@@ -272,6 +321,7 @@ export class RecommendationsService {
               hiringPostId,
               topK,
               poolSize,
+              fingerprint,
             ),
           )
         : undefined;
@@ -302,6 +352,7 @@ export class RecommendationsService {
               hiringPostId,
               topK,
               poolSize,
+              fingerprint,
             ),
           )
         : undefined;
@@ -313,6 +364,7 @@ export class RecommendationsService {
             hiringPostId,
             topK,
             poolSize,
+            fingerprint,
             snapshot,
           ),
         );
@@ -353,6 +405,14 @@ export class RecommendationsService {
       }
 
       timer.annotate({ cache: shouldReadSaved ? 'miss' : 'bypassed' });
+      const lockScope = `hiring-post:${hiringPostId}:candidates`;
+      const lockToken = await this.cacheService.acquireRunLock(lockScope);
+      if (!lockToken) {
+        throw new ConflictException(
+          'A candidate recommendation request is already running for this hiring post',
+        );
+      }
+      runLock = { scope: lockScope, token: lockToken };
       const reservedQuota = await timer.time('quota.reserve', () =>
         this.quotaService.reserve(userId, userRole),
       );
@@ -413,6 +473,7 @@ export class RecommendationsService {
           hiringPostId,
           topK,
           poolSize,
+          fingerprint,
           result,
         ),
       );
@@ -422,6 +483,7 @@ export class RecommendationsService {
           hiringPostId,
           topK,
           poolSize,
+          fingerprint,
           result,
         ),
       );
@@ -445,6 +507,10 @@ export class RecommendationsService {
       }
       timer.fail(error);
       throw error;
+    } finally {
+      if (runLock) {
+        await this.releaseRunLock(runLock);
+      }
     }
   }
 
@@ -525,6 +591,17 @@ export class RecommendationsService {
       await this.quotaService.refund(userId, userRole);
     } catch {
       // The original request failure is more useful to callers; quota repair can be retried operationally.
+    }
+  }
+
+  private async releaseRunLock(lock: {
+    scope: string;
+    token: string;
+  }): Promise<void> {
+    try {
+      await this.cacheService.releaseRunLock(lock.scope, lock.token);
+    } catch {
+      // Lock TTL is the final safeguard if Redis becomes unavailable during cleanup.
     }
   }
 }

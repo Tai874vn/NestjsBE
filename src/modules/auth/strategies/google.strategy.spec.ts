@@ -44,7 +44,7 @@ describe('GoogleStrategy', () => {
     prisma.user.create.mockResolvedValue(createdUser);
 
     const result = await strategy.validate(
-      { query: { state: Role.EMPLOYER } } as any,
+      { query: {}, googleSignupRole: Role.EMPLOYER } as any,
       'access-token',
       'refresh-token',
       profile as any,
@@ -66,7 +66,7 @@ describe('GoogleStrategy', () => {
 
     await expect(
       strategy.validate(
-        { query: { state: Role.ADMIN } } as any,
+        { query: {} } as any,
         'access-token',
         'refresh-token',
         profile as any,
@@ -98,7 +98,7 @@ describe('GoogleStrategy', () => {
     prisma.user.findUnique.mockResolvedValueOnce(existingUser);
 
     const result = await strategy.validate(
-      { query: { state: Role.USER } } as any,
+      { query: {}, googleSignupRole: Role.USER } as any,
       'access-token',
       'refresh-token',
       profile as any,
@@ -118,7 +118,7 @@ describe('GoogleStrategy', () => {
     prisma.user.update.mockResolvedValue(linkedUser);
 
     const result = await strategy.validate(
-      { query: { state: Role.USER } } as any,
+      { query: {}, googleSignupRole: Role.USER } as any,
       'access-token',
       'refresh-token',
       profile as any,
