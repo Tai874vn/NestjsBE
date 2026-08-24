@@ -46,7 +46,7 @@ describe('Auth DTOs', () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'test@example.com';
-      dto.password = '12345';
+      dto.password = '123456789';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);

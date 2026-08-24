@@ -12,7 +12,7 @@ describe('CandidateDirectoryService', () => {
     };
     const profileNormalizer = new UserProfileNormalizerService();
     const service = new CandidateDirectoryService(
-      prisma as any,
+      prisma as never,
       profileNormalizer,
     );
 
@@ -31,7 +31,7 @@ describe('CandidateDirectoryService', () => {
     );
   });
 
-  it('returns paginated candidate directory cards from completed worker profiles only', async () => {
+  it('returns paginated directory cards from completed, discoverable worker profiles only', async () => {
     const { service, prisma } = createService();
     const updatedAt = new Date('2026-06-01T00:00:00.000Z');
 
@@ -88,6 +88,7 @@ describe('CandidateDirectoryService', () => {
       where: expect.objectContaining({
         role: Role.USER,
         profileCompleted: true,
+        candidateDiscoverable: true,
       }),
     });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -95,6 +96,7 @@ describe('CandidateDirectoryService', () => {
         where: expect.objectContaining({
           role: Role.USER,
           profileCompleted: true,
+          candidateDiscoverable: true,
         }),
       }),
     );

@@ -21,4 +21,19 @@ describe('Profile DTOs', () => {
       expect.arrayContaining([expect.objectContaining({ property: 'birthDay' })]),
     );
   });
+
+  it('accepts only a boolean candidate discoverability preference', async () => {
+    const validDto = new UpdateMyProfileDto();
+    validDto.candidateDiscoverable = true;
+
+    const invalidDto = new UpdateMyProfileDto();
+    invalidDto.candidateDiscoverable = 'true' as unknown as boolean;
+
+    await expect(validate(validDto)).resolves.toHaveLength(0);
+    await expect(validate(invalidDto)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'candidateDiscoverable' }),
+      ]),
+    );
+  });
 });

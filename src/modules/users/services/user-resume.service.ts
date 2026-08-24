@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
@@ -173,6 +177,16 @@ export class UserResumeService {
     };
   }
 
+  async getResumeFilePublicId(userId: number) {
+    await this.ensureUserExists(userId);
+    const resume = await this.prisma.userResume.findUnique({
+      where: { userId },
+      select: { sourceFilePublicId: true },
+    });
+
+    return resume?.sourceFilePublicId ?? null;
+  }
+
   private async ensureUserExists(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -228,7 +242,9 @@ export class UserResumeService {
       : {};
   }
 
-  private compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+  private compactRecord(
+    record: Record<string, unknown>,
+  ): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries(record).filter(([, value]) => this.hasValue(value)),
     );

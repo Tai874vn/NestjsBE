@@ -68,6 +68,7 @@ export class UsersService {
 
   async findAll() {
     const users = await this.prisma.user.findMany({
+      take: 100,
       select: {
         id: true,
         name: true,
@@ -82,6 +83,7 @@ export class UsersService {
         createdAt: true,
         updatedAt: true,
       },
+      orderBy: { id: 'desc' },
     });
 
     return {
@@ -201,6 +203,7 @@ export class UsersService {
           mode: 'insensitive' as const,
         },
       },
+      take: 20,
       select: {
         id: true,
         name: true,
@@ -221,6 +224,7 @@ export class UsersService {
         createdAt: true,
         updatedAt: true,
       },
+      orderBy: { id: 'desc' },
     });
 
     return {

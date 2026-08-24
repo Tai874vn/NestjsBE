@@ -158,6 +158,7 @@ export class UserProfileService {
         avatar: true,
         coverImage: true,
         profileCompleted: true,
+        candidateDiscoverable: true,
         createdAt: true,
         updatedAt: true,
         profileSkills: {
@@ -222,6 +223,7 @@ export class UserProfileService {
         avatar: true,
         coverImage: true,
         profileCompleted: true,
+        candidateDiscoverable: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -238,6 +240,19 @@ export class UserProfileService {
         profileCompleted,
       },
     };
+  }
+
+  async getUploadReferences(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true, coverImage: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return user;
   }
 
   async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
