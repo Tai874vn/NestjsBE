@@ -2,11 +2,13 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplication, Logger } from '@nestjs/common';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { ServerOptions } from 'socket.io';
+import { Server, ServerOptions } from 'socket.io';
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
   private logger = new Logger('RedisIoAdapter');
+  private pubClient: ReturnType<typeof createClient> | null = null;
+  private subClient: ReturnType<typeof createClient> | null = null;
 
   constructor(app: INestApplication) {
     super(app);
@@ -19,6 +21,8 @@ export class RedisIoAdapter extends IoAdapter {
 
       await Promise.all([pubClient.connect(), subClient.connect()]);
 
+      this.pubClient = pubClient;
+      this.subClient = subClient;
       this.adapterConstructor = createAdapter(pubClient, subClient);
       this.logger.log(
         'Socket.io Redis adapter connected — cross-instance messaging enabled',
@@ -36,5 +40,16 @@ export class RedisIoAdapter extends IoAdapter {
       server.adapter(this.adapterConstructor);
     }
     return server;
+  }
+
+  async close(server: Server): Promise<void> {
+    await super.close(server);
+    await Promise.all(
+      [this.pubClient, this.subClient]
+        .filter((client): client is ReturnType<typeof createClient> =>
+          Boolean(client?.isOpen),
+        )
+        .map((client) => client.quit()),
+    );
   }
 }

@@ -1,6 +1,10 @@
 import { ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
+import {
+  GoogleOAuthRequest,
+  GoogleOAuthStateService,
+} from '../services/google-oauth-state.service';
 
 const GOOGLE_ROLE_REQUIRED_MESSAGE =
   'Account type is required for Google signup';
@@ -8,6 +12,28 @@ const GOOGLE_ROLE_REQUIRED_MESSAGE =
 @Injectable()
 export class GoogleCallbackGuard extends AuthGuard('google') {
   private readonly logger = new Logger(GoogleCallbackGuard.name);
+
+  constructor(private readonly stateService: GoogleOAuthStateService) {
+    super();
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const http = context.switchToHttp();
+    const request = http.getRequest<GoogleOAuthRequest>();
+    const response = http.getResponse<Response>();
+
+    try {
+      this.stateService.consume(request, response);
+      return (await super.canActivate(context)) as boolean;
+    } catch (error) {
+      this.logFailure(request, error, 'invalid_state');
+      if (!response.headersSent && !response.writableEnded) {
+        const frontendUrl = process.env.FRONTEND_URL ?? '/';
+        response.redirect(`${frontendUrl}/auth/callback?error=auth_failed`);
+      }
+      return false;
+    }
+  }
 
   handleRequest(
     error: unknown,
@@ -29,20 +55,12 @@ export class GoogleCallbackGuard extends AuthGuard('google') {
         : '/auth/callback?error=auth_failed';
 
     if (message !== GOOGLE_ROLE_REQUIRED_MESSAGE) {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'google_oauth_failed',
-          reason: this.failureReason(error, info, status),
-          requestId: request.requestId,
-          path: this.safePath(request),
-          queryKeys: Object.keys(request.query ?? {}).sort(),
-          status,
-          host: request.header('host'),
-          forwardedProto: request.header('x-forwarded-proto'),
-          callbackUrl: process.env.GOOGLE_CALLBACK_URL,
-          error: this.errorDetails(error),
-          info: this.errorDetails(info),
-        }),
+      this.logFailure(
+        request,
+        error,
+        this.failureReason(error, info, status),
+        info,
+        status,
       );
     }
 
@@ -51,6 +69,30 @@ export class GoogleCallbackGuard extends AuthGuard('google') {
     }
 
     return null;
+  }
+
+  private logFailure(
+    request: Request & { requestId?: string },
+    error: unknown,
+    reason: string,
+    info?: unknown,
+    status?: unknown,
+  ): void {
+    this.logger.warn(
+      JSON.stringify({
+        event: 'google_oauth_failed',
+        reason,
+        requestId: request.requestId,
+        path: this.safePath(request),
+        queryKeys: Object.keys(request.query ?? {}).sort(),
+        status,
+        host: request.header('host'),
+        forwardedProto: request.header('x-forwarded-proto'),
+        callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+        error: this.errorDetails(error),
+        info: this.errorDetails(info),
+      }),
+    );
   }
 
   private safePath(request: Request): string {

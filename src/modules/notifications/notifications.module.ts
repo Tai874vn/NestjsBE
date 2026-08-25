@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import { PrismaService } from '../../prisma.service';
 import { ObservabilityModule } from '../../common/observability/observability.module';
 import { NotificationsController } from './controllers/notifications.controller';
 import { NotificationsGateway } from './gateways/notifications.gateway';
@@ -26,7 +25,6 @@ import { NotificationsService } from './services/notifications.service';
     NotificationTemplateService,
     NotificationsService,
     NotificationsGateway,
-    PrismaService,
   ],
   exports: [NotificationsService],
 })

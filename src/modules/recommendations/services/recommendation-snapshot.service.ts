@@ -1,28 +1,42 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, RecommendationSnapshotKind } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { CachedRecommendationResult } from './recommendation-cache.service';
 
 @Injectable()
 export class RecommendationSnapshotService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly maxAgeMs: number;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    configService: ConfigService,
+  ) {
+    this.maxAgeMs =
+      configService.get<number>(
+        'RECOMMENDATION_SNAPSHOT_MAX_AGE_SECONDS',
+        86_400,
+      ) * 1000;
+  }
 
   getJobs<T>(
     userId: number,
     topK: number,
     poolSize: number,
+    fingerprint: string,
   ): Promise<CachedRecommendationResult<T> | undefined> {
-    return this.get<T>(this.jobsScopeKey(userId, topK, poolSize));
+    return this.get<T>(this.jobsScopeKey(userId, topK, poolSize, fingerprint));
   }
 
   saveJobs<T>(
     userId: number,
     topK: number,
     poolSize: number,
+    fingerprint: string,
     value: CachedRecommendationResult<T>,
   ): Promise<void> {
     return this.save({
-      scopeKey: this.jobsScopeKey(userId, topK, poolSize),
+      scopeKey: this.jobsScopeKey(userId, topK, poolSize, fingerprint),
       userId,
       kind: RecommendationSnapshotKind.JOBS,
       jobId: null,
@@ -66,9 +80,16 @@ export class RecommendationSnapshotService {
     hiringPostId: number,
     topK: number,
     poolSize: number,
+    fingerprint: string,
   ): Promise<CachedRecommendationResult<T> | undefined> {
     return this.get<T>(
-      this.hiringPostCandidatesScopeKey(userId, hiringPostId, topK, poolSize),
+      this.hiringPostCandidatesScopeKey(
+        userId,
+        hiringPostId,
+        topK,
+        poolSize,
+        fingerprint,
+      ),
     );
   }
 
@@ -77,6 +98,7 @@ export class RecommendationSnapshotService {
     hiringPostId: number,
     topK: number,
     poolSize: number,
+    fingerprint: string,
     value: CachedRecommendationResult<T>,
   ): Promise<void> {
     return this.save({
@@ -85,6 +107,7 @@ export class RecommendationSnapshotService {
         hiringPostId,
         topK,
         poolSize,
+        fingerprint,
       ),
       userId,
       kind: RecommendationSnapshotKind.CANDIDATES,
@@ -99,8 +122,11 @@ export class RecommendationSnapshotService {
   private async get<T>(
     scopeKey: string,
   ): Promise<CachedRecommendationResult<T> | undefined> {
-    const snapshot = await this.prisma.recommendationSnapshot.findUnique({
-      where: { scopeKey },
+    const snapshot = await this.prisma.recommendationSnapshot.findFirst({
+      where: {
+        scopeKey,
+        generatedAt: { gte: new Date(Date.now() - this.maxAgeMs) },
+      },
       select: {
         data: true,
         modelName: true,
@@ -145,36 +171,54 @@ export class RecommendationSnapshotService {
     const data = this.toJson(value.data);
     const generatedAt = this.toDate(value.generatedAt);
 
-    await this.prisma.recommendationSnapshot.upsert({
-      where: { scopeKey },
-      update: {
-        data,
-        modelName: value.model,
-        elapsedMs: value.elapsedMs,
-        generatedAt,
-        topK,
-        poolSize,
-        jobId,
-        hiringPostId,
-      },
-      create: {
-        scopeKey,
-        userId,
-        kind,
-        jobId,
-        hiringPostId,
-        topK,
-        poolSize,
-        data,
-        modelName: value.model,
-        elapsedMs: value.elapsedMs,
-        generatedAt,
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.recommendationSnapshot.upsert({
+        where: { scopeKey },
+        update: {
+          data,
+          modelName: value.model,
+          elapsedMs: value.elapsedMs,
+          generatedAt,
+          topK,
+          poolSize,
+          jobId,
+          hiringPostId,
+        },
+        create: {
+          scopeKey,
+          userId,
+          kind,
+          jobId,
+          hiringPostId,
+          topK,
+          poolSize,
+          data,
+          modelName: value.model,
+          elapsedMs: value.elapsedMs,
+          generatedAt,
+        },
+      }),
+      this.prisma.recommendationSnapshot.deleteMany({
+        where: {
+          userId,
+          kind,
+          jobId,
+          hiringPostId,
+          topK,
+          poolSize,
+          scopeKey: { not: scopeKey },
+        },
+      }),
+    ]);
   }
 
-  private jobsScopeKey(userId: number, topK: number, poolSize: number): string {
-    return `jobs:${userId}:${topK}:${poolSize}`;
+  private jobsScopeKey(
+    userId: number,
+    topK: number,
+    poolSize: number,
+    fingerprint: string,
+  ): string {
+    return `jobs:${userId}:${topK}:${poolSize}:${fingerprint}`;
   }
 
   private candidatesScopeKey(
@@ -191,8 +235,9 @@ export class RecommendationSnapshotService {
     hiringPostId: number,
     topK: number,
     poolSize: number,
+    fingerprint: string,
   ): string {
-    return `hiring-post-candidates:${userId}:${hiringPostId}:${topK}:${poolSize}`;
+    return `hiring-post-candidates:${userId}:${hiringPostId}:${topK}:${poolSize}:${fingerprint}`;
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue {

@@ -9,7 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleCallbackGuard } from './guards/google-callback.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { PrismaService } from '../../prisma.service';
+import { GoogleOAuthStateService } from './services/google-oauth-state.service';
 
 @Module({
   imports: [
@@ -33,7 +33,7 @@ import { PrismaService } from '../../prisma.service';
     GoogleStrategy,
     GoogleAuthGuard,
     GoogleCallbackGuard,
-    PrismaService,
+    GoogleOAuthStateService,
   ],
   exports: [AuthService],
 })

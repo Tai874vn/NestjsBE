@@ -3,6 +3,12 @@ import * as Joi from 'joi';
 export const envValidationSchema = Joi.object({
   // Database
   DATABASE_URL: Joi.string().required(),
+  DATABASE_POOL_MAX: Joi.number().integer().min(1).max(50).default(10),
+  DATABASE_CONNECTION_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .default(10_000),
+  DATABASE_IDLE_TIMEOUT_MS: Joi.number().integer().min(1000).default(30_000),
 
   // JWT
   JWT_SECRET: Joi.string().min(64).required(),
@@ -28,6 +34,11 @@ export const envValidationSchema = Joi.object({
   AI_SERVICE_URL: Joi.string().uri().required(),
   AI_SERVICE_API_KEY: Joi.string().min(32).required(),
   AI_SERVICE_TIMEOUT_MS: Joi.number().optional(),
+  AI_RECOMMENDATION_MODEL_VERSION: Joi.string().max(100).default('current'),
+  RECOMMENDATION_SNAPSHOT_MAX_AGE_SECONDS: Joi.number()
+    .integer()
+    .min(300)
+    .default(86_400),
 
   // Cloudinary (if used)
   CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),

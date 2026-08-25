@@ -1,4 +1,11 @@
-import { Module, Global, Logger } from '@nestjs/common';
+import {
+  Global,
+  Inject,
+  Injectable,
+  Logger,
+  Module,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
@@ -8,6 +15,18 @@ import { RedisController } from './redis.controller';
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
 const logger = new Logger('RedisModule');
+
+@Injectable()
+class RedisClientLifecycleService implements OnApplicationShutdown {
+  constructor(
+    @Inject(REDIS_CLIENT)
+    private readonly client: ReturnType<typeof createClient> | null,
+  ) {}
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.client?.isOpen) await this.client.quit();
+  }
+}
 
 @Global()
 @Module({
@@ -45,11 +64,22 @@ const logger = new Logger('RedisModule');
                 del: async (key: string) => {
                   await client.del(key);
                 },
-                reset: async () => {
-                  await client.flushDb();
+                scan: async (pattern = '*') => {
+                  const keys: string[] = [];
+                  for await (const entry of client.scanIterator({
+                    MATCH: pattern,
+                    COUNT: 100,
+                  })) {
+                    if (Array.isArray(entry)) keys.push(...entry);
+                    else keys.push(entry);
+                  }
+                  return keys;
                 },
-                keys: async (pattern?: string) => {
-                  return client.keys(pattern || '*');
+                unlink: async (keys: string[]) => {
+                  for (let index = 0; index < keys.length; index += 100) {
+                    const batch = keys.slice(index, index + 100);
+                    if (batch.length) await client.unlink(batch);
+                  }
                 },
                 mget: async (...keys: string[]) => {
                   const values = await client.mGet(keys);
@@ -120,6 +150,7 @@ const logger = new Logger('RedisModule');
         }
       },
     },
+    RedisClientLifecycleService,
   ],
   exports: [CacheModule, RedisService, REDIS_CLIENT],
 })

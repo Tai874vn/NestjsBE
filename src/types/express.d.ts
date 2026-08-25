@@ -21,6 +21,7 @@ declare global {
       avatar: PrismaUser['avatar'];
       coverImage: PrismaUser['coverImage'];
       profileCompleted: PrismaUser['profileCompleted'];
+      candidateDiscoverable: PrismaUser['candidateDiscoverable'];
       refreshToken: PrismaUser['refreshToken'];
       createdAt: PrismaUser['createdAt'];
       updatedAt: PrismaUser['updatedAt'];

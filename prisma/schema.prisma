@@ -25,6 +25,7 @@ model User {
   avatar        String?
   coverImage    String?
   profileCompleted Boolean @default(false)
+  candidateDiscoverable Boolean @default(false)
   refreshToken  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -54,6 +55,7 @@ model User {
   hiringApplications HiringApplication[] @relation("HiringApplicationApplicant")
 
   @@index([role, profileCompleted, updatedAt, id])
+  @@index([role, candidateDiscoverable, profileCompleted, updatedAt, id])
   @@map("users")
 }
 
@@ -490,5 +492,6 @@ model ChatMessage {
   sender User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([roomId, createdAt])
+  @@index([roomId, id])
   @@map("chat_messages")
 }

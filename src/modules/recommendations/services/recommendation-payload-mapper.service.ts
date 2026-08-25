@@ -55,6 +55,7 @@ export type HiringPostForRecommendation = {
   predictedSeniorityMetadata?: unknown;
   predictedSeniorityAt?: Date | null;
   status?: string;
+  updatedAt: Date;
 };
 
 @Injectable()

@@ -37,7 +37,7 @@ describe('GoogleCallbackGuard', () => {
 
   it('redirects first-time Google users without a selected role back to login role selection', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    const guard = new GoogleCallbackGuard();
+    const guard = new GoogleCallbackGuard(stateService as never);
     const { context, response } = createContext();
 
     const result = guard.handleRequest(
@@ -56,7 +56,7 @@ describe('GoogleCallbackGuard', () => {
 
   it('logs unexpected Google callback failures before redirecting to auth failed', () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    const guard = new GoogleCallbackGuard();
+    const guard = new GoogleCallbackGuard(stateService as never);
     const { context, response } = createContext();
 
     const result = guard.handleRequest(
@@ -89,7 +89,7 @@ describe('GoogleCallbackGuard', () => {
   });
 
   it('returns the authenticated user when Google auth succeeds', () => {
-    const guard = new GoogleCallbackGuard();
+    const guard = new GoogleCallbackGuard(stateService as never);
     const { context, response } = createContext();
     const user = { id: 7 };
 
@@ -97,3 +97,4 @@ describe('GoogleCallbackGuard', () => {
     expect(response.redirect).not.toHaveBeenCalled();
   });
 });
+  const stateService = { consume: jest.fn() };

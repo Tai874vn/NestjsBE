@@ -168,6 +168,7 @@ export class AuthService {
         avatar: true,
         coverImage: true,
         profileCompleted: true,
+        candidateDiscoverable: true,
         createdAt: true,
         updatedAt: true,
         profileSkills: {

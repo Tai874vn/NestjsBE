@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsOptional,
@@ -19,6 +20,10 @@ import {
 } from '../../../common/dto/string.transforms';
 
 export class UpdateMyProfileDto {
+  @IsOptional()
+  @IsBoolean()
+  candidateDiscoverable?: boolean;
+
   @Transform(optionalTrimString)
   @IsOptional()
   @IsString()

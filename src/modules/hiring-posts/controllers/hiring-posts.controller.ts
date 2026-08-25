@@ -90,7 +90,7 @@ export class HiringPostsController {
   }
 
   @Post(':id/applications')
-  @Roles(Role.USER)
+  @Roles(Role.USER, Role.ADMIN)
   apply(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ApplyHiringPostDto,

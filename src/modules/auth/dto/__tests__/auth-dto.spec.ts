@@ -46,7 +46,7 @@ describe('Auth DTOs', () => {
       const dto = new SignUpDto();
       dto.name = 'Test User';
       dto.email = 'test@example.com';
-      dto.password = '12345';
+      dto.password = '123456789';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe('Auth DTOs', () => {
       dto.name = 'Hiring Manager';
       dto.email = 'hiring@example.com';
       dto.password = 'password123';
-      dto.role = 'recruiting-admin' as Role;
+      (dto as { role?: string }).role = 'recruiting-admin';
 
       const errors = await validate(dto);
       expect(errors.some((error) => error.property === 'role')).toBe(true);
@@ -114,7 +114,7 @@ describe('Auth DTOs', () => {
       dto.name = 'Admin User';
       dto.email = 'admin-signup@example.com';
       dto.password = 'password123';
-      dto.role = Role.ADMIN;
+      (dto as { role?: string }).role = Role.ADMIN;
 
       const errors = await validate(dto);
       expect(errors.some((error) => error.property === 'role')).toBe(true);

@@ -70,6 +70,7 @@ export class HiresService {
 
   async findAll() {
     const hires = await this.prisma.hire.findMany({
+      take: 100,
       include: {
         job: true,
         user: {
@@ -206,13 +207,16 @@ export class HiresService {
     });
 
     await this.redisService.invalidateUserCaches(hire.job.creatorId);
-    await this.notifications?.notifyHireCompleted({
-      actorId: userId,
-      recipientId: hire.job.creatorId,
-      hireId: updated.id,
-      jobId: updated.job.id,
-      jobTitle: updated.job.title,
-    });
+    const becameCompleted = updateDto.completed === true && !hire.completed;
+    if (becameCompleted) {
+      await this.notifications?.notifyHireCompleted({
+        actorId: userId,
+        recipientId: hire.job.creatorId,
+        hireId: updated.id,
+        jobId: updated.job.id,
+        jobTitle: updated.job.title,
+      });
+    }
 
     return {
       message: 'Hired job updated successfully',
@@ -253,6 +257,7 @@ export class HiresService {
 
   async findHiredJobs(userId: number) {
     const hires = await this.prisma.hire.findMany({
+      take: 100,
       where: {
         hirerId: userId,
         completed: false,

@@ -1,5 +1,6 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { randomUUID } from 'crypto';
 
 // Define cache interface for compatibility
 interface CacheStore {
@@ -8,13 +9,27 @@ interface CacheStore {
   del(key: string): Promise<void>;
   reset?(): Promise<void>;
   keys?(pattern: string): Promise<string[]>;
+  scan?(pattern: string): Promise<string[]>;
+  unlink?(keys: string[]): Promise<void>;
   store?: {
     keys?: (pattern: string) => Promise<string[]>;
+    scan?: (pattern: string) => Promise<string[]>;
+    unlink?: (keys: string[]) => Promise<void>;
     client?: {
-      keys: (pattern: string) => Promise<string[]>;
       incr?: (key: string) => Promise<number>;
       decr?: (key: string) => Promise<number>;
       pExpire?: (key: string, ttlMs: number) => Promise<unknown>;
+      set?: (
+        key: string,
+        value: string,
+        options: { NX: true; PX: number },
+      ) => Promise<string | null>;
+      eval?: (
+        script: string,
+        options: { keys: string[]; arguments: string[] },
+      ) => Promise<unknown>;
+      quit?: () => Promise<unknown>;
+      isOpen?: boolean;
     };
     reset?: () => Promise<void>;
   };
@@ -45,36 +60,50 @@ export const CACHE_TTL = {
 } as const;
 
 @Injectable()
-export class RedisService {
+export class RedisService implements OnModuleDestroy {
+  private readonly namespace = 'jobaura:cache:';
+  private readonly localLocks = new Map<
+    string,
+    { token: string; expiresAt: number }
+  >();
+
   constructor(@Inject(CACHE_MANAGER) private cacheManager: CacheStore) {}
+
+  async onModuleDestroy(): Promise<void> {
+    const client = this.cacheManager.store?.client;
+    if (client?.quit && client.isOpen !== false) {
+      await client.quit();
+    }
+  }
 
   /**
    * Get a value from cache
    */
   async get<T>(key: string): Promise<T | undefined> {
-    return this.cacheManager.get<T>(key);
+    return this.cacheManager.get<T>(this.key(key));
   }
 
   /**
    * Set a value in cache with optional TTL
    */
   async set(key: string, value: unknown, ttl?: number): Promise<void> {
-    await this.cacheManager.set(key, value, ttl);
+    await this.cacheManager.set(this.key(key), value, ttl);
   }
 
   /**
    * Delete a specific key from cache
    */
   async del(key: string): Promise<void> {
-    await this.cacheManager.del(key);
+    await this.cacheManager.del(this.key(key));
   }
 
   async increment(key: string, ttl?: number): Promise<number> {
     const client = this.cacheManager.store?.client;
     if (client?.incr) {
-      const value = await client.incr(key);
+      const namespacedKey = this.key(key);
+      const value = await client.incr(namespacedKey);
       if (value === 1 && ttl && client.pExpire) {
-        await client.pExpire(key, ttl);
+        await client.pExpire(namespacedKey, ttl);
       }
       return value;
     }
@@ -88,9 +117,10 @@ export class RedisService {
   async decrement(key: string, ttl?: number): Promise<number> {
     const client = this.cacheManager.store?.client;
     if (client?.decr) {
-      const value = await client.decr(key);
+      const namespacedKey = this.key(key);
+      const value = await client.decr(namespacedKey);
       if (ttl && client.pExpire) {
-        await client.pExpire(key, ttl);
+        await client.pExpire(namespacedKey, ttl);
       }
       return value;
     }
@@ -107,17 +137,62 @@ export class RedisService {
    */
   async delByPattern(pattern: string): Promise<void> {
     let keys: string[] = [];
+    const namespacedPattern = this.key(pattern);
 
-    // Try different ways to get keys based on cache manager implementation
-    if (this.cacheManager.keys) {
-      keys = await this.cacheManager.keys(pattern);
+    if (this.cacheManager.scan) {
+      keys = await this.cacheManager.scan(namespacedPattern);
+    } else if (this.cacheManager.store?.scan) {
+      keys = await this.cacheManager.store.scan(namespacedPattern);
+    } else if (this.cacheManager.keys) {
+      keys = await this.cacheManager.keys(namespacedPattern);
     } else if (this.cacheManager.store?.keys) {
-      keys = await this.cacheManager.store.keys(pattern);
-    } else if (this.cacheManager.store?.client?.keys) {
-      keys = await this.cacheManager.store.client.keys(pattern);
+      keys = await this.cacheManager.store.keys(namespacedPattern);
     }
 
-    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+    if (this.cacheManager.unlink) {
+      await this.cacheManager.unlink(keys);
+    } else if (this.cacheManager.store?.unlink) {
+      await this.cacheManager.store.unlink(keys);
+    } else {
+      await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+    }
+  }
+
+  async acquireLock(key: string, ttlMs: number): Promise<string | undefined> {
+    const namespacedKey = this.key(`lock:${key}`);
+    const token = randomUUID();
+    const client = this.cacheManager.store?.client;
+    if (client?.set) {
+      const result = await client.set(namespacedKey, token, {
+        NX: true,
+        PX: ttlMs,
+      });
+      return result === 'OK' ? token : undefined;
+    }
+
+    const current = this.localLocks.get(namespacedKey);
+    if (current && current.expiresAt > Date.now()) return undefined;
+    this.localLocks.set(namespacedKey, {
+      token,
+      expiresAt: Date.now() + ttlMs,
+    });
+    return token;
+  }
+
+  async releaseLock(key: string, token: string): Promise<void> {
+    const namespacedKey = this.key(`lock:${key}`);
+    const client = this.cacheManager.store?.client;
+    if (client?.eval) {
+      await client.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        { keys: [namespacedKey], arguments: [token] },
+      );
+      return;
+    }
+
+    if (this.localLocks.get(namespacedKey)?.token === token) {
+      this.localLocks.delete(namespacedKey);
+    }
   }
 
   /**
@@ -193,10 +268,21 @@ export class RedisService {
    * Reset all caches
    */
   async reset(): Promise<void> {
-    if (this.cacheManager.reset) {
+    if (
+      this.cacheManager.scan ||
+      this.cacheManager.store?.scan ||
+      this.cacheManager.keys ||
+      this.cacheManager.store?.keys
+    ) {
+      await this.delByPattern('*');
+    } else if (this.cacheManager.reset) {
       await this.cacheManager.reset();
     } else if (this.cacheManager.store?.reset) {
       await this.cacheManager.store.reset();
     }
+  }
+
+  private key(key: string): string {
+    return `${this.namespace}${key}`;
   }
 }

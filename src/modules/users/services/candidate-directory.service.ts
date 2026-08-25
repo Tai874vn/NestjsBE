@@ -165,6 +165,7 @@ export class CandidateDirectoryService {
     return {
       role: Role.USER,
       profileCompleted: true,
+      candidateDiscoverable: true,
       ...(filters.length ? { AND: filters } : {}),
     };
   }

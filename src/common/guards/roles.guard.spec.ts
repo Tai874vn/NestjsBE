@@ -16,7 +16,7 @@ describe('RolesGuard', () => {
           user: role ? { role } : undefined,
         }),
       }),
-    }) as ExecutionContext;
+    }) as unknown as ExecutionContext;
 
   it('allows access when no required roles are configured', () => {
     const reflector: Pick<Reflector, 'getAllAndOverride'> = {

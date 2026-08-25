@@ -8,6 +8,7 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   app.use(helmet());
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: false, limit: '1mb' }));

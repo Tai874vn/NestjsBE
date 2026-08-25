@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   ParseIntPipe,
   Query,
@@ -32,14 +33,29 @@ export class RecommendationsController {
   }
 
   @Get('jobs')
-  @ApiOperation({ summary: 'Recommend jobs for the current user' })
-  recommendJobs(
+  @Roles(Role.USER, Role.ADMIN)
+  @ApiOperation({ summary: 'Get the current user saved job recommendations' })
+  getRecommendedJobs(
     @CurrentUser() user: ValidatedUser,
     @Query() query: RecommendationQueryDto,
   ) {
     return this.recommendationsService.recommendJobsForUser(
       user.id,
-      query,
+      { ...query, cacheOnly: true, forceRefresh: false },
+      user.role,
+    );
+  }
+
+  @Post('jobs')
+  @Roles(Role.USER, Role.ADMIN)
+  @ApiOperation({ summary: 'Run job recommendations for the current user' })
+  runRecommendedJobs(
+    @CurrentUser() user: ValidatedUser,
+    @Query() query: RecommendationQueryDto,
+  ) {
+    return this.recommendationsService.recommendJobsForUser(
+      user.id,
+      { ...query, cacheOnly: false },
       user.role,
     );
   }
@@ -47,10 +63,9 @@ export class RecommendationsController {
   @Get('hiring-posts/:hiringPostId/candidates')
   @Roles(Role.EMPLOYER, Role.ADMIN)
   @ApiOperation({
-    summary:
-      'Recommend candidates for a recruiter hiring post owned by the current user',
+    summary: 'Get saved candidate recommendations for a hiring post',
   })
-  recommendCandidatesForHiringPost(
+  getRecommendedCandidatesForHiringPost(
     @Param('hiringPostId', ParseIntPipe) hiringPostId: number,
     @CurrentUser() user: ValidatedUser,
     @Query() query: RecommendationQueryDto,
@@ -59,7 +74,23 @@ export class RecommendationsController {
       hiringPostId,
       user.id,
       user.role,
-      query,
+      { ...query, cacheOnly: true, forceRefresh: false },
+    );
+  }
+
+  @Post('hiring-posts/:hiringPostId/candidates')
+  @Roles(Role.EMPLOYER, Role.ADMIN)
+  @ApiOperation({ summary: 'Run candidate recommendations for a hiring post' })
+  runRecommendedCandidatesForHiringPost(
+    @Param('hiringPostId', ParseIntPipe) hiringPostId: number,
+    @CurrentUser() user: ValidatedUser,
+    @Query() query: RecommendationQueryDto,
+  ) {
+    return this.recommendationsService.recommendCandidatesForHiringPost(
+      hiringPostId,
+      user.id,
+      user.role,
+      { ...query, cacheOnly: false },
     );
   }
 }

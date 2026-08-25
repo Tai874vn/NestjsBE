@@ -73,6 +73,8 @@ export class RecommendationDataLoaderService {
     return this.prisma.user.findMany({
       where: {
         role: Role.USER,
+        profileCompleted: true,
+        candidateDiscoverable: true,
         OR: [
           { resume: { isNot: null } },
           { profileSkills: { some: {} } },
