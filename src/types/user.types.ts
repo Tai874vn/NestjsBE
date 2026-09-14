@@ -3,7 +3,7 @@ import { Role } from '../common/constants/roles';
 export interface JwtPayload {
   sub: number;
   email: string;
-  type: 'access' | 'refresh';
+  type: 'access' | 'refresh' | 'socket';
   jti?: string;
   iat?: number;
   exp?: number;

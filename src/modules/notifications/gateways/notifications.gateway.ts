@@ -93,8 +93,8 @@ export class NotificationsGateway
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      if (payload.type !== 'access') {
-        return next(new UnauthorizedException('Invalid access token'));
+      if (payload.type !== 'access' && payload.type !== 'socket') {
+        return next(new UnauthorizedException('Invalid realtime token'));
       }
 
       const user = await this.prisma.user.findUnique({

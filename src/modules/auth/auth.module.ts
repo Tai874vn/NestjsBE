@@ -10,6 +10,8 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleCallbackGuard } from './guards/google-callback.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleOAuthStateService } from './services/google-oauth-state.service';
+import { RealtimeTicketController } from './controllers/realtime-ticket.controller';
+import { RealtimeTicketService } from './services/realtime-ticket.service';
 
 @Module({
   imports: [
@@ -26,7 +28,7 @@ import { GoogleOAuthStateService } from './services/google-oauth-state.service';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, RealtimeTicketController],
   providers: [
     AuthService,
     JwtStrategy,
@@ -34,6 +36,7 @@ import { GoogleOAuthStateService } from './services/google-oauth-state.service';
     GoogleAuthGuard,
     GoogleCallbackGuard,
     GoogleOAuthStateService,
+    RealtimeTicketService,
   ],
   exports: [AuthService],
 })
