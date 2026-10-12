@@ -98,4 +98,33 @@ describe('SavedItemsService', () => {
       service.getSavedPosts(4, { cursor, limit: 20 }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('previews root comments with reply counts on saved posts', async () => {
+    const { service, prisma } = createService();
+    prisma.savedPost.findMany.mockResolvedValue([{
+      userId: 4, postId: 9, createdAt: new Date(),
+      post: {
+        id: 9, content: 'Saved post', imageUrl: null,
+        createdAt: new Date(), updatedAt: new Date(),
+        author: { id: 2, name: 'Maya', avatar: null, headline: null },
+        likes: [], _count: { likes: 0, comments: 3 },
+        comments: [{ id: 5, parentId: null, content: 'Root', _count: { replies: 2 } }],
+      },
+    }]);
+
+    const result = await service.getSavedPosts(4, { limit: 10 });
+
+    expect(prisma.savedPost.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: { post: { include: expect.objectContaining({
+        comments: expect.objectContaining({
+          where: { parentId: null },
+          include: expect.objectContaining({ _count: { select: { replies: true } } }),
+        }),
+      }) } },
+    }));
+    expect(result.content.data[0].recentComments).toEqual([
+      { id: 5, parentId: null, content: 'Root', replyCount: 2 },
+    ]);
+    expect(result.content.data[0].commentCount).toBe(3);
+  });
 });

@@ -28,10 +28,12 @@ type FeedPostAuthor = {
 };
 type FeedPostComment = {
   id: number;
+  parentId: number | null;
   content: string;
   createdAt: Date;
   updatedAt: Date;
   author: FeedPostAuthor;
+  _count: { replies: number };
 };
 type FeedPostSource = {
   id: number;
@@ -223,28 +225,43 @@ export class PostsService {
 
   async getComments(postId: number, query: CommentsQueryDto) {
     await this.ensurePost(postId);
+    return {
+      message: 'Post comments fetched successfully',
+      content: await this.listComments(postId, null, query),
+    };
+  }
+
+  async getReplies(postId: number, commentId: number, query: CommentsQueryDto) {
+    await this.ensureRootComment(postId, commentId);
+    return {
+      message: 'Comment replies fetched successfully',
+      content: await this.listComments(postId, commentId, query),
+    };
+  }
+
+  private async listComments(
+    postId: number,
+    parentId: number | null,
+    query: CommentsQueryDto,
+  ) {
     const limit = query.limit ?? 20;
     const comments = await this.prisma.postComment.findMany({
       where: {
         postId,
+        parentId,
         ...(query.cursor ? { id: { lt: query.cursor } } : {}),
       },
       take: limit + 1,
       orderBy: { id: 'desc' },
-      include: {
-        author: {
-          select: { id: true, name: true, avatar: true, headline: true },
-        },
-      },
+      include: this.commentInclude(),
     });
     const hasMore = comments.length > limit;
-    const data = comments.slice(0, limit);
+    const data = comments
+      .slice(0, limit)
+      .map((comment) => this.formatComment(comment));
     return {
-      message: 'Post comments fetched successfully',
-      content: {
-        data,
-        nextCursor: hasMore && data.length ? data[data.length - 1].id : null,
-      },
+      data,
+      nextCursor: hasMore && data.length ? data[data.length - 1].id : null,
     };
   }
 
@@ -256,11 +273,7 @@ export class PostsService {
     const post = await this.ensurePost(postId);
     const comment = await this.prisma.postComment.create({
       data: { postId, authorId, content: dto.content.trim() },
-      include: {
-        author: {
-          select: { id: true, name: true, avatar: true, headline: true },
-        },
-      },
+      include: this.commentInclude(),
     });
     await this.notifications?.notifyPostComment({
       actorId: authorId,
@@ -270,7 +283,51 @@ export class PostsService {
       preview: comment.content,
       postTitle: post.content,
     });
-    return { message: 'Comment created successfully', content: comment };
+    return {
+      message: 'Comment created successfully',
+      content: this.formatComment(comment),
+    };
+  }
+
+  async createReply(
+    postId: number,
+    commentId: number,
+    authorId: number,
+    dto: CreatePostCommentDto,
+  ) {
+    const content = dto.content.trim();
+    if (!content) throw new BadRequestException('Reply content is required');
+    const post = await this.ensurePost(postId);
+    const parent = await this.ensureRootComment(postId, commentId);
+    const reply = await this.prisma.postComment
+      .create({
+        data: { postId, parentId: commentId, authorId, content },
+        include: this.commentInclude(),
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2003'
+        ) {
+          throw new NotFoundException(
+            'Post or parent comment no longer exists',
+          );
+        }
+        throw error;
+      });
+    await this.notifications?.notifyPostComment({
+      actorId: authorId,
+      recipientId: parent.authorId,
+      postId,
+      commentId: reply.id,
+      parentCommentId: commentId,
+      preview: reply.content,
+      postTitle: post.content,
+    });
+    return {
+      message: 'Reply created successfully',
+      content: this.formatComment(reply),
+    };
   }
 
   async updateComment(
@@ -293,13 +350,12 @@ export class PostsService {
     const updated = await this.prisma.postComment.update({
       where: { id: commentId },
       data: { content },
-      include: {
-        author: {
-          select: { id: true, name: true, avatar: true, headline: true },
-        },
-      },
+      include: this.commentInclude(),
     });
-    return { message: 'Comment updated successfully', content: updated };
+    return {
+      message: 'Comment updated successfully',
+      content: this.formatComment(updated),
+    };
   }
 
   async deleteComment(
@@ -330,6 +386,34 @@ export class PostsService {
     return post;
   }
 
+  private async ensureRootComment(postId: number, commentId: number) {
+    const parent = await this.prisma.postComment.findUnique({
+      where: { id: commentId },
+      select: { id: true, postId: true, parentId: true, authorId: true },
+    });
+    if (!parent || parent.postId !== postId) {
+      throw new NotFoundException('Parent comment not found');
+    }
+    if (parent.parentId !== null) {
+      throw new BadRequestException('Replies must target a top-level comment');
+    }
+    return parent;
+  }
+
+  private commentInclude() {
+    return {
+      author: {
+        select: { id: true, name: true, avatar: true, headline: true },
+      },
+      _count: { select: { replies: true } },
+    } as const;
+  }
+
+  private formatComment<T extends { _count: { replies: number } }>(comment: T) {
+    const { _count, ...data } = comment;
+    return { ...data, replyCount: _count.replies };
+  }
+
   private postInclude(userId: number) {
     return {
       author: {
@@ -338,13 +422,10 @@ export class PostsService {
       likes: { where: { userId }, select: { userId: true } },
       savedBy: { where: { userId }, select: { userId: true } },
       comments: {
+        where: { parentId: null },
         take: 5,
         orderBy: { id: 'desc' as const },
-        include: {
-          author: {
-            select: { id: true, name: true, avatar: true, headline: true },
-          },
-        },
+        include: this.commentInclude(),
       },
       _count: { select: { likes: true, comments: true } },
     };
@@ -362,7 +443,9 @@ export class PostsService {
       commentCount: post._count.comments,
       viewerHasLiked: post.likes.length > 0,
       viewerHasSaved: post.savedBy.length > 0,
-      recentComments: [...post.comments].reverse(),
+      recentComments: [...post.comments]
+        .reverse()
+        .map((comment) => this.formatComment(comment)),
     };
   }
 

@@ -130,6 +130,25 @@ export class PostsController {
     );
   }
 
+  @Get(':postId/comments/:commentId/replies')
+  getReplies(
+    @Param('postId', ParseIntPipe) postId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Query() query: CommentsQueryDto,
+  ) {
+    return this.postsService.getReplies(postId, commentId, query);
+  }
+
+  @Post(':postId/comments/:commentId/replies')
+  createReply(
+    @Param('postId', ParseIntPipe) postId: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @CurrentUser() user: ValidatedUser,
+    @Body() dto: CreatePostCommentDto,
+  ) {
+    return this.postsService.createReply(postId, commentId, user.id, dto);
+  }
+
   @Put(':postId/comments/:commentId')
   updateComment(
     @Param('postId', ParseIntPipe) postId: number,

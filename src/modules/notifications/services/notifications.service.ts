@@ -242,6 +242,7 @@ export class NotificationsService {
     recipientId: number;
     postId: number;
     commentId: number;
+    parentCommentId?: number;
     preview: string;
     postTitle?: string;
   }) {

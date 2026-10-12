@@ -70,6 +70,7 @@ export class NotificationTemplateService {
     recipientId: number;
     postId: number;
     commentId: number;
+    parentCommentId?: number;
     preview: string;
     postTitle?: string;
   }): CreateNotificationInput {
@@ -77,14 +78,22 @@ export class NotificationTemplateService {
       recipientId: input.recipientId,
       actorId: input.actorId,
       type: NotificationType.POST_COMMENT,
-      title: 'New comment',
-      body: this.preview(input.preview, 'commented on your post.'),
+      title: input.parentCommentId ? 'New reply' : 'New comment',
+      body: this.preview(
+        input.preview,
+        input.parentCommentId
+          ? 'replied to your comment.'
+          : 'commented on your post.',
+      ),
       entityType: 'post_comment',
       entityId: input.commentId,
       actionUrl: `/?postId=${input.postId}`,
       metadata: {
         postId: input.postId,
         commentId: input.commentId,
+        ...(input.parentCommentId
+          ? { parentCommentId: input.parentCommentId }
+          : {}),
         postTitle: this.preview(input.postTitle ?? '', 'Post'),
       },
     };

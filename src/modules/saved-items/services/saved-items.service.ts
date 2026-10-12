@@ -15,10 +15,12 @@ type SavedPostAuthor = {
 };
 type SavedPostComment = {
   id: number;
+  parentId: number | null;
   content: string;
   createdAt: Date;
   updatedAt: Date;
   author: SavedPostAuthor;
+  _count: { replies: number };
 };
 type SavedPostSource = {
   id: number;
@@ -107,9 +109,11 @@ export class SavedItemsService {
             },
             likes: { where: { userId }, select: { userId: true } },
             comments: {
+              where: { parentId: null },
               take: 2,
               orderBy: { id: 'desc' },
               include: {
+                _count: { select: { replies: true } },
                 author: {
                   select: {
                     id: true,
@@ -200,7 +204,12 @@ export class SavedItemsService {
       commentCount: post._count.comments,
       viewerHasLiked: post.likes.length > 0,
       viewerHasSaved: true,
-      recentComments: [...post.comments].reverse(),
+      recentComments: [...post.comments]
+        .reverse()
+        .map(({ _count, ...comment }) => ({
+          ...comment,
+          replyCount: _count.replies,
+        })),
     };
   }
 

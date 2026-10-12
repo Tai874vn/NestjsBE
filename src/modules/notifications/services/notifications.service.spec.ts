@@ -246,4 +246,34 @@ describe('NotificationsService', () => {
       }),
     );
   });
+
+  it('notifies a comment author about a reply with its thread metadata', async () => {
+    const { service, prisma, gateway } = createService();
+    prisma.notification.create.mockResolvedValue(notification({ title: 'New reply' }));
+    prisma.notification.count.mockResolvedValue(1);
+
+    await service.notifyPostComment({
+      actorId: 7, recipientId: 6, postId: 3, commentId: 8,
+      parentCommentId: 4, preview: '  Thanks for sharing  ', postTitle: 'Post',
+    });
+
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        recipientId: 6, type: NotificationType.POST_COMMENT, title: 'New reply',
+        body: 'Thanks for sharing', entityType: 'post_comment', entityId: 8,
+        actionUrl: '/?postId=3',
+        metadata: { postId: 3, commentId: 8, parentCommentId: 4, postTitle: 'Post' },
+      }),
+    }));
+    expect(gateway.emitNotification).toHaveBeenCalledWith(6, expect.any(Object));
+  });
+
+  it('does not notify someone replying to their own comment', async () => {
+    const { service, prisma } = createService();
+    await expect(service.notifyPostComment({
+      actorId: 6, recipientId: 6, postId: 3, commentId: 8,
+      parentCommentId: 4, preview: 'Own reply',
+    })).resolves.toBeNull();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
 });

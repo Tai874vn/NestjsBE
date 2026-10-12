@@ -236,14 +236,19 @@ model PostComment {
   id        Int      @id @default(autoincrement())
   postId    Int
   authorId  Int
+  parentId  Int?
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent PostComment? @relation("PostCommentReplies", fields: [parentId, postId], references: [id, postId], onDelete: Cascade)
+  replies PostComment[] @relation("PostCommentReplies")
 
+  @@unique([id, postId])
   @@index([postId, id])
+  @@index([postId, parentId, id])
   @@map("post_comments")
 }
 
