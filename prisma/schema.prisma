@@ -25,7 +25,7 @@ model User {
   avatar        String?
   coverImage    String?
   profileCompleted Boolean @default(false)
-  candidateDiscoverable Boolean @default(false)
+  candidateDiscoverable Boolean @default(true)
   refreshToken  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

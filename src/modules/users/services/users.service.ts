@@ -34,6 +34,7 @@ export class UsersService {
         email,
         password: hashedPassword,
         role: createUserDto.role || Role.USER,
+        candidateDiscoverable: true,
       },
       select: {
         id: true,

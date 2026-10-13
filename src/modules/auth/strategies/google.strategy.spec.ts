@@ -36,6 +36,29 @@ describe('GoogleStrategy', () => {
     photos: [{ value: 'https://example.com/avatar.png' }],
   };
 
+  it('enables candidate discoverability for new Google accounts by default', async () => {
+    const { prisma, strategy } = createStrategy();
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(null);
+    prisma.user.create.mockResolvedValue({ id: 18, role: Role.USER });
+
+    await strategy.validate(
+      { query: {}, googleSignupRole: Role.USER } as Parameters<
+        GoogleStrategy['validate']
+      >[0],
+      'access-token',
+      'refresh-token',
+      profile,
+    );
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: Role.USER,
+        candidateDiscoverable: true,
+      }),
+    });
+  });
+
   it('creates new Google accounts with the selected employer role', async () => {
     const { prisma, strategy } = createStrategy();
     const createdUser = { id: 17, email: 'hiring@example.com', role: Role.EMPLOYER };

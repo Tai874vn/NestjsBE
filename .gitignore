@@ -61,8 +61,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /uploads
 
 # Documentation files
+doc/
 docs/
-**/docs/
+documentation/
 *.md
 *.mdx
 *.markdown
@@ -77,16 +78,3 @@ docs/
 **/*seed*
 
 repomix-output.xml
-
-# Backend presentation study guides
-!/docs/
-/docs/*
-!/docs/BACKEND_PRESENTATION_GUIDE.md
-!/docs/BACKEND_KNOWLEDGE_QUESTIONS.md
-!/docs/SYSTEM_DESIGN.md
-!/docs/SYSTEM_DESIGN.html
-!/docs/render-system-design.mjs
-!/docs/system-design-svg/
-/docs/system-design-svg/*
-!/docs/system-design-svg/*.svg
-!/docs/POST_COMMENT_REPLIES.md

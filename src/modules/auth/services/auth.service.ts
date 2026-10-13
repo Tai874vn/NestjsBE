@@ -63,6 +63,7 @@ export class AuthService {
         location: signUpDto.location,
         website: signUpDto.website,
         role: signUpDto.role ?? Role.USER,
+        candidateDiscoverable: true,
       },
     });
 

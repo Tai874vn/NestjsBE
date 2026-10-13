@@ -21,6 +21,29 @@ describe('AuthService current user profile', () => {
     return { service, prisma };
   };
 
+  it('enables candidate discoverability for new accounts by default', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 12,
+      email: 'candidate@example.com',
+      role: Role.USER,
+    });
+
+    await service.signUp({
+      name: 'Candidate',
+      email: 'candidate@example.com',
+      password: 'password123',
+    });
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: Role.USER,
+        candidateDiscoverable: true,
+      }),
+    });
+  });
+
   it('creates employer accounts when signup role is employer', async () => {
     const { service, prisma } = createService();
     prisma.user.findFirst.mockResolvedValue(null);

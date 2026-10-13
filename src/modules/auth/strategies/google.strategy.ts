@@ -64,6 +64,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             name: this.displayNameFor(displayName, email),
             avatar: photos?.[0]?.value,
             role: signupRole,
+            candidateDiscoverable: true,
           },
         });
       }

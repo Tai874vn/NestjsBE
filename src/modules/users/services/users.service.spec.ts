@@ -25,6 +25,24 @@ describe('UsersService account behavior', () => {
     return { service, prisma, redisService };
   };
 
+  it('enables candidate discoverability for admin-created accounts by default', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({ id: 2, name: 'Candidate' });
+
+    await service.create({
+      name: 'Candidate',
+      email: 'candidate@example.com',
+      password: 'password123',
+    });
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ candidateDiscoverable: true }),
+      }),
+    );
+  });
+
   it('rejects duplicate account emails on create', async () => {
     const { service, prisma } = createService();
 
