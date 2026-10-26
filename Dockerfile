@@ -12,8 +12,8 @@ RUN apt-get update \
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --non-interactive --no-progress --network-timeout 600000 \
-    && yarn cache clean
+RUN --mount=type=cache,id=jobaura-backend-yarn,target=/tmp/yarn-cache,sharing=locked \
+    yarn install --frozen-lockfile --non-interactive --no-progress --network-timeout 600000
 
 FROM deps AS builder
 
@@ -27,6 +27,7 @@ FROM deps AS migrator
 
 COPY prisma.config.ts ./
 COPY prisma ./prisma
+COPY scripts/validate-public-origin.cjs ./scripts/validate-public-origin.cjs
 
 CMD ["yarn", "prisma", "migrate", "deploy"]
 
@@ -35,9 +36,9 @@ FROM deps AS prod-deps
 ENV NODE_ENV=production
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 
-RUN rm -rf node_modules \
-    && yarn install --frozen-lockfile --production --non-interactive --no-progress --network-timeout 600000 \
-    && yarn cache clean
+RUN --mount=type=cache,id=jobaura-backend-yarn,target=/tmp/yarn-cache,sharing=locked \
+    rm -rf node_modules \
+    && yarn install --frozen-lockfile --production --non-interactive --no-progress --network-timeout 600000
 
 FROM node:22-bookworm-slim AS runner
 
