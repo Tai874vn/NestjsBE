@@ -12,10 +12,16 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GoogleOAuthStateService } from './services/google-oauth-state.service';
 import { RealtimeTicketController } from './controllers/realtime-ticket.controller';
 import { RealtimeTicketService } from './services/realtime-ticket.service';
+import { AuthSessionService } from './session/auth-session.service';
+import { AuthSessionRedisModule } from './session/auth-session-redis.module';
+import { AuthRateLimitGuard } from './session/auth-rate-limit.guard';
+import { AuthSessionsController } from './controllers/auth-sessions.controller';
+import { jwtVerifyOptions } from './session/auth-jwt.config';
 
 @Module({
   imports: [
     ConfigModule,
+    AuthSessionRedisModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -24,13 +30,22 @@ import { RealtimeTicketService } from './services/realtime-ticket.service';
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
           expiresIn: configService.getOrThrow<StringValue>('JWT_EXPIRES_IN'),
+          algorithm: 'HS256',
+          issuer: jwtVerifyOptions().issuer,
+          audience: jwtVerifyOptions().audience,
         },
       }),
     }),
   ],
-  controllers: [AuthController, RealtimeTicketController],
+  controllers: [
+    AuthController,
+    RealtimeTicketController,
+    AuthSessionsController,
+  ],
   providers: [
     AuthService,
+    AuthSessionService,
+    AuthRateLimitGuard,
     JwtStrategy,
     GoogleStrategy,
     GoogleAuthGuard,
@@ -38,6 +53,6 @@ import { RealtimeTicketService } from './services/realtime-ticket.service';
     GoogleOAuthStateService,
     RealtimeTicketService,
   ],
-  exports: [AuthService],
+  exports: [AuthService, AuthSessionService, JwtModule],
 })
 export class AuthModule {}

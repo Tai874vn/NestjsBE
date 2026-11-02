@@ -11,12 +11,8 @@ describe('AuthService current user profile', () => {
         update: jest.fn(),
       },
     };
-    const jwtService = {
-      sign: jest.fn().mockReturnValue('jwt-token'),
-      verify: jest.fn(),
-    };
-
-    const service = new AuthService(prisma as any, jwtService as any);
+    const sessions = { create: jest.fn().mockResolvedValue({ token: 'jwt-token', refreshToken: 'opaque-refresh', logoutToken: 'logout-credential' }) };
+    const service = new AuthService(prisma as any, sessions as any);
 
     return { service, prisma };
   };

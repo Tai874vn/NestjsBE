@@ -12,7 +12,32 @@ export const envValidationSchema = Joi.object({
 
   // JWT
   JWT_SECRET: Joi.string().min(64).required(),
-  JWT_EXPIRES_IN: Joi.string().required(),
+  JWT_EXPIRES_IN: Joi.string()
+    .custom((value: string, helpers) => {
+      const match = /^(\d+)(m|s)$/.exec(value);
+      if (!match) return helpers.error('any.invalid');
+      const seconds = Number(match[1]) * (match[2] === 'm' ? 60 : 1);
+      return seconds >= 300 && seconds <= 900
+        ? value
+        : helpers.error('any.invalid');
+    })
+    .default('10m'),
+  JWT_ISSUER: Joi.string().max(200).default('jobaura'),
+  JWT_AUDIENCE: Joi.string().max(200).default('jobaura-api'),
+  AUTH_REFRESH_TTL_DAYS: Joi.number().integer().min(7).max(30).default(14),
+  AUTH_REDIS_URL: Joi.string().uri().optional(),
+  AUTH_REDIS_PASSWORD: Joi.string().min(32).optional(),
+  AUTH_REDIS_PASSWORD_FILE: Joi.string().optional(),
+  AUTH_REDIS_COMMAND_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(50)
+    .max(2000)
+    .default(200),
+  AUTH_REDIS_CONNECT_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(100)
+    .max(5000)
+    .default(1000),
 
   // Google OAuth
   GOOGLE_CLIENT_ID: Joi.string().required(),

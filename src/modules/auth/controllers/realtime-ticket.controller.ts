@@ -20,10 +20,15 @@ export class RealtimeTicketController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Header('Cache-Control', 'no-store')
   issue(@Req() req: express.Request) {
-    if (!req.user) throw new UnauthorizedException('User not authenticated');
+    const user = req.user as
+      | (Express.User & { sessionId?: string })
+      | undefined;
+    if (!user || typeof user.sessionId !== 'string' || !user.sessionId.trim()) {
+      throw new UnauthorizedException('User session not authenticated');
+    }
 
     return {
-      content: this.ticketService.issue(req.user.id, req.user.email),
+      content: this.ticketService.issue(user.id, user.sessionId, user.role),
     };
   }
 }

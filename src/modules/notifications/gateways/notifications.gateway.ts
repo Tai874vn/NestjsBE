@@ -4,24 +4,17 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, OnModuleDestroy, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../../../prisma.service';
-import { JwtPayload } from '../../../types';
-
-type NotificationSocketUser = {
-  id: number;
-  name: string;
-  avatar: string | null;
-};
-
-interface AuthenticatedNotificationSocket extends Socket {
-  data: {
-    user?: NotificationSocketUser;
-  };
-}
+import { AuthSessionService } from '../../auth/session/auth-session.service';
+import { jwtVerifyOptions } from '../../auth/session/auth-jwt.config';
+import type {
+  AuthenticatedSocket,
+  RealtimeSocketClaims,
+} from '../../chat/services/authenticated-socket.type';
 
 type NotificationPayload = {
   id: number;
@@ -37,36 +30,69 @@ type NotificationPayload = {
   namespace: '/notifications',
 })
 export class NotificationsGateway
-  implements OnGatewayInit, OnGatewayConnection
+  implements OnGatewayInit, OnGatewayConnection, OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger('NotificationsGateway');
+  private unsubscribeRevoked?: () => void;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   afterInit(server: Server) {
-    server.use((socket: AuthenticatedNotificationSocket, next) => {
+    this.unsubscribeRevoked?.();
+    this.unsubscribeRevoked = this.sessions.onRevoked((sid) => {
+      server.local.in(`auth-session:${sid}`).disconnectSockets(true);
+    });
+    server.use((socket: AuthenticatedSocket, next) => {
       void this.authenticateSocket(socket, next);
     });
   }
 
-  async handleConnection(client: AuthenticatedNotificationSocket) {
+  onModuleDestroy(): void {
+    this.unsubscribeRevoked?.();
+    this.unsubscribeRevoked = undefined;
+  }
+
+  async handleConnection(client: AuthenticatedSocket) {
     const user = client.data.user;
-    if (!user) {
+    const sessionId = client.data.sessionId;
+    if (!user || !sessionId) {
       client.disconnect();
       return;
     }
 
-    await client.join(this.userRoom(user.id));
-    this.logger.log(
-      `User ${user.name} (${user.id}) connected to notifications`,
-    );
+    if (!client.connected) return;
+
+    try {
+      await client.join(`auth-session:${sessionId}`);
+      if (!client.connected) return;
+
+      // Cover revocation during the handshake lookup, before the room existed.
+      await this.sessions.assertAccessSession(
+        sessionId,
+        user.id,
+        client.data.jti,
+      );
+      if (!client.connected) return;
+
+      await client.join(this.userRoom(user.id));
+      if (!client.connected) return;
+      this.logger.log(
+        `User ${user.name} (${user.id}) connected to notifications`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Connection error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      client.disconnect(true);
+    }
   }
 
   emitNotification(recipientId: number, notification: NotificationPayload) {
@@ -82,20 +108,36 @@ export class NotificationsGateway
   }
 
   private async authenticateSocket(
-    socket: AuthenticatedNotificationSocket,
+    socket: AuthenticatedSocket,
     next: (err?: Error) => void,
   ): Promise<void> {
     try {
       const token = this.extractToken(socket);
       if (!token) return next(new UnauthorizedException('No token provided'));
 
-      const payload = this.jwtService.verify<JwtPayload>(token, {
+      const payload = this.jwtService.verify<RealtimeSocketClaims>(token, {
+        ...jwtVerifyOptions(),
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      if (payload.type !== 'access' && payload.type !== 'socket') {
+      if (
+        !payload ||
+        (payload.type !== 'access' && payload.type !== 'socket') ||
+        !Number.isSafeInteger(payload.sub) ||
+        payload.sub <= 0 ||
+        typeof payload.sid !== 'string' ||
+        !payload.sid.trim() ||
+        typeof payload.jti !== 'string' ||
+        !payload.jti.trim()
+      ) {
         return next(new UnauthorizedException('Invalid realtime token'));
       }
+
+      await this.sessions.assertAccessSession(
+        payload.sid,
+        payload.sub,
+        payload.jti,
+      );
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -104,6 +146,8 @@ export class NotificationsGateway
       if (!user) return next(new UnauthorizedException('User not found'));
 
       socket.data.user = user;
+      socket.data.sessionId = payload.sid;
+      socket.data.jti = payload.jti;
       next();
     } catch (error) {
       this.logger.error(

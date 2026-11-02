@@ -3,6 +3,7 @@ import type { User as PrismaUser } from '@prisma/client';
 declare global {
   namespace Express {
     interface User {
+      sessionId?: string;
       id: PrismaUser['id'];
       name: PrismaUser['name'];
       email: PrismaUser['email'];

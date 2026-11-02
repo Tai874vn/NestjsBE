@@ -10,12 +10,14 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
+import { AuthSessionService } from '../../auth/session/auth-session.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -301,9 +303,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    await this.prisma.user.delete({
-      where: { id },
-    });
+    await this.sessions.deleteUser(id);
 
     // Invalidate user caches
     await this.redisService.invalidateUserCaches(id);

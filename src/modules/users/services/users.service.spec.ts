@@ -20,9 +20,10 @@ describe('UsersService account behavior', () => {
       invalidateUserCaches: jest.fn(),
     };
 
-    const service = new UsersService(prisma as any, redisService as any);
+    const sessions = { deleteUser: jest.fn() };
+    const service = new UsersService(prisma as any, redisService as any, sessions as any);
 
-    return { service, prisma, redisService };
+    return { service, prisma, redisService, sessions };
   };
 
   it('enables candidate discoverability for admin-created accounts by default', async () => {
@@ -76,5 +77,13 @@ describe('UsersService account behavior', () => {
 
     await expect(service.findOne(1)).resolves.toBe(cachedUser);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('deletes an account through the revoking session transaction, not a direct cascade', async () => {
+    const { service, prisma, sessions } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 7 });
+    await service.remove(7);
+    expect(sessions.deleteUser).toHaveBeenCalledWith(7);
+    expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 });

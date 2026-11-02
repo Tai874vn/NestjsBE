@@ -1,50 +1,27 @@
-import { UnauthorizedException } from '@nestjs/common';
-import { JwtPayload } from '../../../types';
 import { JwtStrategy } from './jwt.strategy';
+import { JwtPayload } from '../../../types';
 
-describe('JwtStrategy token purpose', () => {
-  const originalSecret = process.env.JWT_SECRET;
-
-  beforeEach(() => {
-    process.env.JWT_SECRET = 'test-secret-with-at-least-thirty-two-characters';
+describe('JwtStrategy session validation',()=>{
+  const sessions={assertAccessSession:jest.fn()};
+  const payload:JwtPayload={sub:7,role:'user',sid:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',jti:'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',ver:0,type:'access'};
+  beforeEach(()=>{jest.clearAllMocks();process.env.JWT_SECRET='test-secret';});
+  it('rejects refresh and old access JWTs without session identifiers',async()=>{
+    const strategy=new JwtStrategy(sessions as never);
+    await expect(strategy.validate({} as any,{...payload,type:'refresh'})).rejects.toMatchObject({response:{code:'INVALID_ACCESS_TOKEN'}});
+    await expect(strategy.validate({} as any,{sub:7,email:'old@example.test',type:'access'})).rejects.toMatchObject({response:{code:'INVALID_ACCESS_TOKEN'}});
+    expect(sessions.assertAccessSession).not.toHaveBeenCalled();
   });
-
-  afterAll(() => {
-    process.env.JWT_SECRET = originalSecret;
+  it('checks session and jti before trusting role claims and caches only within the request',async()=>{
+    const strategy=new JwtStrategy(sessions as never);
+    const request={} as any;
+    const user=await strategy.validate(request,payload);
+    expect(user).toEqual({id:7,role:'user',sessionId:payload.sid});
+    await strategy.validate(request,payload);
+    expect(sessions.assertAccessSession).toHaveBeenCalledTimes(1);
+    expect(sessions.assertAccessSession).toHaveBeenCalledWith(payload.sid,7,payload.jti);
   });
-
-  it('rejects a refresh token used as an access token before loading a user', async () => {
-    const prisma = { user: { findUnique: jest.fn() } };
-    const strategy = new JwtStrategy(prisma as never);
-    const payload = { sub: 6, email: 'tai@example.com', type: 'refresh' } as unknown as JwtPayload;
-
-    await expect(strategy.validate({} as never, payload)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
-  });
-
-  it('reuses the validated user when global and controller guards both run', async () => {
-    const prisma = {
-      user: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 6,
-          email: 'tai@example.com',
-          role: 'user',
-        }),
-      },
-    };
-    const strategy = new JwtStrategy(prisma as never);
-    const request = {} as never;
-    const payload = {
-      sub: 6,
-      email: 'tai@example.com',
-      type: 'access',
-    } as JwtPayload;
-
-    await strategy.validate(request, payload);
-    await strategy.validate(request, payload);
-
-    expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+  it('propagates session revocation instead of treating it as an invalid signature',async()=>{
+    sessions.assertAccessSession.mockRejectedValueOnce(new Error('revoked'));
+    await expect(new JwtStrategy(sessions as never).validate({} as any,payload)).rejects.toThrow('revoked');
   });
 });

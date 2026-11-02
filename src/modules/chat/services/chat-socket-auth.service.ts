@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Socket } from 'socket.io';
 import { PrismaService } from '../../../prisma.service';
-import { AuthenticatedSocket } from './authenticated-socket.type';
+import { AuthSessionService } from '../../auth/session/auth-session.service';
+import { jwtVerifyOptions } from '../../auth/session/auth-jwt.config';
+import type {
+  AuthenticatedSocket,
+  RealtimeSocketClaims,
+} from './authenticated-socket.type';
 
 @Injectable()
 export class ChatSocketAuthService {
@@ -13,6 +18,7 @@ export class ChatSocketAuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   async authenticateSocket(
@@ -25,13 +31,29 @@ export class ChatSocketAuthService {
         return next(new UnauthorizedException('No token provided'));
       }
 
-      const payload = this.jwtService.verify(token, {
+      const payload = this.jwtService.verify<RealtimeSocketClaims>(token, {
+        ...jwtVerifyOptions(),
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
-      if (payload.type !== 'access' && payload.type !== 'socket') {
+      if (
+        !payload ||
+        (payload.type !== 'access' && payload.type !== 'socket') ||
+        !Number.isSafeInteger(payload.sub) ||
+        payload.sub <= 0 ||
+        typeof payload.sid !== 'string' ||
+        !payload.sid.trim() ||
+        typeof payload.jti !== 'string' ||
+        !payload.jti.trim()
+      ) {
         return next(new UnauthorizedException('Invalid realtime token'));
       }
+
+      await this.sessions.assertAccessSession(
+        payload.sid,
+        payload.sub,
+        payload.jti,
+      );
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -43,6 +65,8 @@ export class ChatSocketAuthService {
       }
 
       socket.data.user = user;
+      socket.data.sessionId = payload.sid;
+      socket.data.jti = payload.jti;
       next();
     } catch (error) {
       this.logger.error(`Authentication error: ${this.getErrMsg(error)}`);

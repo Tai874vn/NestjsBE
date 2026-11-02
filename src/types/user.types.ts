@@ -2,7 +2,10 @@ import { Role } from '../common/constants/roles';
 
 export interface JwtPayload {
   sub: number;
-  email: string;
+  email?: string;
+  role?: string;
+  sid?: string;
+  ver?: number;
   type: 'access' | 'refresh' | 'socket';
   jti?: string;
   iat?: number;
@@ -20,6 +23,7 @@ export interface GoogleProfile {
 
 export class ValidatedUser {
   id: number;
-  email: string;
+  email?: string;
   role: Role;
+  sessionId?: string;
 }

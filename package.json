@@ -52,6 +52,7 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "scripts": {
+    "test:auth:integration": "node scripts/auth-sessions.integration.cjs",
     "db:seed": "prisma db seed",
     "db:seed:hiring": "ts-node src/tools/hiring-posts-fixtures.ts",
     "benchmark:candidates": "ts-node src/tools/benchmark-candidates.ts",

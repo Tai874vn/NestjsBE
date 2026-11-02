@@ -3,14 +3,17 @@ import {
   ConflictException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
-import { ApiResponse, JwtPayload } from '../../../types';
+import { ApiResponse } from '../../../types';
 import { Role } from '../../../common/constants/roles';
+import {
+  AuthSessionService,
+  SessionMetadata,
+} from '../session/auth-session.service';
 
 type UserType = User;
 
@@ -18,25 +21,19 @@ type UserType = User;
 export class AuthService {
   constructor(
     private prisma: PrismaService,
-    private jwtService: JwtService,
+    private readonly sessions: AuthSessionService,
   ) {}
-  verifyRefreshToken(token: string): JwtPayload {
-    try {
-      const decoded = this.jwtService.verify(token);
-      if (typeof decoded.sub !== 'number' || decoded.type !== 'refresh') {
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-      return decoded as JwtPayload;
-    } catch {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-  }
 
-  async signUp(signUpDto: SignUpDto): Promise<
+  async signUp(
+    signUpDto: SignUpDto,
+    metadata: SessionMetadata = {},
+  ): Promise<
     ApiResponse<{
       user: Omit<UserType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
+      logoutToken: string;
+      refreshExpiresAt: Date;
     }>
   > {
     const email = this.normalizeEmail(signUpDto.email);
@@ -67,9 +64,8 @@ export class AuthService {
       },
     });
 
-    const token: string = this.generateToken(user.id, user.email);
-    const refreshToken: string = this.generateRefreshToken(user.id, user.email);
-    await this.updateRefreshToken(user.id, refreshToken);
+    const { token, refreshToken, logoutToken, refreshExpiresAt } =
+      await this.sessions.create(user.id, metadata);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken: _, ...result } = user;
@@ -80,22 +76,29 @@ export class AuthService {
         user: result,
         token,
         refreshToken,
+        logoutToken,
+        refreshExpiresAt,
       },
     };
   }
 
-  async signIn(signInDto: SignInDto): Promise<
+  async signIn(
+    signInDto: SignInDto,
+    metadata: SessionMetadata = {},
+  ): Promise<
     ApiResponse<{
       user: Omit<UserType, 'password' | 'refreshToken'>;
       token: string;
       refreshToken: string;
+      logoutToken: string;
+      refreshExpiresAt: Date;
     }>
   > {
     const user: UserType | null = await this.findUserByEmail(
       this.normalizeEmail(signInDto.email),
     );
 
-    if (!user || !user.password) {
+    if (!user || !user.password || user.bannedAt) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -108,9 +111,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const token: string = this.generateToken(user.id, user.email);
-    const refreshToken: string = this.generateRefreshToken(user.id, user.email);
-    await this.updateRefreshToken(user.id, refreshToken);
+    const { token, refreshToken, logoutToken, refreshExpiresAt } =
+      await this.sessions.create(user.id, metadata, user.password);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken: _, ...result } = user;
@@ -121,26 +123,29 @@ export class AuthService {
         user: result,
         token,
         refreshToken,
+        logoutToken,
+        refreshExpiresAt,
       },
     };
   }
 
-  async googleLogin(user: UserType): Promise<{
-    user: Omit<UserType, 'password' | 'refreshToken'>;
+  async googleLogin(
+    user: { id: number },
+    metadata: SessionMetadata = {},
+  ): Promise<{
     token: string;
     refreshToken: string;
+    logoutToken: string;
+    refreshExpiresAt: Date;
   }> {
-    const token: string = this.generateToken(user.id, user.email);
-    const refreshToken: string = this.generateRefreshToken(user.id, user.email);
-    await this.updateRefreshToken(user.id, refreshToken);
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, refreshToken: _, ...result } = user;
+    const { token, refreshToken, logoutToken, refreshExpiresAt } =
+      await this.sessions.create(user.id, metadata);
 
     return {
-      user: result,
       token,
       refreshToken,
+      logoutToken,
+      refreshExpiresAt,
     };
   }
 
@@ -227,71 +232,17 @@ export class AuthService {
     };
   }
 
-  private generateToken(userId: number, email: string): string {
-    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
-      sub: userId,
-      email,
-      type: 'access',
-    };
-    return this.jwtService.sign(payload);
+  refreshTokens(refreshToken: string) {
+    return this.sessions.refresh(refreshToken);
   }
 
-  private generateRefreshToken(userId: number, email: string): string {
-    const payload: Pick<JwtPayload, 'sub' | 'email' | 'type'> = {
-      sub: userId,
-      email,
-      type: 'refresh',
-    };
-    return this.jwtService.sign(payload, { expiresIn: '30d' });
-  }
-
-  async updateRefreshToken(
-    userId: number,
-    refreshToken: string,
+  async logout(
+    refreshToken?: string,
+    logoutCredential?: string,
   ): Promise<void> {
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: hashedRefreshToken },
-    });
-  }
-
-  async refreshTokens(
-    userId: number,
-    refreshToken: string,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user || !user.refreshToken) {
-      throw new UnauthorizedException('Access Denied');
-    }
-
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      user.refreshToken,
-    );
-
-    if (!refreshTokenMatches) {
-      throw new UnauthorizedException('Access Denied');
-    }
-
-    const newAccessToken = this.generateToken(user.id, user.email);
-    const newRefreshToken = this.generateRefreshToken(user.id, user.email);
-    await this.updateRefreshToken(user.id, newRefreshToken);
-
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    };
-  }
-
-  async logout(userId: number): Promise<void> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: null },
-    });
+    if (refreshToken) await this.sessions.logoutToken(refreshToken);
+    else if (logoutCredential)
+      await this.sessions.logoutCredentialToken(logoutCredential);
   }
 
   private withLegacyProfileRows<T extends { name: string }, FallbackRow>(

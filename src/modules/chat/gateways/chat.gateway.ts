@@ -16,7 +16,9 @@ import {
   ValidationPipe,
   Optional,
   ForbiddenException,
+  OnModuleDestroy,
 } from '@nestjs/common';
+import { AuthSessionService } from '../../auth/session/auth-session.service';
 import {
   ObservabilityService,
   OperationTimer,
@@ -51,18 +53,24 @@ import {
   }),
 )
 export class ChatGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements
+    OnGatewayInit,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
 
   private logger = new Logger('ChatGateway');
   private readonly presenceRefreshTimers = new Map<string, NodeJS.Timeout>();
+  private unsubscribeRevoked?: () => void;
 
   constructor(
     private readonly chatService: ChatService,
     private readonly socketAuth: ChatSocketAuthService,
     private readonly presence: ChatPresenceService,
+    private readonly sessions: AuthSessionService,
     @Optional()
     private readonly messageFanout?: ChatMessageFanoutService,
     @Optional()
@@ -76,50 +84,92 @@ export class ChatGateway
 
     this.presence.logMode();
 
+    this.unsubscribeRevoked?.();
+    this.unsubscribeRevoked = this.sessions.onRevoked((sid) => {
+      server.local.in(`auth-session:${sid}`).disconnectSockets(true);
+    });
+
     // Authentication middleware
     server.use((socket: AuthenticatedSocket, next) => {
       void this.socketAuth.authenticateSocket(socket, next);
     });
   }
 
+  onModuleDestroy(): void {
+    this.unsubscribeRevoked?.();
+    this.unsubscribeRevoked = undefined;
+    for (const timer of this.presenceRefreshTimers.values())
+      clearInterval(timer);
+    this.presenceRefreshTimers.clear();
+  }
+
   async handleConnection(client: AuthenticatedSocket) {
     const user = client.data.user;
-    if (!user) {
+    const sessionId = client.data.sessionId;
+    if (!user || !sessionId) {
       client.disconnect();
       return;
     }
 
-    this.logger.log(`User ${user.name} (${user.id}) connected: ${client.id}`);
+    if (!client.connected) return;
 
-    // Track online status
-    await this.presence.addOnlineUser(user.id, client.id);
-    this.startPresenceRefresh(client.id, user.id);
+    try {
+      await client.join(`auth-session:${sessionId}`);
+      if (!client.connected) return;
 
-    // Auto-join user's rooms
-    const [roomIds, contactIds] = await Promise.all([
-      this.chatService.getUserRoomIds(user.id),
-      this.chatService.getUserContactIds(user.id),
-    ]);
-    for (const roomId of roomIds) {
-      await client.join(`room:${roomId}`);
-    }
+      // Cover revocation during the handshake lookup, before the room existed.
+      await this.sessions.assertAccessSession(
+        sessionId,
+        user.id,
+        client.data.jti,
+      );
+      if (!client.connected) return;
 
-    // Broadcast online status once per online contact.
-    for (const contactId of contactIds) {
-      const memberSockets = await this.presence.getOnlineSockets(contactId);
-      for (const socketId of memberSockets) {
-        this.server.to(socketId).emit('user-online', {
-          userId: user.id,
-          name: user.name,
-          avatar: user.avatar,
-        });
+      this.logger.log(`User ${user.name} (${user.id}) connected: ${client.id}`);
+
+      // Track online status
+      await this.presence.addOnlineUser(user.id, client.id);
+      if (!client.connected) {
+        await this.presence.removeOnlineUser(user.id, client.id);
+        return;
       }
+      client.data.presenceRegistered = true;
+      this.startPresenceRefresh(client.id, user.id);
+
+      // Auto-join user's rooms
+      const [roomIds, contactIds] = await Promise.all([
+        this.chatService.getUserRoomIds(user.id),
+        this.chatService.getUserContactIds(user.id),
+      ]);
+      if (!client.connected) return;
+      for (const roomId of roomIds) {
+        await client.join(`room:${roomId}`);
+        if (!client.connected) return;
+      }
+
+      // Broadcast online status once per online contact.
+      for (const contactId of contactIds) {
+        const memberSockets = await this.presence.getOnlineSockets(contactId);
+        if (!client.connected) return;
+        for (const socketId of memberSockets) {
+          this.server.to(socketId).emit('user-online', {
+            userId: user.id,
+            name: user.name,
+            avatar: user.avatar,
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Connection error: ${this.getErrMsg(error)}`);
+      this.stopPresenceRefresh(client.id);
+      client.disconnect(true);
     }
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
     const user = client.data.user;
-    if (!user) return;
+    if (!user || !client.data.presenceRegistered) return;
+    client.data.presenceRegistered = false;
 
     this.stopPresenceRefresh(client.id);
 

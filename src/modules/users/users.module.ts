@@ -11,9 +11,10 @@ import { UserUploadsService } from './services/user-uploads.service';
 import { UsersController } from './controllers/users.controller';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { RecommendationsModule } from '../recommendations/recommendations.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [CloudinaryModule, RecommendationsModule],
+  imports: [CloudinaryModule, RecommendationsModule, AuthModule],
   controllers: [UsersController],
   providers: [
     UsersService,

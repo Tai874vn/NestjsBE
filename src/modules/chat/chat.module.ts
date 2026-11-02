@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule } from '../auth/auth.module';
 import { ChatGateway } from './gateways/chat.gateway';
 import { ChatMessageFanoutService } from './services/chat-message-fanout.service';
 import { ChatPresenceService } from './services/chat-presence.service';
@@ -12,17 +11,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ObservabilityModule } from '../../common/observability/observability.module';
 
 @Module({
-  imports: [
-    ObservabilityModule,
-    NotificationsModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-      }),
-    }),
-  ],
+  imports: [ObservabilityModule, NotificationsModule, AuthModule],
   controllers: [ChatController],
   providers: [
     ChatGateway,

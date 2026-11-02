@@ -27,6 +27,8 @@ model User {
   profileCompleted Boolean @default(false)
   candidateDiscoverable Boolean @default(true)
   refreshToken  String?
+  tokenVersion  Int      @default(0)
+  bannedAt      DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -53,10 +55,45 @@ model User {
   recommendationQuotaUsages RecommendationQuotaUsage[]
   hiringPosts     HiringPost[]      @relation("HiringPostRecruiter")
   hiringApplications HiringApplication[] @relation("HiringApplicationApplicant")
+  authSessions AuthSession[]
 
   @@index([role, profileCompleted, updatedAt, id])
   @@index([role, candidateDiscoverable, profileCompleted, updatedAt, id])
   @@map("users")
+}
+
+model AuthSession {
+  id           String   @id @db.Uuid
+  familyId     String   @unique @db.Uuid
+  userId       Int
+  tokenVersion Int
+  userAgent    String?
+  ip           String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens AuthRefreshToken[]
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("auth_sessions")
+}
+
+model AuthRefreshToken {
+  id           String   @id @db.Uuid
+  sessionId    String   @db.Uuid
+  tokenHash    String   @unique @db.Char(64)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  usedAt       DateTime?
+  revokedAt    DateTime?
+  replacedById String?  @db.Uuid
+  session      AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replacedBy   AuthRefreshToken? @relation("RefreshReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     AuthRefreshToken[] @relation("RefreshReplacement")
+
+  @@index([sessionId, expiresAt])
+  @@map("auth_refresh_tokens")
 }
 
 model UserSkill {

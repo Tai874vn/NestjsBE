@@ -1,0 +1,21 @@
+**/*.tsbuildinfo
+
+# Loại trừ toàn bộ thư mục test
+**/tests/**
+**/__tests__/**
+
+# Loại trừ các file có đuôi test/spec
+**/*.test.*
+**/*.spec.*
+
+dist/
+build/
+out/
+
+node_modules/
+
+.env
+.env.*
+!.env.example
+
+

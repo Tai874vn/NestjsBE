@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'crypto';
 
 const REALTIME_TICKET_TTL_SECONDS = 60;
 
@@ -7,9 +8,20 @@ const REALTIME_TICKET_TTL_SECONDS = 60;
 export class RealtimeTicketService {
   constructor(private readonly jwtService: JwtService) {}
 
-  issue(userId: number, email: string) {
+  issue(userId: number, sessionId: string, role: string) {
+    if (
+      !Number.isSafeInteger(userId) ||
+      userId <= 0 ||
+      typeof sessionId !== 'string' ||
+      !sessionId.trim() ||
+      typeof role !== 'string' ||
+      !role.trim()
+    ) {
+      throw new UnauthorizedException('Invalid authenticated session');
+    }
+
     const token = this.jwtService.sign(
-      { sub: userId, email, type: 'socket' },
+      { sub: userId, sid: sessionId, role, jti: randomUUID(), type: 'socket' },
       { expiresIn: `${REALTIME_TICKET_TTL_SECONDS}s` },
     );
 

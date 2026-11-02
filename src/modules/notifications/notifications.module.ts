@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
 import { ObservabilityModule } from '../../common/observability/observability.module';
 import { NotificationsController } from './controllers/notifications.controller';
 import { NotificationsGateway } from './gateways/notifications.gateway';
@@ -9,16 +8,7 @@ import { NotificationTemplateService } from './services/notification-template.se
 import { NotificationsService } from './services/notifications.service';
 
 @Module({
-  imports: [
-    ObservabilityModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-      }),
-    }),
-  ],
+  imports: [ObservabilityModule, AuthModule],
   controllers: [NotificationsController],
   providers: [
     NotificationPresenterService,

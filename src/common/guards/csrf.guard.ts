@@ -45,7 +45,7 @@ export class CsrfGuard implements CanActivate {
 
     const cookies = request.cookies ?? {};
     const hasAuthCookie = Boolean(
-      cookies.access_token || cookies.refresh_token,
+      cookies.access_token || cookies.refresh_token || cookies.logout_session,
     );
     const authorization = this.header(headers.authorization);
     if (!hasAuthCookie && authorization?.startsWith('Bearer ')) return true;

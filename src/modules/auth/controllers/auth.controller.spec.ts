@@ -1,177 +1,60 @@
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 
-describe('AuthController logout', () => {
-  const authService = {
-    signIn: jest.fn(),
-    verifyRefreshToken: jest.fn(),
-    refreshTokens: jest.fn(),
-    logout: jest.fn(),
-    googleLogin: jest.fn(),
-  };
-
-  function createController() {
-    return new AuthController(authService as any);
-  }
-
-  function createResponse() {
-    return {
-      cookie: jest.fn(),
-      clearCookie: jest.fn(),
-      redirect: jest.fn(),
-      headersSent: false,
-      writableEnded: false,
-    };
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env.NODE_ENV = 'test';
-    process.env.JWT_EXPIRES_IN = '15m';
+describe('AuthController session cookies', () => {
+  const service = {signIn:jest.fn(),signUp:jest.fn(),refreshTokens:jest.fn(),logout:jest.fn(),googleLogin:jest.fn()};
+  const response = () => ({cookie:jest.fn(),clearCookie:jest.fn(),redirect:jest.fn(),headersSent:false,writableEnded:false});
+  beforeEach(()=>{jest.clearAllMocks();process.env.NODE_ENV='test';process.env.GLOBAL_PREFIX='api';process.env.JWT_EXPIRES_IN='10m';});
+  it('passes only the opaque refresh token to canonical rotation',async()=>{
+    service.refreshTokens.mockResolvedValue({accessToken:'access',refreshToken:'new-refresh',logoutToken:'logout'});
+    const res=response();
+    await new AuthController(service as never).refresh({cookies:{refresh_token:'old'}} as any,res as any);
+    expect(service.refreshTokens).toHaveBeenCalledWith('old');
+    expect(res.cookie).toHaveBeenCalledWith('refresh_token','new-refresh',expect.objectContaining({path:'/api/auth/refresh',httpOnly:true}));
   });
-
-  it('revokes the refresh token and clears auth cookies without requiring an access-token user', async () => {
-    authService.verifyRefreshToken.mockReturnValue({ sub: 7, email: 'admin@example.com', type: 'refresh' });
-    const response = createResponse();
-
-    const result = await createController().logout(
-      { cookies: { refresh_token: 'refresh-token' } } as any,
-      response as any,
-    );
-
-    expect(authService.verifyRefreshToken).toHaveBeenCalledWith('refresh-token');
-    expect(authService.logout).toHaveBeenCalledWith(7);
-    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.objectContaining({ path: '/' }));
-    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.objectContaining({ path: '/' }));
-    expect(response.clearCookie).toHaveBeenCalledWith(
-      'csrf_token',
-      expect.objectContaining({ path: '/', httpOnly: false }),
-    );
-    expect(result).toEqual({ message: 'Logged out successfully' });
+  it('keeps cookies when refresh storage is unavailable',async()=>{
+    service.refreshTokens.mockRejectedValue(new ServiceUnavailableException());
+    const res=response();
+    await expect(new AuthController(service as never).refresh({cookies:{refresh_token:'old'}} as any,res as any)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(res.clearCookie).not.toHaveBeenCalled();
   });
-
-  it('still clears browser cookies when the refresh token is already invalid', async () => {
-    authService.verifyRefreshToken.mockImplementation(() => {
-      throw new Error('expired');
-    });
-    const response = createResponse();
-
-    await createController().logout({ cookies: { refresh_token: 'bad-token' } } as any, response as any);
-
-    expect(authService.logout).not.toHaveBeenCalled();
-    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  it('clears both legacy and narrow refresh paths on terminal authentication failure',async()=>{
+    service.refreshTokens.mockRejectedValue(new UnauthorizedException());
+    const res=response();
+    await expect(new AuthController(service as never).refresh({cookies:{refresh_token:'old'}} as any,res as any)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(res.clearCookie).toHaveBeenCalledWith('refresh_token',expect.objectContaining({path:'/api/auth/refresh'}));
+    expect(res.clearCookie).toHaveBeenCalledWith('refresh_token',expect.objectContaining({path:'/'}));
   });
-
-  it('clears browser cookies when refresh token verification fails', async () => {
-    authService.verifyRefreshToken.mockImplementation(() => {
-      throw new Error('invalid token');
-    });
-    const response = createResponse();
-
-    await expect(
-      createController().refresh(
-        { cookies: { refresh_token: 'bad-token' } } as any,
-        response as any,
-      ),
-    ).rejects.toThrow('invalid token');
-
-    expect(authService.refreshTokens).not.toHaveBeenCalled();
-    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  it('uses the scoped logout credential when refresh cookie is not sent to the legacy route',async()=>{
+    const res=response();
+    await new AuthController(service as never).logout({cookies:{logout_session:'logout'}} as any,res as any);
+    expect(service.logout).toHaveBeenCalledWith(undefined,'logout');
+    expect(res.clearCookie).toHaveBeenCalledWith('logout_session',expect.objectContaining({path:'/api/auth/logout'}));
   });
-
-  it('clears browser cookies when the stored refresh token no longer matches', async () => {
-    authService.verifyRefreshToken.mockReturnValue({ sub: 7, email: 'admin@example.com', type: 'refresh' });
-    authService.refreshTokens.mockRejectedValue(new Error('Access Denied'));
-    const response = createResponse();
-
-    await expect(
-      createController().refresh(
-        { cookies: { refresh_token: 'stale-token' } } as any,
-        response as any,
-      ),
-    ).rejects.toThrow('Access Denied');
-
-    expect(authService.refreshTokens).toHaveBeenCalledWith(7, 'stale-token');
-    expect(response.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object));
-    expect(response.clearCookie).toHaveBeenCalledWith('csrf_token', expect.any(Object));
+  it('uses refresh cookie at the path-compatible logout route',async()=>{
+    await new AuthController(service as never).logout({cookies:{refresh_token:'refresh'}} as any,response() as any);
+    expect(service.logout).toHaveBeenCalledWith('refresh',undefined);
   });
-
-  it('does not set Google auth cookies after a guard already committed the response', async () => {
-    const response = {
-      ...createResponse(),
-      headersSent: true,
-    };
-
-    await createController().googleAuthRedirect(
-      { user: { id: 7, email: 'user@example.com' } } as any,
-      response as any,
-    );
-
-    expect(authService.googleLogin).not.toHaveBeenCalled();
-    expect(response.cookie).not.toHaveBeenCalled();
-    expect(response.redirect).not.toHaveBeenCalled();
+  it('does not issue Google cookies after a guard has sent the response',async()=>{
+    const res={...response(),headersSent:true};
+    await new AuthController(service as never).googleAuthRedirect({user:{id:7}} as any,res as any);
+    expect(service.googleLogin).not.toHaveBeenCalled();
+    expect(res.cookie).not.toHaveBeenCalled();
   });
-
-  it('sets Google auth cookies and redirects when the callback succeeds', async () => {
-    const response = createResponse();
-    authService.googleLogin.mockResolvedValue({
-      token: 'access-token',
-      refreshToken: 'refresh-token',
-    });
-    process.env.FRONTEND_URL = 'https://example.test';
-
-    await createController().googleAuthRedirect(
-      { user: { id: 7, email: 'user@example.com' } } as any,
-      response as any,
-    );
-
-    expect(authService.googleLogin).toHaveBeenCalledWith({
-      id: 7,
-      email: 'user@example.com',
-    });
-    expect(response.cookie).toHaveBeenCalledWith(
-      'access_token',
-      'access-token',
-      expect.any(Object),
-    );
-    expect(response.cookie).toHaveBeenCalledWith(
-      'refresh_token',
-      'refresh-token',
-      expect.any(Object),
-    );
-    expect(response.cookie).toHaveBeenCalledWith(
-      'csrf_token',
-      expect.any(String),
-      expect.any(Object),
-    );
-    expect(response.redirect).toHaveBeenCalledWith('https://example.test/auth/callback');
+  it('sets secure scoped cookies and passes device metadata after Google login',async()=>{
+    process.env.NODE_ENV='production';process.env.FRONTEND_URL='https://example.test';
+    service.googleLogin.mockResolvedValue({token:'access',refreshToken:'refresh',logoutToken:'logout'});
+    const res=response();
+    await new AuthController(service as never).googleAuthRedirect({user:{id:7},ip:'127.0.0.1',headers:{'user-agent':'fixture'}} as any,res as any);
+    expect(service.googleLogin).toHaveBeenCalledWith({id:7},{ip:'127.0.0.1',userAgent:'fixture'});
+    expect(res.cookie).toHaveBeenCalledWith('refresh_token','refresh',expect.objectContaining({secure:true,httpOnly:true,sameSite:'lax',path:'/api/auth/refresh'}));
+    expect(res.redirect).toHaveBeenCalledWith('https://example.test/auth/callback');
   });
-
-  it('uses JWT_EXPIRES_IN for the access-token cookie lifetime', async () => {
-    const response = createResponse();
-    process.env.JWT_EXPIRES_IN = '2h';
-    authService.signIn.mockResolvedValue({
-      message: 'Login successful',
-      content: {
-        token: 'access-token',
-        refreshToken: 'refresh-token',
-        user: { id: 7, email: 'user@example.com' },
-      },
-    });
-
-    await createController().signIn(
-      { email: 'user@example.com', password: 'password123' } as any,
-      response as any,
-    );
-
-    expect(response.cookie).toHaveBeenCalledWith(
-      'access_token',
-      'access-token',
-      expect.objectContaining({ maxAge: 2 * 60 * 60 * 1000 }),
-    );
+  it('uses configured access lifetime without returning tokens in JSON',async()=>{
+    service.signIn.mockResolvedValue({message:'ok',content:{user:{id:7},token:'access',refreshToken:'refresh',logoutToken:'logout'}});
+    const res=response();
+    const result=await new AuthController(service as never).signIn({email:'a@example.test',password:'password'} as any,res as any);
+    expect(res.cookie).toHaveBeenCalledWith('access_token','access',expect.objectContaining({maxAge:600000}));
+    expect(result).toEqual({message:'ok',content:{user:{id:7}}});
   });
 });
