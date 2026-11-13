@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { loadJobTaxonomy } from './job-taxonomy';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -32,7 +33,7 @@ async function main() {
       birthDay: '1990-01-01',
       gender: 'other',
       role: 'admin',
-      skill: JSON.stringify(['Project Management', 'Backend Development']),
+      skill: JSON.stringify(['project management', 'Node.js']),
       certification: JSON.stringify(['AWS Cloud Practitioner']),
       avatar: 'https://i.pravatar.cc/300?img=12',
     },
@@ -47,7 +48,7 @@ async function main() {
       birthDay: '1994-03-18',
       gender: 'male',
       role: 'user',
-      skill: JSON.stringify(['UI Design', 'Figma', 'Brand Identity']),
+      skill: JSON.stringify(['graphic design', 'Figma', 'Adobe Illustrator']),
       certification: JSON.stringify(['Google UX Design']),
       avatar: 'https://i.pravatar.cc/300?img=33',
     },
@@ -62,7 +63,7 @@ async function main() {
       birthDay: '1996-08-09',
       gender: 'female',
       role: 'user',
-      skill: JSON.stringify(['React', 'Next.js', 'NestJS']),
+      skill: JSON.stringify(['React', 'TypeScript', 'Node.js']),
       certification: JSON.stringify(['Meta Front-End Developer']),
       avatar: 'https://i.pravatar.cc/300?img=47',
     },
@@ -77,77 +78,57 @@ async function main() {
       birthDay: '1992-11-24',
       gender: 'male',
       role: 'user',
-      skill: JSON.stringify(['SEO', 'Copywriting', 'Content Strategy']),
+      skill: JSON.stringify([
+        'search engine optimisation',
+        'perform copywriting',
+        'content marketing strategy',
+      ]),
       certification: JSON.stringify(['HubSpot Content Marketing']),
       avatar: 'https://i.pravatar.cc/300?img=52',
     },
   });
 
-  const design = await prisma.category.create({
-    data: {
-      name: 'Design',
-      subcategories: {
-        create: [
-          {
-            name: 'Logo Design',
-            image:
-              'https://images.unsplash.com/photo-1634942537034-2531766767d1',
-          },
-          {
-            name: 'UI/UX Design',
-            image:
-              'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c',
-          },
-        ],
+  // Job categories: the 37 career fields with their ISCO-08 unit groups (see prisma/job-taxonomy.ts).
+  const taxonomy = loadJobTaxonomy();
+  for (const category of taxonomy.categories) {
+    await prisma.category.create({
+      data: {
+        name: category.name,
+        subcategories: {
+          create: category.subcategories.map((sub) => ({ name: sub.name })),
+        },
       },
-    },
-    include: { subcategories: true },
+    });
+  }
+  const subcategories = await prisma.subcategory.findMany({
+    include: { category: true },
   });
-
-  const development = await prisma.category.create({
-    data: {
-      name: 'Development',
-      subcategories: {
-        create: [
-          {
-            name: 'Frontend Development',
-            image:
-              'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
-          },
-          {
-            name: 'Backend Development',
-            image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31',
-          },
-        ],
-      },
-    },
-    include: { subcategories: true },
-  });
-
-  const marketing = await prisma.category.create({
-    data: {
-      name: 'Marketing',
-      subcategories: {
-        create: [
-          {
-            name: 'SEO',
-            image:
-              'https://images.unsplash.com/photo-1460925895917-afdab827c52f',
-          },
-          {
-            name: 'Content Writing',
-            image:
-              'https://images.unsplash.com/photo-1455390582262-044cdead277a',
-          },
-        ],
-      },
-    },
-    include: { subcategories: true },
-  });
-
-  const [logoDesign, uiDesign] = design.subcategories;
-  const [frontendDevelopment, backendDevelopment] = development.subcategories;
-  const [seo, contentWriting] = marketing.subcategories;
+  const subcategory = (categoryName: string, name: string) => {
+    const found = subcategories.find(
+      (sub) => sub.category.name === categoryName && sub.name === name,
+    );
+    if (!found)
+      throw new Error(`Missing subcategory ${categoryName} / ${name}`);
+    return found;
+  };
+  const logoDesign = subcategory('Design', 'Graphic and multimedia designers');
+  const uiDesign = logoDesign;
+  const frontendDevelopment = subcategory(
+    'Software development',
+    'Web and multimedia developers',
+  );
+  const backendDevelopment = subcategory(
+    'Software development',
+    'Software developers',
+  );
+  const seo = subcategory(
+    'Marketing and PR',
+    'Advertising and marketing professionals',
+  );
+  const contentWriting = subcategory(
+    'Media and arts',
+    'Authors and related writers',
+  );
 
   const jobs = await Promise.all([
     prisma.job.create({
@@ -308,7 +289,7 @@ async function main() {
   });
 
   console.log(
-    `Seeded ${4} users, ${3} categories, ${6} subcategories, ${jobs.length} jobs, ${4} comments, ${3} hires, and ${1} chat room.`,
+    `Seeded ${4} users, ${taxonomy.categories.length} categories, ${subcategories.length} subcategories, ${jobs.length} jobs, ${4} comments, ${3} hires, and ${1} chat room.`,
   );
   console.log('Demo login: admin@example.com / password123');
 }

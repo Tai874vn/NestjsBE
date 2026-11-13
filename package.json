@@ -57,6 +57,7 @@
     "db:seed:hiring": "ts-node src/tools/hiring-posts-fixtures.ts",
     "benchmark:candidates": "ts-node src/tools/benchmark-candidates.ts",
     "db:seed:feed": "ts-node prisma/seed-feed.ts",
+    "db:taxonomy": "ts-node prisma/sync-job-taxonomy.ts",
     "db:seed:professional": "node ./node_modules/ts-node/dist/bin.js prisma/seed-professional.ts",
     "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
