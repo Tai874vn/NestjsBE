@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { UserResumeService } from './user-resume.service';
@@ -21,14 +22,31 @@ describe('UserResumeService', () => {
       predictResumeSeniority: jest.fn(),
     };
     const profileNormalizer = new UserProfileNormalizerService();
+    // Stands in for the AI service dictionary: "React" and "reactjs" are one skill, "Reakt" is unknown.
+    const skillService = {
+      requireKnownSkills: jest.fn((names: string[]) => {
+        const unknown = names.filter((name) => name === 'Reakt');
+        if (unknown.length) {
+          throw new BadRequestException(
+            `Choose skills from the list. Not recognised: ${unknown.join(', ')}`,
+          );
+        }
+        return names.map((name) =>
+          ['react', 'reactjs'].includes(name.toLowerCase())
+            ? { id: 'onet:react', name: 'React' }
+            : { id: `skill:${name.toLowerCase()}`, name },
+        );
+      }),
+    };
     const service = new UserResumeService(
       prisma as any,
       redisService as any,
       aiClient as any,
       profileNormalizer,
+      skillService as any,
     );
 
-    return { service, prisma, redisService, aiClient };
+    return { service, prisma, redisService, aiClient, skillService };
   };
 
   it('stores extracted resume data for the current user', async () => {
@@ -66,10 +84,14 @@ describe('UserResumeService', () => {
       schemaVersion: ' resume-atlas-v1 ',
     });
 
+    const savedData = {
+      ...resumeData,
+      SkillIds: ['skill:python', 'skill:sql', 'skill:git', 'skill:linux'],
+    };
     expect(prisma.userResume.upsert).toHaveBeenCalledWith({
       where: { userId: 1 },
       update: {
-        data: resumeData,
+        data: savedData,
         sourceFileName: 'resume.pdf',
         schemaVersion: 'resume-atlas-v1',
         predictedSeniority: null,
@@ -80,7 +102,7 @@ describe('UserResumeService', () => {
       },
       create: {
         userId: 1,
-        data: resumeData,
+        data: savedData,
         sourceFileName: 'resume.pdf',
         schemaVersion: 'resume-atlas-v1',
       },
@@ -181,7 +203,7 @@ describe('UserResumeService', () => {
       data: {
         Category: 'Backend Engineer',
         Role: 'Frontend Engineer',
-        Industry: 'Software',
+        Industry: 'Software development',
         YearsExperience: '1',
         Skills: 'Python, FastAPI',
         Education: 'BSc',
@@ -227,7 +249,8 @@ describe('UserResumeService', () => {
       resume: {
         role: 'Frontend Engineer',
         years_experience: '1',
-        industry: 'Software',
+        industry: 'Software development',
+        years_in_field: 1,
         education: 'BSc',
         skills: ['Docker', 'Python', 'FastAPI'],
       },
@@ -267,5 +290,96 @@ describe('UserResumeService', () => {
     await expect(service.predictResumeSeniority(1)).rejects.toThrow(
       'Resume for user ID 1 not found',
     );
+  });
+
+  it('saves skills under their dictionary names and rejects unknown ones', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockImplementation((args) => Promise.resolve(args.create));
+
+    const saved = await service.importResume(1, {
+      data: { Skills: 'reactjs, React, SQL' },
+    });
+    expect(saved.content.data).toEqual({
+      Skills: 'React, SQL',
+      SkillIds: ['onet:react', 'skill:sql'],
+    });
+
+    await expect(
+      service.importResume(1, { data: { Skills: 'SQL, Reakt' } }),
+    ).rejects.toThrow('Not recognised: Reakt');
+  });
+
+  it('rejects a field outside the list and incomplete jobs', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+
+    await expect(
+      service.importResume(1, { data: { Industry: 'Software' } }),
+    ).rejects.toThrow('Choose your field from the list.');
+    await expect(
+      service.importResume(1, {
+        data: {
+          Industry: 'QA',
+          Jobs: [{ title: 'Tester', field: 'QA', start: '2022-05', end: '2021-01' }],
+        },
+      }),
+    ).rejects.toThrow('Job 1: the end month is before the start month.');
+    expect(prisma.userResume.upsert).not.toHaveBeenCalled();
+  });
+
+  it('needs the field and years in it before predicting seniority', async () => {
+    const { service, prisma, aiClient } = createService();
+    const userWith = (data: Record<string, unknown>) => ({
+      id: 1,
+      headline: null,
+      skill: null,
+      profileSkills: [],
+      resume: { data },
+    });
+
+    prisma.user.findUnique.mockResolvedValue(userWith({ Skills: 'SQL' }));
+    await expect(service.predictResumeSeniority(1)).rejects.toThrow(
+      'Choose your field',
+    );
+
+    prisma.user.findUnique.mockResolvedValue(
+      userWith({ Industry: 'QA', Specialty: 'Manual testing' }),
+    );
+    await expect(service.predictResumeSeniority(1)).rejects.toThrow(
+      'Add jobs with dates in your field',
+    );
+    expect(aiClient.predictResumeSeniority).not.toHaveBeenCalled();
+  });
+
+  it('counts years in the field from dated jobs', async () => {
+    const { service, prisma, aiClient } = createService();
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      headline: null,
+      skill: null,
+      profileSkills: [],
+      resume: {
+        data: {
+          Industry: 'QA',
+          Specialty: 'Automation',
+          Jobs: [
+            { title: 'Store clerk', field: 'Sales and business development', start: '2015-01', end: '2019-01', current: false, description: '' },
+            { title: 'QA Engineer', field: 'QA', start: '2020-01', end: '2023-01', current: false, description: '' },
+          ],
+        },
+      },
+    });
+    aiClient.predictResumeSeniority.mockResolvedValue({
+      label: 'Mid', confidence: 0.6, probabilities: {}, features: {}, model: 'm', elapsed_ms: 1,
+    });
+    prisma.userResume.update.mockResolvedValue({});
+
+    await service.predictResumeSeniority(1);
+
+    const sent = aiClient.predictResumeSeniority.mock.calls[0][0].resume;
+    expect(sent.years_in_field).toBe(3);
+    expect(sent.specialty).toBe('Automation');
+    expect(sent.jobs).toHaveLength(2);
   });
 });

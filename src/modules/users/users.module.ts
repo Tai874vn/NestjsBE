@@ -12,9 +12,10 @@ import { UsersController } from './controllers/users.controller';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { RecommendationsModule } from '../recommendations/recommendations.module';
 import { AuthModule } from '../auth/auth.module';
+import { SkillModule } from '../skill/skill.module';
 
 @Module({
-  imports: [CloudinaryModule, RecommendationsModule, AuthModule],
+  imports: [CloudinaryModule, RecommendationsModule, AuthModule, SkillModule],
   controllers: [UsersController],
   providers: [
     UsersService,

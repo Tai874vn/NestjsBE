@@ -12,6 +12,13 @@ import {
   UploadedResumeFileMetadata,
 } from '../dto/import-resume.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
+import { SkillService } from '../../skill/services/skill.service';
+import { isCareerField } from '../../../common/career-fields';
+import {
+  cleanResumeJobs,
+  resumeCareerProblems,
+  yearsInField,
+} from './resume-career';
 
 @Injectable()
 export class UserResumeService {
@@ -20,6 +27,7 @@ export class UserResumeService {
     private readonly redisService: RedisService,
     private readonly aiClient: AiRecommendationClient,
     private readonly profileNormalizer: UserProfileNormalizerService,
+    private readonly skillService: SkillService,
   ) {}
 
   async importResume(userId: number, dto: ImportResumeDto) {
@@ -30,11 +38,12 @@ export class UserResumeService {
     );
     const schemaVersion =
       this.profileNormalizer.trimOptional(dto.schemaVersion) ?? 'v1';
+    const data = await this.normalizeResumeData(dto.data);
 
     const resume = await this.prisma.userResume.upsert({
       where: { userId },
       update: {
-        data: dto.data as Prisma.InputJsonValue,
+        data: data as Prisma.InputJsonValue,
         sourceFileName,
         schemaVersion,
         predictedSeniority: null,
@@ -45,7 +54,7 @@ export class UserResumeService {
       },
       create: {
         userId,
-        data: dto.data as Prisma.InputJsonValue,
+        data: data as Prisma.InputJsonValue,
         sourceFileName,
         schemaVersion,
       },
@@ -81,6 +90,19 @@ export class UserResumeService {
     const resume = user.resume;
     if (!resume) {
       throw new NotFoundException(`Resume for user ID ${userId} not found`);
+    }
+
+    // The preview judges people within their own field, so it needs the field and years in it.
+    const resumeData = this.asRecord(resume.data);
+    if (!isCareerField(resumeData.Industry)) {
+      throw new BadRequestException(
+        'Choose your field in the resume before requesting AI seniority prediction',
+      );
+    }
+    if (yearsInField(resumeData) === null) {
+      throw new BadRequestException(
+        'Add jobs with dates in your field, or your years of experience, before requesting AI seniority prediction',
+      );
     }
 
     const resumePayload = this.buildResumeSeniorityPayload({
@@ -198,6 +220,40 @@ export class UserResumeService {
     }
   }
 
+  /**
+   * Checks the career fields and puts skills under their dictionary names ("reactjs" -> "React").
+   * Unknown skills are rejected so the model only ever sees skills it was trained with.
+   */
+  private async normalizeResumeData(
+    raw: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const problems = resumeCareerProblems(raw);
+    if (problems.length) {
+      throw new BadRequestException(problems.join(' '));
+    }
+    const fieldOfStudy = raw.FieldOfStudy;
+    if (typeof fieldOfStudy === 'string' && fieldOfStudy.trim()) {
+      const { content } = await this.skillService.fieldsOfStudy();
+      if (!content.some((field) => field.code === fieldOfStudy.trim())) {
+        throw new BadRequestException(
+          'Choose your field of study from the list.',
+        );
+      }
+    }
+    const data: Record<string, unknown> = { ...raw };
+    if (raw.Jobs !== undefined && raw.Jobs !== null) {
+      data.Jobs = cleanResumeJobs(raw.Jobs);
+    }
+    const names = this.stringList(raw.Skills);
+    if (names.length) {
+      const known = await this.skillService.requireKnownSkills(names);
+      const unique = new Map(known.map((skill) => [skill.id, skill]));
+      data.Skills = [...unique.values()].map((skill) => skill.name).join(', ');
+      data.SkillIds = [...unique.keys()];
+    }
+    return data;
+  }
+
   private buildResumeSeniorityPayload(user: {
     headline?: string | null;
     skill?: string | null;
@@ -231,6 +287,14 @@ export class UserResumeService {
         data.YearsOfExperience,
       ),
       industry: this.firstText(data.industry, data.Industry),
+      specialty: this.firstText(data.specialty, data.Specialty),
+      // Free text where seniority evidence is described (leading, mentoring, tools used).
+      summary: this.firstText(data.summary, data.Summary),
+      experience: this.firstText(data.experience, data.Experience),
+      years_in_field: yearsInField(data),
+      jobs: cleanResumeJobs(data.Jobs),
+      degree: this.firstText(data.Degree),
+      field_of_study: this.firstText(data.FieldOfStudy),
       education: this.firstText(data.education, data.Education),
       skills,
     });

@@ -13,6 +13,7 @@ import {
 import { ProfileCompletionService } from './profile-completion.service';
 import { UserLegacyProfileSyncService } from './user-legacy-profile-sync.service';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
+import { SkillService } from '../../skill/services/skill.service';
 
 @Injectable()
 export class UserProfileService {
@@ -22,6 +23,7 @@ export class UserProfileService {
     private readonly profileCompletionService: ProfileCompletionService,
     private readonly legacyProfileSyncService: UserLegacyProfileSyncService,
     private readonly profileNormalizer: UserProfileNormalizerService,
+    private readonly skillService: SkillService,
   ) {}
 
   async getPublicProfile(id: number) {
@@ -275,10 +277,18 @@ export class UserProfileService {
       throw new BadRequestException('Skill name is required');
     }
 
-    const uniqueNames = new Set(
-      skills.map((skill) => skill.name.toLowerCase()),
+    // Every skill must be in the dictionary; it is saved under its standard name ("reactjs" -> "React").
+    const known = await this.skillService.requireKnownSkills(
+      skills.map((skill) => skill.name),
     );
-    if (uniqueNames.size !== skills.length) {
+    const canonical = skills.map((skill, index) => ({
+      ...skill,
+      name: known[index].name,
+      skillId: known[index].id,
+    }));
+
+    const uniqueIds = new Set(canonical.map((skill) => skill.skillId));
+    if (uniqueIds.size !== canonical.length) {
       throw new BadRequestException('Duplicate skills are not allowed');
     }
 
@@ -287,7 +297,7 @@ export class UserProfileService {
     await this.prisma.$transaction([
       this.prisma.userSkill.deleteMany({ where: { userId } }),
       this.prisma.userSkill.createMany({
-        data: skills.map((skill) => ({
+        data: canonical.map((skill) => ({
           userId,
           ...skill,
         })),

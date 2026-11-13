@@ -45,6 +45,28 @@ export interface AiSeniorityPredictionResponse {
   elapsed_ms: number;
 }
 
+/** A skill from the AI service's ESCO/O*NET dictionary. */
+export interface AiSkillSummary {
+  id: string;
+  name: string;
+  kind: string;
+  reuse: string | null;
+  fields: Record<string, number>;
+  hot: boolean;
+}
+
+export interface AiFoundSkill extends AiSkillSummary {
+  matched: string[];
+  count: number;
+}
+
+export interface AiFieldOfStudy {
+  code: string;
+  name: string;
+  broad: string;
+  narrow: string;
+}
+
 @Injectable()
 export class AiRecommendationClient {
   private readonly baseUrl: string;
@@ -97,18 +119,67 @@ export class AiRecommendationClient {
     );
   }
 
-  private async post<T>(path: string, payload: unknown): Promise<T> {
+  async searchSkills(
+    query: string,
+    field?: string,
+    limit = 10,
+  ): Promise<AiSkillSummary[]> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    if (field) params.set('field', field);
+    const response = await this.get<{ skills: AiSkillSummary[] }>(
+      `/api/v1/skills/search?${params.toString()}`,
+    );
+    return response.skills;
+  }
+
+  async extractSkills(text: string): Promise<AiFoundSkill[]> {
+    const response = await this.post<{ skills: AiFoundSkill[] }>(
+      '/api/v1/skills/extract',
+      { text },
+    );
+    return response.skills;
+  }
+
+  /** One result per name, in order; null when the name is not a dictionary skill. */
+  async resolveSkills(names: string[]): Promise<Array<AiSkillSummary | null>> {
+    const response = await this.post<{
+      skills: Array<AiSkillSummary | null>;
+    }>('/api/v1/skills/resolve', { names });
+    return response.skills;
+  }
+
+  async fieldsOfStudy(): Promise<AiFieldOfStudy[]> {
+    const response = await this.get<{ fields: AiFieldOfStudy[] }>(
+      '/api/v1/fields-of-study',
+    );
+    return response.fields;
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'GET' });
+  }
+
+  private post<T>(path: string, payload: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  private async request<T>(
+    path: string,
+    init: { method: 'GET' | 'POST'; body?: string },
+  ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
+        ...init,
         headers: {
           'Content-Type': 'application/json',
           'X-AI-Service-Key': this.serviceApiKey,
         },
-        body: JSON.stringify(payload),
         signal: controller.signal,
       });
 

@@ -100,6 +100,8 @@ model UserSkill {
   id        Int      @id @default(autoincrement())
   userId    Int
   name      String
+  /// Id in the AI service's skill dictionary (ESCO or O*NET), e.g. "onet:react". Null for skills saved before it.
+  skillId   String?
   level     String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())

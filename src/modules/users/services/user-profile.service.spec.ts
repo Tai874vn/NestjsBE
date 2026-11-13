@@ -42,12 +42,29 @@ describe('UserProfileService', () => {
     const legacyProfileSyncService = new UserLegacyProfileSyncService(
       prisma as any,
     );
+    // Stands in for the AI service dictionary: any spelling of React resolves to it; "Reakt" is unknown.
+    const skillService = {
+      requireKnownSkills: jest.fn((names: string[]) => {
+        const unknown = names.filter((name) => name === 'Reakt');
+        if (unknown.length) {
+          throw new BadRequestException(
+            `Choose skills from the list. Not recognised: ${unknown.join(', ')}`,
+          );
+        }
+        return names.map((name) =>
+          ['react', 'reactjs', 'react.js'].includes(name.toLowerCase())
+            ? { id: 'onet:react', name: 'React' }
+            : { id: `skill:${name.toLowerCase()}`, name },
+        );
+      }),
+    };
     const service = new UserProfileService(
       prisma as any,
       redisService as any,
       profileCompletionService,
       legacyProfileSyncService,
       profileNormalizer,
+      skillService as any,
     );
 
     return { service, prisma, redisService };
@@ -281,9 +298,23 @@ describe('UserProfileService', () => {
 
     expect(prisma.userSkill.createMany).toHaveBeenCalledWith({
       data: [
-        { userId: 1, name: 'React', level: undefined, sortOrder: 0 },
-        { userId: 1, name: 'NestJS', level: undefined, sortOrder: 1 },
+        { userId: 1, name: 'React', skillId: 'onet:react', level: undefined, sortOrder: 0 },
+        { userId: 1, name: 'NestJS', skillId: 'skill:nestjs', level: undefined, sortOrder: 1 },
       ],
     });
+  });
+
+  it('saves skills under their dictionary names and rejects unknown or repeated ones', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+
+    await expect(
+      service.replaceProfileSkills(1, { skills: [{ name: 'SQL' }, { name: 'Reakt' }] }),
+    ).rejects.toThrow('Not recognised: Reakt');
+    // "reactjs" and "React" are the same dictionary skill.
+    await expect(
+      service.replaceProfileSkills(1, { skills: [{ name: 'reactjs' }, { name: 'React' }] }),
+    ).rejects.toThrow('Duplicate skills are not allowed');
+    expect(prisma.userSkill.createMany).not.toHaveBeenCalled();
   });
 });
