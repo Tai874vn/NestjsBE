@@ -1,4 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ProfileCompletionService } from './profile-completion.service';
 import { UserLegacyProfileSyncService } from './user-legacy-profile-sync.service';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
@@ -67,7 +70,7 @@ describe('UserProfileService', () => {
       skillService as any,
     );
 
-    return { service, prisma, redisService };
+    return { service, prisma, redisService, skillService };
   };
 
   it('rejects duplicate profile certifications case-insensitively', async () => {
@@ -316,5 +319,32 @@ describe('UserProfileService', () => {
       service.replaceProfileSkills(1, { skills: [{ name: 'reactjs' }, { name: 'React' }] }),
     ).rejects.toThrow('Duplicate skills are not allowed');
     expect(prisma.userSkill.createMany).not.toHaveBeenCalled();
+  });
+
+  it('still saves skills when the AI service is unavailable, without dictionary ids', async () => {
+    const { service, prisma, skillService } = createService();
+    skillService.requireKnownSkills.mockImplementation(() => {
+      throw new ServiceUnavailableException('AI service is unavailable');
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      skill: null,
+      certification: null,
+      profileSkills: [],
+      profileCertifications: [],
+      portfolioItems: [],
+    });
+    prisma.$transaction.mockResolvedValue([]);
+    prisma.userSkill.findMany.mockResolvedValue([]);
+    prisma.userCertification.findMany.mockResolvedValue([]);
+    prisma.user.update.mockResolvedValue({ profileCompleted: true });
+
+    await service.replaceProfileSkills(1, { skills: [{ name: 'React' }] });
+
+    expect(prisma.userSkill.createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: 1, name: 'React', skillId: null, level: undefined, sortOrder: 0 },
+      ],
+    });
   });
 });

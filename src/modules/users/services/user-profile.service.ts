@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
@@ -257,6 +258,28 @@ export class UserProfileService {
     return user;
   }
 
+  /**
+   * Standard dictionary names and ids ("reactjs" -> React). Saving never depends on the AI service: when it is
+   * unavailable the names are kept as chosen (the picker only offers dictionary skills) with no id yet.
+   */
+  private async toDictionarySkills<T extends { name: string }>(
+    skills: T[],
+  ): Promise<Array<T & { skillId: string | null }>> {
+    try {
+      const known = await this.skillService.requireKnownSkills(
+        skills.map((skill) => skill.name),
+      );
+      return skills.map((skill, index) => ({
+        ...skill,
+        name: known[index].name,
+        skillId: known[index].id,
+      }));
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      return skills.map((skill) => ({ ...skill, skillId: null }));
+    }
+  }
+
   async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
     const skills = dto.skills
       .flatMap((skill) =>
@@ -278,16 +301,11 @@ export class UserProfileService {
     }
 
     // Every skill must be in the dictionary; it is saved under its standard name ("reactjs" -> "React").
-    const known = await this.skillService.requireKnownSkills(
-      skills.map((skill) => skill.name),
-    );
-    const canonical = skills.map((skill, index) => ({
-      ...skill,
-      name: known[index].name,
-      skillId: known[index].id,
-    }));
+    const canonical = await this.toDictionarySkills(skills);
 
-    const uniqueIds = new Set(canonical.map((skill) => skill.skillId));
+    const uniqueIds = new Set(
+      canonical.map((skill) => skill.skillId ?? skill.name.toLowerCase()),
+    );
     if (uniqueIds.size !== canonical.length) {
       throw new BadRequestException('Duplicate skills are not allowed');
     }

@@ -7,6 +7,7 @@ import { UserPortfolioService } from './services/user-portfolio.service';
 import { UserProfileService } from './services/user-profile.service';
 import { UserProfileNormalizerService } from './services/user-profile-normalizer.service';
 import { UserResumeService } from './services/user-resume.service';
+import { ResumeAiQueueService } from './services/resume-ai-queue.service';
 import { UserUploadsService } from './services/user-uploads.service';
 import { UsersController } from './controllers/users.controller';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
@@ -26,6 +27,7 @@ import { SkillModule } from '../skill/skill.module';
     UserProfileService,
     UserProfileNormalizerService,
     UserResumeService,
+    ResumeAiQueueService,
     UserUploadsService,
   ],
   exports: [UsersService],

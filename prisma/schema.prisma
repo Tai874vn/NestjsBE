@@ -163,12 +163,21 @@ model UserResume {
   predictedSeniorityModel String?
   predictedSeniorityMetadata Json?
   predictedSeniorityAt DateTime?
+  /// AI work queue: QUEUED, PROCESSING, DONE, AI_UNAVAILABLE, NEEDS_INPUT, or FAILED. Null = never queued.
+  aiStatus       String?
+  aiStatusMessage String?
+  aiQueuedAt     DateTime?
+  aiClaimedAt    DateTime?
+  aiAttempts     Int      @default(0)
+  /// Skills suggested from the CV text and skills the dictionary didn't recognise.
+  aiInsights     Json?
   schemaVersion  String   @default("v1")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([aiStatus, aiQueuedAt])
   @@map("user_resumes")
 }
 

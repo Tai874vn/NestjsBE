@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export interface AiMatchItem {
@@ -148,6 +152,32 @@ export class AiRecommendationClient {
     return response.skills;
   }
 
+  /** Whether the AI service answers its health check within a short time. Never throws. */
+  async isAvailable(timeoutMs = 3000): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}/health`, {
+        signal: controller.signal,
+      });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async errorDetail(response: Response): Promise<string> {
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') return body.detail;
+    } catch {
+      // fall through to the status text
+    }
+    return `AI service rejected the request (${response.status})`;
+  }
+
   async fieldsOfStudy(): Promise<AiFieldOfStudy[]> {
     const response = await this.get<{ fields: AiFieldOfStudy[] }>(
       '/api/v1/fields-of-study',
@@ -183,6 +213,10 @@ export class AiRecommendationClient {
         signal: controller.signal,
       });
 
+      if (response.status === 400 || response.status === 422) {
+        // The service is up but refused this input (for example, no field chosen): not worth retrying.
+        throw new BadRequestException(await this.errorDetail(response));
+      }
       if (!response.ok) {
         throw new ServiceUnavailableException(
           `AI service returned ${response.status}`,
@@ -191,7 +225,10 @@ export class AiRecommendationClient {
 
       return (await response.json()) as T;
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
       throw new ServiceUnavailableException(
