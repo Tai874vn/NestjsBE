@@ -2,6 +2,7 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplication, Logger } from '@nestjs/common';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
+import { watchRedisErrors } from '../redis/redis-client-errors';
 import { Server, ServerOptions } from 'socket.io';
 
 export class RedisIoAdapter extends IoAdapter {
@@ -18,6 +19,8 @@ export class RedisIoAdapter extends IoAdapter {
     try {
       const pubClient = createClient({ url: redisUrl });
       const subClient = pubClient.duplicate();
+      watchRedisErrors(pubClient, this.logger, 'socket.io pub');
+      watchRedisErrors(subClient, this.logger, 'socket.io sub');
 
       await Promise.all([pubClient.connect(), subClient.connect()]);
 

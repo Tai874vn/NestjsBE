@@ -80,21 +80,34 @@ export class RedisService implements OnModuleDestroy {
    * Get a value from cache
    */
   async get<T>(key: string): Promise<T | undefined> {
-    return this.cacheManager.get<T>(this.key(key));
+    // The cache is an optimisation: while Redis is down, read from the source instead of failing.
+    try {
+      return await this.cacheManager.get<T>(this.key(key));
+    } catch {
+      return undefined;
+    }
   }
 
   /**
    * Set a value in cache with optional TTL
    */
   async set(key: string, value: unknown, ttl?: number): Promise<void> {
-    await this.cacheManager.set(this.key(key), value, ttl);
+    try {
+      await this.cacheManager.set(this.key(key), value, ttl);
+    } catch {
+      // Not cached this time; the next read goes to the source.
+    }
   }
 
   /**
    * Delete a specific key from cache
    */
   async del(key: string): Promise<void> {
-    await this.cacheManager.del(this.key(key));
+    try {
+      await this.cacheManager.del(this.key(key));
+    } catch {
+      // Redis is down. If it comes back with this key, the entry still expires with its TTL.
+    }
   }
 
   async increment(key: string, ttl?: number): Promise<number> {

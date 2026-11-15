@@ -9,6 +9,10 @@ import {
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
+import {
+  REDIS_CLIENT_OPTIONS,
+  watchRedisErrors,
+} from '../../common/redis/redis-client-errors';
 import { RedisService } from './redis.service';
 import { RedisController } from './redis.controller';
 
@@ -39,7 +43,11 @@ class RedisClientLifecycleService implements OnApplicationShutdown {
 
         if (redisUrl) {
           try {
-            const client = createClient({ url: redisUrl });
+            const client = createClient({
+              url: redisUrl,
+              ...REDIS_CLIENT_OPTIONS,
+            });
+            watchRedisErrors(client, logger, 'cache');
             await client.connect();
             logger.log('Connected to Redis successfully');
 
@@ -138,7 +146,11 @@ class RedisClientLifecycleService implements OnApplicationShutdown {
         if (!redisUrl) return null;
 
         try {
-          const client = createClient({ url: redisUrl });
+          const client = createClient({
+            url: redisUrl,
+            ...REDIS_CLIENT_OPTIONS,
+          });
+          watchRedisErrors(client, logger, 'shared');
           await client.connect();
           logger.log('Redis client created for Socket.io adapter');
           return client;
