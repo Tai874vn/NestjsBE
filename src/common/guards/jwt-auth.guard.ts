@@ -12,8 +12,23 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  handleRequest<TUser = any>(error: any, user: TUser, info: any): TUser {
+  handleRequest<TUser = any>(
+    error: any,
+    user: TUser,
+    info: any,
+    context?: ExecutionContext,
+  ): TUser {
     if (error) throw error;
+    // A visitor with no token is anonymous on optional routes. A token that is sent but expired or invalid is
+    // still rejected, so the client refreshes it instead of silently browsing signed out.
+    if (
+      !user &&
+      info?.message === 'No auth token' &&
+      context &&
+      this.isOptional(context)
+    ) {
+      return null as TUser;
+    }
     if (!user) {
       const code =
         info?.name === 'TokenExpiredError'
@@ -28,6 +43,15 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       });
     }
     return user;
+  }
+
+  private isOptional(context: ExecutionContext) {
+    return Boolean(
+      this.reflector.getAllAndOverride<boolean>('optionalAuth', [
+        context.getHandler(),
+        context.getClass(),
+      ]),
+    );
   }
 
   canActivate(context: ExecutionContext) {

@@ -466,6 +466,16 @@ model HiringPost {
   employmentType String?
   salaryMin      Int?
   salaryMax      Int?
+  /// Shown on the post instead of the recruiter's display name.
+  companyName    String?
+  /// One of the 37 career fields (src/common/career-fields.ts).
+  careerField    String?
+  /// Minimum years of experience in the field.
+  yearsRequired  Int?
+  /// Skill names picked from the dictionary.
+  skills         String[]         @default([])
+  /// After this time the post is no longer listed as open.
+  closesAt       DateTime?
   predictedSeniority String?
   predictedSeniorityConfidence Float?
   predictedSeniorityModel String?
@@ -481,6 +491,7 @@ model HiringPost {
 
   @@index([recruiterId, status, updatedAt, id])
   @@index([status, updatedAt, id])
+  @@index([status, careerField])
   @@map("hiring_posts")
 }
 

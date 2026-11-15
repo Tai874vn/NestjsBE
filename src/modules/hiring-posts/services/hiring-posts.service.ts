@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { HiringPostQueryDto } from '../dto/hiring-post-query.dto';
 import { PrismaService } from '../../../prisma.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
 import { RecommendationPayloadMapperService } from '../../recommendations/services/recommendation-payload-mapper.service';
@@ -47,7 +48,7 @@ export class HiringPostsService {
     private readonly payloadMapper: RecommendationPayloadMapperService,
   ) {}
 
-  async findOpen(query: PaginationDto, viewerId?: number) {
+  async findOpen(query: HiringPostQueryDto, viewerId?: number) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const where = this.buildOpenWhere(query);
@@ -121,7 +122,7 @@ export class HiringPostsService {
     };
   }
 
-  async findOne(id: number, userId: number, userRole: Role) {
+  async findOne(id: number, userId?: number, userRole?: Role) {
     const post = await this.findPostOrThrow(id);
     if (
       post.status !== HiringPostStatus.OPEN &&
@@ -132,7 +133,7 @@ export class HiringPostsService {
     }
 
     const appliedPostIds =
-      userRole === Role.USER
+      userId !== undefined && userRole === Role.USER
         ? await this.findAppliedPostIds(userId, [id])
         : new Set<number>();
 
@@ -144,6 +145,7 @@ export class HiringPostsService {
 
   async create(dto: CreateHiringPostDto, recruiterId: number) {
     this.assertSalaryRange(dto.salaryMin, dto.salaryMax);
+    this.assertClosesInFuture(dto.closesAt);
 
     const post = await this.prisma.hiringPost.create({
       data: {
@@ -155,6 +157,11 @@ export class HiringPostsService {
         employmentType: this.optionalTrim(dto.employmentType),
         salaryMin: dto.salaryMin,
         salaryMax: dto.salaryMax,
+        companyName: this.optionalTrim(dto.companyName),
+        careerField: dto.careerField,
+        yearsRequired: dto.yearsRequired,
+        skills: dto.skills ?? [],
+        closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
       },
       include: hiringPostInclude,
     });
@@ -177,6 +184,14 @@ export class HiringPostsService {
       dto.salaryMin ?? post.salaryMin ?? undefined,
       dto.salaryMax ?? post.salaryMax ?? undefined,
     );
+    this.assertClosesInFuture(dto.closesAt);
+    // A new field, required years or skill list means the saved AI level no longer describes the post.
+    const levelInputsChanged =
+      (dto.careerField !== undefined && dto.careerField !== post.careerField) ||
+      (dto.yearsRequired !== undefined &&
+        dto.yearsRequired !== post.yearsRequired) ||
+      (dto.skills !== undefined &&
+        JSON.stringify(dto.skills) !== JSON.stringify(post.skills));
 
     const updated = await this.prisma.hiringPost.update({
       where: { id },
@@ -197,6 +212,28 @@ export class HiringPostsService {
         ...(dto.salaryMin !== undefined ? { salaryMin: dto.salaryMin } : {}),
         ...(dto.salaryMax !== undefined ? { salaryMax: dto.salaryMax } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.companyName !== undefined
+          ? { companyName: this.optionalTrim(dto.companyName) }
+          : {}),
+        ...(dto.careerField !== undefined
+          ? { careerField: dto.careerField }
+          : {}),
+        ...(dto.yearsRequired !== undefined
+          ? { yearsRequired: dto.yearsRequired }
+          : {}),
+        ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
+        ...(dto.closesAt !== undefined
+          ? { closesAt: new Date(dto.closesAt) }
+          : {}),
+        ...(levelInputsChanged
+          ? {
+              predictedSeniority: null,
+              predictedSeniorityConfidence: null,
+              predictedSeniorityModel: null,
+              predictedSeniorityMetadata: Prisma.DbNull,
+              predictedSeniorityAt: null,
+            }
+          : {}),
       },
       include: hiringPostInclude,
     });
@@ -376,14 +413,30 @@ export class HiringPostsService {
     return post;
   }
 
-  private buildOpenWhere(query: PaginationDto): Prisma.HiringPostWhereInput {
+  private buildOpenWhere(
+    query: HiringPostQueryDto,
+  ): Prisma.HiringPostWhereInput {
     const keyword = query.keyword?.trim();
     const filters: Prisma.HiringPostWhereInput[] = [
       { status: HiringPostStatus.OPEN },
+      // A post past its closing date is no longer open, even before anyone closes it.
+      { OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
     ];
 
     if (keyword) {
       filters.push(this.keywordWhere(keyword));
+    }
+    if (query.careerField) filters.push({ careerField: query.careerField });
+    if (query.level) filters.push({ predictedSeniority: query.level });
+    if (query.employmentType) {
+      filters.push({
+        employmentType: { equals: query.employmentType, mode: 'insensitive' },
+      });
+    }
+    if (query.location) {
+      filters.push({
+        location: { contains: query.location, mode: 'insensitive' },
+      });
     }
 
     return { AND: filters };
@@ -484,6 +537,12 @@ export class HiringPostsService {
   private assertCanManage(ownerId: number, userId: number, userRole: Role) {
     if (ownerId !== userId && userRole !== Role.ADMIN) {
       throw new ForbiddenException('You can only manage your own hiring posts');
+    }
+  }
+
+  private assertClosesInFuture(closesAt?: string) {
+    if (closesAt !== undefined && new Date(closesAt).getTime() <= Date.now()) {
+      throw new BadRequestException('The closing date must be in the future');
     }
   }
 

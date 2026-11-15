@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { HiringApplicationStatus, HiringPostStatus } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { HiringPostsService } from './hiring-posts.service';
@@ -21,6 +21,11 @@ describe('HiringPostsService', () => {
     predictedSeniorityModel: null,
     predictedSeniorityMetadata: null,
     predictedSeniorityAt: null,
+    companyName: null,
+    careerField: 'Information security',
+    yearsRequired: 3,
+    skills: ['SIEM'],
+    closesAt: null,
     status: HiringPostStatus.OPEN,
     createdAt: now,
     updatedAt: now,
@@ -37,6 +42,9 @@ describe('HiringPostsService', () => {
     const prisma = {
       hiringPost: {
         findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(),
         update: jest.fn(),
       },
       hiringApplication: {
@@ -113,6 +121,112 @@ describe('HiringPostsService', () => {
       id: 99,
       hiringPost: { id: openPost.id, applicationCount: 0 },
     });
+  });
+
+  it('shows an open post to a visitor who is not signed in', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+
+    const result = await service.findOne(openPost.id);
+
+    expect(result.content).toMatchObject({ id: openPost.id, viewerHasApplied: false });
+  });
+
+  it('hides a closed post from a visitor', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue({
+      ...openPost,
+      status: HiringPostStatus.CLOSED,
+    });
+
+    await expect(service.findOne(openPost.id)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('lists only posts that are open and not past their closing date, with filters', async () => {
+    const { prisma, service } = createService();
+
+    await service.findOpen({
+      page: 1,
+      pageSize: 10,
+      careerField: 'Software development',
+      level: 'Mid',
+      location: 'Hanoi',
+    });
+
+    const where = prisma.hiringPost.findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { status: HiringPostStatus.OPEN },
+        { OR: [{ closesAt: null }, { closesAt: { gt: expect.any(Date) } }] },
+        { careerField: 'Software development' },
+        { predictedSeniority: 'Mid' },
+        { location: { contains: 'Hanoi', mode: 'insensitive' } },
+      ]),
+    );
+  });
+
+  it('saves the structured fields of a new post', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.create.mockResolvedValue(openPost);
+
+    await service.create(
+      {
+        title: 'Security Analyst',
+        description: 'Monitor alerts and respond to incidents quickly',
+        careerField: 'Information security',
+        yearsRequired: 3,
+        skills: ['SIEM'],
+        companyName: ' Acme ',
+      },
+      2,
+    );
+
+    expect(prisma.hiringPost.create.mock.calls[0][0].data).toMatchObject({
+      companyName: 'Acme',
+      careerField: 'Information security',
+      yearsRequired: 3,
+      skills: ['SIEM'],
+      closesAt: null,
+    });
+  });
+
+  it('rejects a closing date in the past', async () => {
+    const { service } = createService();
+    await expect(
+      service.create(
+        {
+          title: 'Security Analyst',
+          description: 'Monitor alerts and respond to incidents quickly',
+          careerField: 'Information security',
+          yearsRequired: 3,
+          closesAt: '2020-01-01T00:00:00.000Z',
+        },
+        2,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('clears the AI level when the required years change', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue({ ...openPost, predictedSeniority: 'Mid' });
+    prisma.hiringPost.update.mockResolvedValue(openPost);
+
+    await service.update(openPost.id, { yearsRequired: 6 }, 2, Role.EMPLOYER);
+
+    expect(prisma.hiringPost.update.mock.calls[0][0].data).toMatchObject({
+      yearsRequired: 6,
+      predictedSeniority: null,
+    });
+  });
+
+  it('keeps the AI level when only the description changes', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue({ ...openPost, predictedSeniority: 'Mid' });
+    prisma.hiringPost.update.mockResolvedValue(openPost);
+
+    await service.update(openPost.id, { description: 'A clearer description of the role' }, 2, Role.EMPLOYER);
+
+    expect(prisma.hiringPost.update.mock.calls[0][0].data).not.toHaveProperty('predictedSeniority');
   });
 
   it('rejects applications to closed hiring posts', async () => {

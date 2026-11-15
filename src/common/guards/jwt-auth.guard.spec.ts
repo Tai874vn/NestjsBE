@@ -61,4 +61,36 @@ describe('JwtAuthGuard', () => {
     expect(guard.canActivate(context)).toBe(true);
     expect(superSpy).not.toHaveBeenCalled();
   });
+
+  describe('optional authentication', () => {
+    const optional = (value: boolean) =>
+      ({
+        getAllAndOverride: jest
+          .fn()
+          .mockImplementation((key: string) =>
+            key === 'optionalAuth' ? value : false,
+          ),
+      }) as unknown as Reflector;
+
+    it('lets a visitor without a token through as anonymous', () => {
+      const guard = new JwtAuthGuard(optional(true));
+      expect(
+        guard.handleRequest(null, false, { message: 'No auth token' }, createContext()),
+      ).toBeNull();
+    });
+
+    it('still rejects an expired token so the client refreshes it', () => {
+      const guard = new JwtAuthGuard(optional(true));
+      expect(() =>
+        guard.handleRequest(null, false, { name: 'TokenExpiredError' }, createContext()),
+      ).toThrow('Access token is missing, invalid or expired');
+    });
+
+    it('requires a token on routes that are not optional', () => {
+      const guard = new JwtAuthGuard(optional(false));
+      expect(() =>
+        guard.handleRequest(null, false, { message: 'No auth token' }, createContext()),
+      ).toThrow('Access token is missing, invalid or expired');
+    });
+  });
 });

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { OptionalAuth } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
@@ -19,6 +20,7 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { ValidatedUser } from '../../../types';
 import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
+import { HiringPostQueryDto } from '../dto/hiring-post-query.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { HiringPostsService } from '../services/hiring-posts.service';
 
@@ -27,9 +29,14 @@ import { HiringPostsService } from '../services/hiring-posts.service';
 export class HiringPostsController {
   constructor(private readonly hiringPostsService: HiringPostsService) {}
 
+  // Visitors can browse open posts; signed-in candidates also see which ones they applied to.
   @Get()
-  findOpen(@Query() query: PaginationDto, @CurrentUser() user: ValidatedUser) {
-    return this.hiringPostsService.findOpen(query, user.id);
+  @OptionalAuth()
+  findOpen(
+    @Query() query: HiringPostQueryDto,
+    @CurrentUser() user: ValidatedUser | null,
+  ) {
+    return this.hiringPostsService.findOpen(query, user?.id);
   }
 
   @Get('mine')
@@ -48,11 +55,12 @@ export class HiringPostsController {
   }
 
   @Get(':id')
+  @OptionalAuth()
   findOne(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: ValidatedUser,
+    @CurrentUser() user: ValidatedUser | null,
   ) {
-    return this.hiringPostsService.findOne(id, user.id, user.role);
+    return this.hiringPostsService.findOne(id, user?.id, user?.role);
   }
 
   @Post()
