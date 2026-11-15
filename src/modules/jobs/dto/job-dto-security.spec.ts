@@ -15,3 +15,16 @@ describe('CreateJobDto writable fields', () => {
     expect(errors.some((error) => error.property === field)).toBe(true);
   });
 });
+
+describe('CreateJobDto price', () => {
+  it('lets a portfolio post leave the price out', async () => {
+    const dto = plainToInstance(CreateJobDto, { title: 'Checkout redesign case study', subcategoryId: 1 });
+    expect(await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).toEqual([]);
+  });
+
+  it('still rejects a negative price', async () => {
+    const dto = plainToInstance(CreateJobDto, { title: 'Service', subcategoryId: 1, price: -5 });
+    const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+    expect(errors.some((error) => error.property === 'price')).toBe(true);
+  });
+});

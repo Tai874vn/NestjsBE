@@ -20,7 +20,7 @@ export class JobMutationService {
     const job = await this.prisma.job.create({
       data: {
         title: createDto.title,
-        price: createDto.price,
+        price: createDto.price ?? 0,
         description: createDto.description,
         shortDescription: createDto.shortDescription,
         subcategory: {

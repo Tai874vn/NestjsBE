@@ -21,10 +21,11 @@ export class CreateJobDto {
   @MaxLength(160)
   title: string;
 
-  @IsNotEmpty()
+  /** Optional: a portfolio post has no price (0). */
+  @IsOptional()
   @IsInt()
   @Min(0)
-  price: number;
+  price?: number;
 
   @Transform(optionalTrimString)
   @IsOptional()
