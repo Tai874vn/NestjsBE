@@ -27,7 +27,32 @@ type CandidateDirectoryUser = {
     portfolioItems?: number;
     jobs?: number;
   };
+  resume?: {
+    data?: Prisma.JsonValue;
+    predictedSeniority?: string | null;
+    predictedSeniorityMetadata?: Prisma.JsonValue;
+  } | null;
 };
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** What a recruiter filters by, read from the candidate's resume and its AI result. */
+export function candidateCareer(resume: CandidateDirectoryUser['resume']) {
+  if (!resume) return null;
+  const field = record(resume.data).Industry;
+  const years = record(
+    record(resume.predictedSeniorityMetadata).features,
+  ).years_in_field;
+  return {
+    careerField: typeof field === 'string' && field ? field : null,
+    level: resume.predictedSeniority ?? null,
+    yearsInField: typeof years === 'number' ? years : null,
+  };
+}
 
 @Injectable()
 export class CandidateDirectoryService {
@@ -71,6 +96,13 @@ export class CandidateDirectoryService {
               profileCertifications: true,
               portfolioItems: true,
               jobs: true,
+            },
+          },
+          resume: {
+            select: {
+              data: true,
+              predictedSeniority: true,
+              predictedSeniorityMetadata: true,
             },
           },
         },
@@ -162,6 +194,31 @@ export class CandidateDirectoryService {
       filters.push({ profileCertifications: { some: {} } });
     }
 
+    if (query.careerField) {
+      filters.push({
+        resume: {
+          is: { data: { path: ['Industry'], equals: query.careerField } },
+        },
+      });
+    }
+
+    if (query.level) {
+      filters.push({ resume: { is: { predictedSeniority: query.level } } });
+    }
+
+    if (query.minYears !== undefined && query.minYears > 0) {
+      filters.push({
+        resume: {
+          is: {
+            predictedSeniorityMetadata: {
+              path: ['features', 'years_in_field'],
+              gte: query.minYears,
+            },
+          },
+        },
+      });
+    }
+
     return {
       role: Role.USER,
       profileCompleted: true,
@@ -209,6 +266,7 @@ export class CandidateDirectoryService {
         completedWork: 0,
         rating: 0,
       },
+      career: candidateCareer(user.resume),
       match,
     };
   }

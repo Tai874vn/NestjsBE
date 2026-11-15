@@ -19,6 +19,65 @@ describe('CandidateDirectoryService', () => {
     return { service, prisma };
   };
 
+  it('filters by field, AI level and minimum years from the resume', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.user.count.mockResolvedValue(0);
+
+    await service.findCandidates({
+      careerField: 'Software development',
+      level: 'Mid',
+      minYears: 3,
+    });
+
+    const where = prisma.user.findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([
+      {
+        resume: {
+          is: { data: { path: ['Industry'], equals: 'Software development' } },
+        },
+      },
+      { resume: { is: { predictedSeniority: 'Mid' } } },
+      {
+        resume: {
+          is: {
+            predictedSeniorityMetadata: {
+              path: ['features', 'years_in_field'],
+              gte: 3,
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('shows the field, AI level and years in field on each card', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 4,
+        name: 'Ava',
+        resume: {
+          data: { Industry: 'Data' },
+          predictedSeniority: 'Senior',
+          predictedSeniorityMetadata: { features: { years_in_field: 6.5 } },
+        },
+      },
+      { id: 5, name: 'Ben', resume: null },
+    ]);
+    prisma.user.count.mockResolvedValue(2);
+
+    const result = await service.findCandidates({});
+
+    const byId = new Map(result.content.data.map((card) => [card.id, card]));
+    expect(byId.get(4)?.career).toEqual({
+      careerField: 'Data',
+      level: 'Senior',
+      yearsInField: 6.5,
+    });
+    expect(byId.get(5)?.career).toBeNull();
+  });
+
   it('paginates candidate rows in the database', async () => {
     const { service, prisma } = createService();
     prisma.user.findMany.mockResolvedValue([]);
