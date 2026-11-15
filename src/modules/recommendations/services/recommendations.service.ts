@@ -24,7 +24,6 @@ import {
 } from './recommendation-scoring.service';
 import { RecommendationSnapshotService } from './recommendation-snapshot.service';
 import {
-  JobForRecommendation,
   RecommendationPayloadMapperService,
   UserForRecommendation,
 } from './recommendation-payload-mapper.service';
@@ -175,13 +174,14 @@ export class RecommendationsService {
       const user = await timer.time('db.user', () =>
         this.dataLoader.loadUser(userId),
       );
-      const jobs = await timer.time('db.jobs', () =>
-        this.dataLoader.loadJobs(userId, poolSize),
+      // A candidate's matches are open hiring posts, not other candidates' service posts.
+      const posts = await timer.time('db.hiringPosts', () =>
+        this.dataLoader.loadOpenHiringPosts(userId, poolSize),
       );
       const resumePayload = this.payloadMapper.buildResumePayload(user);
       const knownSkills = resumePayload.skills as string[];
-      const jobPayloads = jobs.map((job) =>
-        this.payloadMapper.buildJobPayload(job, knownSkills),
+      const jobPayloads = posts.map((post) =>
+        this.payloadMapper.buildHiringPostPayload(post, knownSkills),
       );
 
       const aiResponse = await timer.time('aiService', () =>
@@ -194,21 +194,26 @@ export class RecommendationsService {
         ),
       );
 
-      const jobsById = new Map(jobs.map((job) => [String(job.id), job]));
+      const postsById = new Map(posts.map((post) => [String(post.id), post]));
       const matches = aiResponse.matches
         .map((match) => {
-          const job = jobsById.get(String(match.id));
-          if (!job) {
+          const post = postsById.get(String(match.id));
+          if (!post) {
             return null;
           }
           const score = this.scoringService.scoreJobMatch({
             aiScore: match.score,
             resumeSkills: knownSkills,
             resumeText: this.payloadText(resumePayload),
-            jobText: this.payloadMapper.jobToText(job),
-            jobCategoryText: this.payloadMapper.jobCategoryText(job),
+            jobText: this.payloadMapper.hiringPostToText(post),
+            jobCategoryText: post.careerField ?? '',
           });
-          return this.withRecommendation(job, match, score);
+          const { _count, ...card } = post;
+          return {
+            ...card,
+            applicationCount: _count.applications,
+            recommendation: this.toRecommendationPayload(match, score),
+          };
         })
         .filter((match): match is NonNullable<typeof match> => Boolean(match));
 
@@ -512,17 +517,6 @@ export class RecommendationsService {
         await this.releaseRunLock(runLock);
       }
     }
-  }
-
-  private withRecommendation(
-    job: JobForRecommendation,
-    match: AiMatchItem,
-    score: RecommendationScore,
-  ) {
-    return {
-      ...job,
-      recommendation: this.toRecommendationPayload(match, score),
-    };
   }
 
   private safeCandidate(

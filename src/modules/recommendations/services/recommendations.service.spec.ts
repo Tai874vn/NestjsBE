@@ -23,6 +23,7 @@ const redisFreePrisma = {
   },
   hiringPost: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
 };
 
@@ -133,7 +134,7 @@ describe('RecommendationsService', () => {
     observability.startOperation.mockReturnValue(timer);
   });
 
-  it('recommends jobs by sending current user resume and candidate jobs to AI service', async () => {
+  it('recommends open hiring posts by sending the candidate resume and the posts to the AI service', async () => {
     redisFreePrisma.user.findUnique.mockResolvedValue({
       id: 1,
       headline: 'Backend Engineer',
@@ -143,15 +144,19 @@ describe('RecommendationsService', () => {
       profileSkills: [{ name: 'FastAPI', level: 'advanced' }],
       resume: { data: { Summary: 'Python backend developer', Skills: 'Python, FastAPI' } },
     });
-    redisFreePrisma.job.findMany.mockResolvedValue([
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([
       {
         id: 10,
+        recruiterId: 2,
         title: 'API Developer',
         description: 'Python FastAPI project',
-        shortDescription: 'Backend API',
-        price: 100,
-        subcategory: { name: 'Backend', category: { name: 'Software' } },
-        user: { id: 2, name: 'Client', avatar: null },
+        requirements: null,
+        careerField: 'Software development',
+        yearsRequired: 2,
+        skills: [],
+        updatedAt: new Date('2026-11-15T00:00:00.000Z'),
+        recruiter: { id: 2, name: 'Recruiter', avatar: null, headline: null },
+        _count: { applications: 3 },
       },
     ]);
     aiClient.matchJobs.mockResolvedValue({
@@ -185,8 +190,11 @@ describe('RecommendationsService', () => {
         top_k: 5,
       }),
     );
+    // Candidates are matched to open hiring posts, shown with their applicant count.
     expect(result.content.data[0]).toMatchObject({
       id: 10,
+      careerField: 'Software development',
+      applicationCount: 3,
       recommendation: {
         aiScore: 0.82,
         finalScore: 0.91,
@@ -234,8 +242,8 @@ describe('RecommendationsService', () => {
         },
       },
     });
-    redisFreePrisma.job.findMany.mockResolvedValue([
-      { id: 10, title: 'API Developer', description: 'Node.js API' },
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([
+      { id: 10, title: 'API Developer', description: 'Node.js API', skills: [], _count: { applications: 0 } },
     ]);
     aiClient.matchJobs.mockResolvedValue({
       matches: [],
@@ -271,7 +279,7 @@ describe('RecommendationsService', () => {
       profileSkills: [],
       resume: { data: { Summary: 'Backend developer' } },
     });
-    redisFreePrisma.job.findMany.mockResolvedValue([{ id: 10, title: 'API Developer' }]);
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([{ id: 10, title: 'API Developer', description: '', skills: [], _count: { applications: 0 } }]);
     aiClient.matchJobs.mockResolvedValue({
       matches: [],
       model: 'model',
@@ -345,7 +353,7 @@ describe('RecommendationsService', () => {
     expect(quota.consume).not.toHaveBeenCalled();
     expect(quota.reserve).not.toHaveBeenCalled();
     expect(redisFreePrisma.user.findUnique).not.toHaveBeenCalled();
-    expect(redisFreePrisma.job.findMany).not.toHaveBeenCalled();
+    expect(redisFreePrisma.hiringPost.findMany).not.toHaveBeenCalled();
     expect(aiClient.matchJobs).not.toHaveBeenCalled();
     expect(result.content).toMatchObject({
       data: [],
@@ -365,7 +373,7 @@ describe('RecommendationsService', () => {
       profileSkills: [],
       resume: { data: { Summary: 'Backend developer' } },
     });
-    redisFreePrisma.job.findMany.mockResolvedValue([{ id: 10, title: 'API Developer' }]);
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([{ id: 10, title: 'API Developer', description: '', skills: [], _count: { applications: 0 } }]);
     aiClient.matchJobs.mockResolvedValue({
       matches: [],
       model: 'fresh-model',
@@ -392,7 +400,7 @@ describe('RecommendationsService', () => {
       profileSkills: [],
       resume: { data: { Summary: 'Backend developer' } },
     });
-    redisFreePrisma.job.findMany.mockResolvedValue([{ id: 10, title: 'API Developer' }]);
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([{ id: 10, title: 'API Developer', description: '', skills: [], _count: { applications: 0 } }]);
     aiClient.matchJobs.mockRejectedValue(new Error('connect ECONNREFUSED'));
 
     await expect(createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 })).rejects.toBeInstanceOf(

@@ -16,29 +16,6 @@ export type UserForRecommendation = {
   } | null;
 };
 
-export type JobForRecommendation = {
-  id: number;
-  title: string;
-  price?: number;
-  image?: string | null;
-  description?: string | null;
-  shortDescription?: string | null;
-  rating?: number;
-  reviews?: number;
-  creatorId?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-  subcategory?: {
-    name: string;
-    category?: { name: string } | null;
-  } | null;
-  user?: {
-    id: number;
-    name: string;
-    avatar?: string | null;
-  } | null;
-};
-
 export type HiringPostForRecommendation = {
   id: number;
   recruiterId: number;
@@ -49,6 +26,9 @@ export type HiringPostForRecommendation = {
   employmentType?: string | null;
   salaryMin?: number | null;
   salaryMax?: number | null;
+  careerField?: string | null;
+  yearsRequired?: number | null;
+  skills?: string[];
   predictedSeniority?: string | null;
   predictedSeniorityConfidence?: number | null;
   predictedSeniorityModel?: string | null;
@@ -125,25 +105,6 @@ export class RecommendationPayloadMapperService {
     };
   }
 
-  buildJobPayload(
-    job: JobForRecommendation,
-    knownSkills: string[] = [],
-  ): Record<string, unknown> {
-    const jobText = this.jobToText(job);
-    return {
-      id: job.id,
-      job_title: job.title,
-      title: job.title,
-      description: job.description,
-      short_description: job.shortDescription,
-      industry: job.subcategory?.category?.name,
-      required_skills: this.skillsMentionedInText(knownSkills, jobText),
-      text: jobText,
-      category: job.subcategory?.category?.name,
-      subcategory: job.subcategory?.name,
-    };
-  }
-
   buildHiringPostPayload(
     post: HiringPostForRecommendation,
     knownSkills: string[] = [],
@@ -167,25 +128,11 @@ export class RecommendationPayloadMapperService {
       employment_type: post.employmentType,
       salary_min: post.salaryMin,
       salary_max: post.salaryMax,
+      // Set by the recruiter on the form; the AI uses them before guessing from the text.
+      career_field: post.careerField,
+      years_required: post.yearsRequired,
+      skills: post.skills ?? [],
     };
-  }
-
-  jobToText(job: JobForRecommendation): string {
-    return [
-      job.title,
-      job.shortDescription,
-      job.description,
-      job.subcategory?.name,
-      job.subcategory?.category?.name,
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  jobCategoryText(job: JobForRecommendation): string {
-    return [job.subcategory?.name, job.subcategory?.category?.name]
-      .filter(Boolean)
-      .join(' ');
   }
 
   hiringPostToText(post: HiringPostForRecommendation): string {
@@ -221,6 +168,7 @@ export class RecommendationPayloadMapperService {
     post: HiringPostForRecommendation,
     knownSkills: string[],
   ): string[] {
+    if (post.skills?.length) return post.skills;
     const explicitSkills = this.parseDelimitedString(post.requirements);
     if (explicitSkills.length) {
       return explicitSkills;

@@ -17,7 +17,7 @@ export class RecommendationFingerprintService {
   }
 
   async jobs(userId: number): Promise<string> {
-    const [user, latestSkill, latestJob] = await Promise.all([
+    const [user, latestSkill, latestPost] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
         select: { updatedAt: true, resume: { select: { updatedAt: true } } },
@@ -26,15 +26,17 @@ export class RecommendationFingerprintService {
         where: { userId },
         _max: { updatedAt: true },
       }),
-      this.prisma.job.aggregate({ _max: { updatedAt: true } }),
+      this.prisma.hiringPost.aggregate({ _max: { updatedAt: true } }),
     ]);
 
     return this.hash([
       this.modelVersion,
+      // Candidates are matched to hiring posts; the tag keeps older results (other candidates' services) unused.
+      'hiring-posts',
       user?.updatedAt,
       user?.resume?.updatedAt,
       latestSkill._max.updatedAt,
-      latestJob._max.updatedAt,
+      latestPost._max.updatedAt,
     ]);
   }
 

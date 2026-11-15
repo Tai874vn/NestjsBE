@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { HiringPostStatus } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
 import {
   HiringPostForRecommendation,
-  JobForRecommendation,
   UserForRecommendation,
 } from './recommendation-payload-mapper.service';
 
@@ -41,14 +41,21 @@ export class RecommendationDataLoaderService {
     return user;
   }
 
-  loadJobs(userId: number, poolSize: number): Promise<JobForRecommendation[]> {
-    return this.prisma.job.findMany({
-      where: { creatorId: { not: userId } },
+  /** Open hiring posts a candidate could apply to: not their own, not closed, not past the closing date. */
+  loadOpenHiringPosts(userId: number, poolSize: number) {
+    return this.prisma.hiringPost.findMany({
+      where: {
+        status: HiringPostStatus.OPEN,
+        recruiterId: { not: userId },
+        OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }],
+      },
       take: poolSize,
-      orderBy: [{ rating: 'desc' }, { id: 'desc' }],
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       include: {
-        user: { select: { id: true, name: true, avatar: true } },
-        subcategory: { include: { category: true } },
+        recruiter: {
+          select: { id: true, name: true, avatar: true, headline: true },
+        },
+        _count: { select: { applications: true } },
       },
     });
   }
