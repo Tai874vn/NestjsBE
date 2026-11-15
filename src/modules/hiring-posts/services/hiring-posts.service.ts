@@ -14,8 +14,10 @@ import { Role } from '../../../common/constants/roles';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { HiringPostQueryDto } from '../dto/hiring-post-query.dto';
 import { PrismaService } from '../../../prisma.service';
-import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
-import { RecommendationPayloadMapperService } from '../../recommendations/services/recommendation-payload-mapper.service';
+import {
+  HiringPostAiQueueService,
+  queuedHiringPostFields,
+} from './hiring-post-ai-queue.service';
 import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
@@ -44,8 +46,7 @@ type HiringPostWithMeta = Prisma.HiringPostGetPayload<{
 export class HiringPostsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly aiClient: AiRecommendationClient,
-    private readonly payloadMapper: RecommendationPayloadMapperService,
+    private readonly aiQueue: HiringPostAiQueueService,
   ) {}
 
   async findOpen(query: HiringPostQueryDto, viewerId?: number) {
@@ -162,9 +163,12 @@ export class HiringPostsService {
         yearsRequired: dto.yearsRequired,
         skills: dto.skills ?? [],
         closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
+        // The AI level is worked out by the queue, never while saving.
+        ...queuedHiringPostFields(),
       },
       include: hiringPostInclude,
     });
+    this.aiQueue.kick();
 
     return {
       message: 'Create hiring post successfully',
@@ -192,6 +196,15 @@ export class HiringPostsService {
         dto.yearsRequired !== post.yearsRequired) ||
       (dto.skills !== undefined &&
         JSON.stringify(dto.skills) !== JSON.stringify(post.skills));
+    // The AI also reads the title and text, so a change there asks for a fresh level too.
+    const levelTextChanged =
+      (dto.title !== undefined && dto.title.trim() !== post.title) ||
+      (dto.description !== undefined &&
+        dto.description.trim() !== post.description) ||
+      (dto.requirements !== undefined &&
+        (this.optionalTrim(dto.requirements) ?? null) !==
+          (post.requirements ?? null));
+    const requeue = levelInputsChanged || levelTextChanged;
 
     const updated = await this.prisma.hiringPost.update({
       where: { id },
@@ -234,9 +247,11 @@ export class HiringPostsService {
               predictedSeniorityAt: null,
             }
           : {}),
+        ...(requeue ? queuedHiringPostFields() : {}),
       },
       include: hiringPostInclude,
     });
+    if (requeue) this.aiQueue.kick();
 
     return {
       message: 'Update hiring post successfully',
@@ -259,29 +274,13 @@ export class HiringPostsService {
     const post = await this.findPostOrThrow(id);
     this.assertCanManage(post.recruiterId, userId, userRole);
 
-    const prediction = await this.aiClient.predictJobSeniority({
-      job: this.payloadMapper.buildHiringPostPayload(post),
-    });
-    const predictedAt = new Date();
-    const updated = await this.prisma.hiringPost.update({
-      where: { id },
-      data: {
-        predictedSeniority: prediction.label,
-        predictedSeniorityConfidence: prediction.confidence,
-        predictedSeniorityModel: prediction.model,
-        predictedSeniorityMetadata: {
-          probabilities: prediction.probabilities,
-          features: prediction.features,
-          elapsedMs: prediction.elapsed_ms,
-        } as Prisma.InputJsonValue,
-        predictedSeniorityAt: predictedAt,
-      },
-      include: hiringPostInclude,
-    });
+    // The level is worked out by the queue; this puts the post (back) in it, e.g. after "Try again".
+    await this.aiQueue.enqueue(id);
+    const queued = await this.findPostOrThrow(id);
 
     return {
-      message: 'Hiring post seniority predicted successfully',
-      content: this.toHiringPostCard(updated),
+      message: 'Hiring post queued for AI evaluation',
+      content: this.toHiringPostCard(queued),
     };
   }
 

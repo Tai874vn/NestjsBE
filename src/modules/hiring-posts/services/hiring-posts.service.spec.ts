@@ -22,7 +22,7 @@ describe('HiringPostsService', () => {
     predictedSeniorityMetadata: null,
     predictedSeniorityAt: null,
     companyName: null,
-    careerField: 'Information security',
+    careerField: 'IT and security',
     yearsRequired: 3,
     skills: ['SIEM'],
     closesAt: null,
@@ -53,25 +53,15 @@ describe('HiringPostsService', () => {
         update: jest.fn(),
       },
     };
-    const aiClient = {
-      predictJobSeniority: jest.fn(),
-    };
-    const payloadMapper = {
-      buildHiringPostPayload: jest.fn((post) => ({
-        id: post.id,
-        job_title: post.title,
-      })),
+    const aiQueue = {
+      kick: jest.fn(),
+      enqueue: jest.fn().mockResolvedValue(undefined),
     };
 
     return {
       prisma,
-      aiClient,
-      payloadMapper,
-      service: new HiringPostsService(
-        prisma as never,
-        aiClient as never,
-        payloadMapper as never,
-      ),
+      aiQueue,
+      service: new HiringPostsService(prisma as never, aiQueue as never),
     };
   }
 
@@ -173,7 +163,7 @@ describe('HiringPostsService', () => {
       {
         title: 'Security Analyst',
         description: 'Monitor alerts and respond to incidents quickly',
-        careerField: 'Information security',
+        careerField: 'IT and security',
         yearsRequired: 3,
         skills: ['SIEM'],
         companyName: ' Acme ',
@@ -183,7 +173,7 @@ describe('HiringPostsService', () => {
 
     expect(prisma.hiringPost.create.mock.calls[0][0].data).toMatchObject({
       companyName: 'Acme',
-      careerField: 'Information security',
+      careerField: 'IT and security',
       yearsRequired: 3,
       skills: ['SIEM'],
       closesAt: null,
@@ -197,7 +187,7 @@ describe('HiringPostsService', () => {
         {
           title: 'Security Analyst',
           description: 'Monitor alerts and respond to incidents quickly',
-          careerField: 'Information security',
+          careerField: 'IT and security',
           yearsRequired: 3,
           closesAt: '2020-01-01T00:00:00.000Z',
         },
@@ -298,55 +288,59 @@ describe('HiringPostsService', () => {
     });
   });
 
-  it('predicts and saves hiring post seniority', async () => {
-    const { prisma, service, aiClient, payloadMapper } = createService();
+  it('queues a post for its AI level instead of waiting for the AI', async () => {
+    const { prisma, service, aiQueue } = createService();
     prisma.hiringPost.findUnique.mockResolvedValue(openPost);
-    aiClient.predictJobSeniority.mockResolvedValue({
-      label: 'Mid',
-      confidence: 0.72,
-      probabilities: { Junior: 0.1, Mid: 0.72, Senior: 0.18 },
-      features: { job_title: 'Security Analyst' },
-      model: 'jobaura-recruiter-classifier',
-      elapsed_ms: 8,
-    });
-    prisma.hiringPost.update.mockResolvedValue({
-      ...openPost,
-      predictedSeniority: 'Mid',
-      predictedSeniorityConfidence: 0.72,
-      predictedSeniorityModel: 'jobaura-recruiter-classifier',
-      predictedSeniorityMetadata: {
-        probabilities: { Junior: 0.1, Mid: 0.72, Senior: 0.18 },
-        features: { job_title: 'Security Analyst' },
-        elapsedMs: 8,
-      },
-      predictedSeniorityAt: now,
-    });
 
-    const result = await service.predictSeniority(
-      openPost.id,
-      2,
-      Role.EMPLOYER,
-    );
+    const result = await service.predictSeniority(openPost.id, 2, Role.EMPLOYER);
 
-    expect(payloadMapper.buildHiringPostPayload).toHaveBeenCalledWith(openPost);
-    expect(aiClient.predictJobSeniority).toHaveBeenCalledWith({
-      job: { id: openPost.id, job_title: openPost.title },
-    });
-    expect(prisma.hiringPost.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: openPost.id },
-        data: expect.objectContaining({
-          predictedSeniority: 'Mid',
-          predictedSeniorityConfidence: 0.72,
-          predictedSeniorityModel: 'jobaura-recruiter-classifier',
-          predictedSeniorityAt: expect.any(Date),
-        }),
-      }),
-    );
-    expect(result.content).toMatchObject({
-      id: openPost.id,
-      predictedSeniority: 'Mid',
-      predictedSeniorityConfidence: 0.72,
-    });
+    expect(aiQueue.enqueue).toHaveBeenCalledWith(openPost.id);
+    expect(result.message).toBe('Hiring post queued for AI evaluation');
   });
+
+  it('queues a new post for its AI level', async () => {
+    const { prisma, service, aiQueue } = createService();
+    prisma.hiringPost.create.mockResolvedValue(openPost);
+
+    await service.create(
+      {
+        title: 'Security Analyst',
+        description: 'Monitor alerts and respond to incidents quickly',
+        careerField: 'IT and security',
+        yearsRequired: 3,
+      },
+      2,
+    );
+
+    expect(prisma.hiringPost.create.mock.calls[0][0].data).toMatchObject({
+      aiStatus: 'QUEUED',
+      aiQueuedAt: expect.any(Date),
+    });
+    expect(aiQueue.kick).toHaveBeenCalled();
+  });
+
+  it('queues again when the description changes, but keeps the current level', async () => {
+    const { prisma, service, aiQueue } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue({ ...openPost, predictedSeniority: 'Mid' });
+    prisma.hiringPost.update.mockResolvedValue(openPost);
+
+    await service.update(openPost.id, { description: 'Lead the incident response team and mentor two analysts' }, 2, Role.EMPLOYER);
+
+    const data = prisma.hiringPost.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ aiStatus: 'QUEUED' });
+    expect(data).not.toHaveProperty('predictedSeniority');
+    expect(aiQueue.kick).toHaveBeenCalled();
+  });
+
+  it('does not queue when only the location changes', async () => {
+    const { prisma, service, aiQueue } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+    prisma.hiringPost.update.mockResolvedValue(openPost);
+
+    await service.update(openPost.id, { location: 'Hanoi' }, 2, Role.EMPLOYER);
+
+    expect(prisma.hiringPost.update.mock.calls[0][0].data).not.toHaveProperty('aiStatus');
+    expect(aiQueue.kick).not.toHaveBeenCalled();
+  });
+
 });

@@ -481,6 +481,12 @@ model HiringPost {
   predictedSeniorityModel String?
   predictedSeniorityMetadata Json?
   predictedSeniorityAt DateTime?
+  /// AI level queue: QUEUED, PROCESSING, DONE, AI_UNAVAILABLE, NEEDS_INPUT, or FAILED. Null = never queued.
+  aiStatus       String?
+  aiStatusMessage String?
+  aiQueuedAt     DateTime?
+  aiClaimedAt    DateTime?
+  aiAttempts     Int              @default(0)
   status         HiringPostStatus @default(OPEN)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -492,6 +498,7 @@ model HiringPost {
   @@index([recruiterId, status, updatedAt, id])
   @@index([status, updatedAt, id])
   @@index([status, careerField])
+  @@index([aiStatus, aiQueuedAt])
   @@map("hiring_posts")
 }
 

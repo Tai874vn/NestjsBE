@@ -61,6 +61,7 @@ export const envValidationSchema = Joi.object({
   AI_SERVICE_TIMEOUT_MS: Joi.number().optional(),
   // How often the resume AI queue checks for work; 0 turns the background worker off.
   RESUME_AI_QUEUE_INTERVAL_MS: Joi.number().integer().min(0).optional(),
+  HIRING_POST_AI_QUEUE_INTERVAL_MS: Joi.number().integer().min(0).optional(),
   AI_RECOMMENDATION_MODEL_VERSION: Joi.string().max(100).default('current'),
   RECOMMENDATION_SNAPSHOT_MAX_AGE_SECONDS: Joi.number()
     .integer()
