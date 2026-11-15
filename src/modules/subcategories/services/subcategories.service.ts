@@ -24,7 +24,7 @@ export class SubcategoriesService {
     await this.redisService.invalidateCategoryCaches(createDto.categoryId);
 
     return {
-      message: 'Job detail type created successfully',
+      message: 'Subcategory created successfully',
       content: subcategory,
     };
   }
@@ -37,7 +37,7 @@ export class SubcategoriesService {
     });
 
     return {
-      message: 'Get job detail types successfully',
+      message: 'Get subcategories successfully',
       content: subcategories,
     };
   }
@@ -67,7 +67,7 @@ export class SubcategoriesService {
     ]);
 
     return {
-      message: 'Get job detail types with pagination successfully',
+      message: 'Get subcategories with pagination successfully',
       content: {
         data: subcategories,
         total,
@@ -88,7 +88,7 @@ export class SubcategoriesService {
     });
 
     if (!subcategory) {
-      throw new NotFoundException(`Job detail type with ID ${id} not found`);
+      throw new NotFoundException(`Subcategory with ID ${id} not found`);
     }
 
     return {
@@ -103,7 +103,7 @@ export class SubcategoriesService {
     });
 
     if (!subcategory) {
-      throw new NotFoundException(`Job detail type with ID ${id} not found`);
+      throw new NotFoundException(`Subcategory with ID ${id} not found`);
     }
 
     const updated = await this.prisma.subcategory.update({
@@ -119,7 +119,7 @@ export class SubcategoriesService {
     await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
 
     return {
-      message: 'Job detail type updated successfully',
+      message: 'Subcategory updated successfully',
       content: updated,
     };
   }
@@ -130,7 +130,7 @@ export class SubcategoriesService {
     });
 
     if (!subcategory) {
-      throw new NotFoundException(`Job detail type with ID ${id} not found`);
+      throw new NotFoundException(`Subcategory with ID ${id} not found`);
     }
 
     await this.prisma.subcategory.delete({
@@ -141,7 +141,7 @@ export class SubcategoriesService {
     await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
 
     return {
-      message: 'Job detail type deleted successfully',
+      message: 'Subcategory deleted successfully',
     };
   }
 
@@ -151,7 +151,7 @@ export class SubcategoriesService {
     });
 
     if (!subcategory) {
-      throw new NotFoundException(`Job detail type with ID ${id} not found`);
+      throw new NotFoundException(`Subcategory with ID ${id} not found`);
     }
 
     const updated = await this.prisma.subcategory.update({

@@ -21,7 +21,7 @@ export class CategoriesService {
     await this.redisService.invalidateCategoryCaches();
 
     return {
-      message: 'Job type created successfully',
+      message: 'Category created successfully',
       content: category,
     };
   }
@@ -37,7 +37,7 @@ export class CategoriesService {
         });
 
         return {
-          message: 'Get job types successfully',
+          message: 'Get categories successfully',
           content: categories,
         };
       },
@@ -69,7 +69,7 @@ export class CategoriesService {
     ]);
 
     return {
-      message: 'Get job types with pagination successfully',
+      message: 'Get categories with pagination successfully',
       content: {
         data: categories,
         total,
@@ -99,7 +99,7 @@ export class CategoriesService {
     });
 
     if (!category) {
-      throw new NotFoundException(`Job type with ID ${id} not found`);
+      throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
     const result = {
@@ -117,7 +117,7 @@ export class CategoriesService {
     });
 
     if (!category) {
-      throw new NotFoundException(`Job type with ID ${id} not found`);
+      throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
     const updated = await this.prisma.category.update({
@@ -132,7 +132,7 @@ export class CategoriesService {
     await this.redisService.invalidateCategoryCaches(id);
 
     return {
-      message: 'Job type updated successfully',
+      message: 'Category updated successfully',
       content: updated,
     };
   }
@@ -143,7 +143,7 @@ export class CategoriesService {
     });
 
     if (!category) {
-      throw new NotFoundException(`Job type with ID ${id} not found`);
+      throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
     await this.prisma.category.delete({
@@ -154,7 +154,7 @@ export class CategoriesService {
     await this.redisService.invalidateCategoryCaches(id);
 
     return {
-      message: 'Job type deleted successfully',
+      message: 'Category deleted successfully',
     };
   }
 }

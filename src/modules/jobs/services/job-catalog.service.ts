@@ -20,7 +20,7 @@ export class JobCatalogService {
         });
 
         return {
-          message: 'Get menu job types successfully',
+          message: 'Get category menu successfully',
           content: categories,
         };
       },
@@ -43,7 +43,7 @@ export class JobCatalogService {
         });
 
         return {
-          message: 'Get job detail types successfully',
+          message: 'Get subcategories successfully',
           content: subcategories,
         };
       },

@@ -88,7 +88,7 @@ export class HiresService {
     });
 
     return {
-      message: 'Get hired jobs successfully',
+      message: 'Get hires successfully',
       content: hires,
     };
   }
@@ -120,7 +120,7 @@ export class HiresService {
     ]);
 
     return {
-      message: 'Get hired jobs with pagination successfully',
+      message: 'Get hires with pagination successfully',
       content: {
         data: hires,
         total,
@@ -148,7 +148,7 @@ export class HiresService {
     });
 
     if (!hire) {
-      throw new NotFoundException(`Hired job with ID ${id} not found`);
+      throw new NotFoundException(`Hire with ID ${id} not found`);
     }
 
     if (
@@ -160,7 +160,7 @@ export class HiresService {
     }
 
     return {
-      message: 'Get hired job successfully',
+      message: 'Get hire successfully',
       content: hire,
     };
   }
@@ -183,7 +183,7 @@ export class HiresService {
     });
 
     if (!hire) {
-      throw new NotFoundException(`Hired job with ID ${id} not found`);
+      throw new NotFoundException(`Hire with ID ${id} not found`);
     }
 
     if (hire.hirerId !== userId && userRole !== Role.ADMIN) {
@@ -219,7 +219,7 @@ export class HiresService {
     }
 
     return {
-      message: 'Hired job updated successfully',
+      message: 'Hire updated successfully',
       content: updated,
     };
   }
@@ -237,7 +237,7 @@ export class HiresService {
     });
 
     if (!hire) {
-      throw new NotFoundException(`Hired job with ID ${id} not found`);
+      throw new NotFoundException(`Hire with ID ${id} not found`);
     }
 
     if (hire.hirerId !== userId && userRole !== Role.ADMIN) {
@@ -251,7 +251,7 @@ export class HiresService {
     await this.redisService.invalidateUserCaches(hire.job.creatorId);
 
     return {
-      message: 'Hired job deleted successfully',
+      message: 'Hire deleted successfully',
     };
   }
 
@@ -279,7 +279,7 @@ export class HiresService {
     });
 
     return {
-      message: 'Get hired jobs list successfully',
+      message: 'Get hires list successfully',
       content: hires,
     };
   }
@@ -297,7 +297,7 @@ export class HiresService {
     });
 
     if (!hire) {
-      throw new NotFoundException(`Hired job with ID ${id} not found`);
+      throw new NotFoundException(`Hire with ID ${id} not found`);
     }
 
     if (hire.hirerId !== userId && userRole !== Role.ADMIN) {
