@@ -4,6 +4,7 @@ import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
 import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
+import { profileStrength } from './profile-strength';
 
 type CandidateDirectoryUser = {
   id: number;
@@ -237,6 +238,17 @@ export class CandidateDirectoryService {
     );
     const skills = profileSkills.map((skill) => skill.name);
     const listedServices = user._count?.jobs ?? 0;
+    // The same Profile strength the candidate sees in Settings and on the feed.
+    const strength = profileStrength({
+      role: 'user',
+      headline: user.headline,
+      avatar: user.avatar,
+      bio: user.bio,
+      location: user.location,
+      skills: skills.length,
+      portfolio: (user._count?.portfolioItems ?? 0) + listedServices,
+      resumeData: user.resume?.data,
+    });
     const match = this.scoreCandidateDirectoryCard(
       {
         name: user.name,
@@ -244,9 +256,7 @@ export class CandidateDirectoryService {
         bio: user.bio,
         location: user.location,
         skills,
-        portfolioItems: user._count?.portfolioItems ?? 0,
-        certifications: user._count?.profileCertifications ?? 0,
-        listedServices,
+        strength,
       },
       query,
     );
@@ -267,6 +277,7 @@ export class CandidateDirectoryService {
         rating: 0,
       },
       career: candidateCareer(user.resume),
+      profileStrength: strength,
       match,
     };
   }
@@ -278,9 +289,8 @@ export class CandidateDirectoryService {
       bio?: string | null;
       location?: string | null;
       skills: string[];
-      portfolioItems: number;
-      certifications: number;
-      listedServices: number;
+      /** Profile strength, 0-100. */
+      strength: number;
     },
     query: CandidateDirectoryQueryDto,
   ) {
@@ -314,13 +324,7 @@ export class CandidateDirectoryService {
         .includes(requestedLocation)
         ? 1
         : 0;
-    const qualityScore = Math.min(
-      1,
-      candidate.skills.length * 0.08 +
-        candidate.portfolioItems * 0.12 +
-        candidate.certifications * 0.08 +
-        Math.min(candidate.listedServices, 10) * 0.03,
-    );
+    const qualityScore = candidate.strength / 100;
     const activeFilterCount = [
       keyword,
       requestedSkill,
