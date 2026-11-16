@@ -172,20 +172,28 @@ describe('ResumeAiQueueService', () => {
     expect(written()[0].data).toMatchObject({ aiStatus: 'NEEDS_INPUT', data });
   });
 
-  it('clears an old level when it asks for the occupation, so no level shows beside "choose your occupation"', async () => {
-    const { queue, written } = setup({ data: { Occupation: '', LegacyField: 'QA' } });
+  it.each([
+    ['an empty Occupation', { Occupation: '', LegacyField: 'QA' }],
+    ['no Occupation key', { Summary: 'Tester' }],
+    ['data that is not an object', ['not', 'an', 'object']],
+  ])(
+    'clears an old level when it asks for the occupation (%s), so no level shows beside "choose your occupation"',
+    async (_case, data) => {
+      const { queue, aiClient, written } = setup({ data: data as Record<string, unknown> });
 
-    await queue.processQueue();
+      await queue.processQueue();
 
-    expect(written()[0].data).toMatchObject({
-      aiStatus: 'NEEDS_INPUT',
-      predictedSeniority: null,
-      predictedSeniorityConfidence: null,
-      predictedSeniorityModel: null,
-      predictedSeniorityMetadata: Prisma.DbNull,
-      predictedSeniorityAt: null,
-    });
-  });
+      expect(aiClient.predictResumeSeniority).not.toHaveBeenCalled();
+      expect(written()[0].data).toMatchObject({
+        aiStatus: 'NEEDS_INPUT',
+        predictedSeniority: null,
+        predictedSeniorityConfidence: null,
+        predictedSeniorityModel: null,
+        predictedSeniorityMetadata: Prisma.DbNull,
+        predictedSeniorityAt: null,
+      });
+    },
+  );
 
   it('marks AI failures as "try again" and refused input as failed', async () => {
     const data = { Occupation: '2513.5', YearsExperience: '2' };
