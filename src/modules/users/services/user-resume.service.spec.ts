@@ -40,7 +40,7 @@ describe('UserResumeService', () => {
     );
 
     const result = await service.importResume(1, {
-      data: { Industry: 'QA', Skills: 'reactjs, SQL, reactjs ', Name: 'Ava' },
+      data: { Occupation: '2513.5', Skills: 'reactjs, SQL, reactjs ', Name: 'Ava' },
       sourceFileName: ' resume.pdf ',
       schemaVersion: ' resume-atlas-v1 ',
     });
@@ -51,7 +51,7 @@ describe('UserResumeService', () => {
       'reactjs',
       'SQL',
     ]);
-    expect(args.create.data).toEqual({ Industry: 'QA', Name: 'Ava' });
+    expect(args.create.data).toEqual({ Occupation: '2513.5', Name: 'Ava' });
     expect(args.create).toMatchObject({
       sourceFileName: 'resume.pdf',
       schemaVersion: 'resume-atlas-v1',
@@ -68,24 +68,45 @@ describe('UserResumeService', () => {
     expect(result.message).toBe('Resume imported successfully');
   });
 
-  it('rejects a field outside the list, a bad field-of-study code, and incomplete jobs', async () => {
+  it('rejects an unknown occupation or specialty, a bad field-of-study code, and incomplete jobs (400)', async () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
 
     await expect(
-      service.importResume(1, { data: { Industry: 'Software' } }),
-    ).rejects.toThrow('Choose your field from the list.');
+      service.importResume(1, { data: { Occupation: '9999.9' } }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Choose your occupation from the list.',
+    });
     await expect(
       service.importResume(1, {
-        data: { Industry: 'QA', FieldOfStudy: 'computing' },
+        data: { Occupation: '2513.5', Specialty: 'Rocket surgery' },
+      }),
+    ).rejects.toThrow('Choose a specialty listed under your occupation.');
+    await expect(
+      service.importResume(1, { data: { Specialty: 'Web Developers' } }),
+    ).rejects.toThrow('Choose your occupation before its specialty.');
+    await expect(
+      service.importResume(1, {
+        data: { Occupation: '2513.5', FieldOfStudy: 'computing' },
       }),
     ).rejects.toThrow('Choose your field of study from the list.');
     await expect(
       service.importResume(1, {
         data: {
-          Industry: 'QA',
+          Occupation: '2513.5',
           Jobs: [
-            { title: 'Tester', field: 'QA', start: '2022-05', end: '2021-01' },
+            { title: 'Tester', occupation: '9999.9', start: '2022-05', end: '2023-01' },
+          ],
+        },
+      }),
+    ).rejects.toThrow('Job 1: choose the occupation from the list.');
+    await expect(
+      service.importResume(1, {
+        data: {
+          Occupation: '2513.5',
+          Jobs: [
+            { title: 'Tester', occupation: '2513.5', start: '2022-05', end: '2021-01' },
           ],
         },
       }),
@@ -93,10 +114,10 @@ describe('UserResumeService', () => {
     expect(prisma.userResume.upsert).not.toHaveBeenCalled();
   });
 
-  it('queues an evaluation when the field and years are present', async () => {
+  it('queues an evaluation when the occupation is present', async () => {
     const { service, prisma, aiQueue } = createService();
     prisma.userResume.findUnique.mockResolvedValue({
-      data: { Industry: 'QA', YearsExperience: '3' },
+      data: { Occupation: '2513.5', YearsExperience: '3' },
     });
 
     const result = await service.predictResumeSeniority(1);
@@ -108,7 +129,7 @@ describe('UserResumeService', () => {
     });
   });
 
-  it('asks for the field before queueing an evaluation; years come from the jobs', async () => {
+  it('asks for the occupation before queueing an evaluation; years come from the jobs', async () => {
     const { service, prisma, aiQueue } = createService();
 
     prisma.userResume.findUnique.mockResolvedValue(null);
@@ -117,12 +138,19 @@ describe('UserResumeService', () => {
     );
     prisma.userResume.findUnique.mockResolvedValue({ data: { Skills: 'SQL' } });
     await expect(service.predictResumeSeniority(1)).rejects.toThrow(
-      'Choose your field',
+      'Choose your occupation in the resume before requesting AI seniority prediction',
+    );
+    // A migrated resume (empty Occupation, LegacyField kept) also needs its occupation chosen.
+    prisma.userResume.findUnique.mockResolvedValue({
+      data: { Occupation: '', LegacyField: 'QA' },
+    });
+    await expect(service.predictResumeSeniority(1)).rejects.toThrow(
+      'Choose your occupation',
     );
     expect(aiQueue.enqueue).not.toHaveBeenCalled();
-    // A field with no jobs in it is 0 years, someone starting out, and can be evaluated.
+    // An occupation with no jobs in it is 0 years, someone starting out, and can be evaluated.
     prisma.userResume.findUnique.mockResolvedValue({
-      data: { Industry: 'QA', Specialty: 'Manual testing' },
+      data: { Occupation: '2513.5' },
     });
     await service.predictResumeSeniority(1);
     expect(aiQueue.enqueue).toHaveBeenCalledWith(1);
@@ -133,9 +161,44 @@ describe('UserResumeService', () => {
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
     prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
 
-    await service.importResume(1, { data: { Industry: 'QA', YearsExperience: '7' } });
+    await service.importResume(1, { data: { Occupation: '2513.5', YearsExperience: '7' } });
 
-    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({ Industry: 'QA' });
+    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({ Occupation: '2513.5' });
+  });
+
+  it('still saves a resume from before occupations: Industry and job fields become read-only legacy values', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
+
+    await service.importResume(1, {
+      data: {
+        Industry: 'QA',
+        Jobs: [{ title: 'Tester', field: 'QA', start: '2022-05', end: '', current: true }],
+      },
+    });
+
+    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({
+      LegacyField: 'QA',
+      Jobs: [
+        { title: 'Tester', occupation: '', legacyField: 'QA', start: '2022-05', end: '', current: true, description: '' },
+      ],
+    });
+  });
+
+  it('opens a migrated resume unchanged', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    const data = {
+      Occupation: '',
+      LegacyField: 'QA',
+      Jobs: [{ title: 'Tester', occupation: '', legacyField: 'QA', start: '2022-05', end: '', current: true, description: '' }],
+    };
+    prisma.userResume.findUnique.mockResolvedValue({ id: 10, userId: 1, data, aiStatus: 'NEEDS_INPUT' });
+
+    const result = await service.getMyResume(1);
+
+    expect(result.content).toMatchObject({ aiStatus: 'NEEDS_INPUT', data: { ...data } });
   });
 
   it('returns the resume with the shared skill list as its Skills', async () => {

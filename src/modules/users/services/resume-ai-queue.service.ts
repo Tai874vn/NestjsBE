@@ -10,9 +10,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
-import { isCareerField } from '../../../common/career-fields';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
-import { yearsInField } from './resume-career';
+import { resumeOccupation } from './resume-career';
 import {
   asRecord,
   buildResumeSeniorityPayload,
@@ -249,17 +248,17 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         .slice(0, MAX_SUGGESTED_SKILLS);
     }
 
-    // 3. Seniority, only when the field and years in it are known.
+    // 3. Seniority, only when the occupation is chosen; years in it are counted from the jobs (0 without any).
     const base: Prisma.UserResumeUpdateManyMutationInput = {
       data: nextData as Prisma.InputJsonValue,
       aiInsights: insights as Prisma.InputJsonValue,
     };
-    if (!isCareerField(nextData.Industry) || yearsInField(nextData) === null) {
+    if (resumeOccupation(nextData) === null) {
       return {
         ...base,
         aiStatus: RESUME_AI_STATUS.NEEDS_INPUT,
         aiStatusMessage:
-          'Choose your field to get a seniority preview; your years are counted from the jobs you add in it.',
+          'Choose your occupation to get a seniority preview; your years are counted from the jobs you add in it.',
       };
     }
     const prediction = await this.aiClient.predictResumeSeniority({

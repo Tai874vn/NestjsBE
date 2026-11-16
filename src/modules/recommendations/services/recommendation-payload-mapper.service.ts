@@ -1,4 +1,9 @@
-import { yearsInField } from '../../users/services/resume-career';
+import {
+  occupationYears,
+  cleanResumeJobs,
+  resumeOccupation,
+} from '../../users/services/resume-career';
+import { findOccupation } from '../../occupations/occupation-catalogue';
 import { Injectable } from '@nestjs/common';
 
 export type UserForRecommendation = {
@@ -60,13 +65,16 @@ export class RecommendationPayloadMapperService {
       sanitizedData.category,
       user.headline,
     );
-    const industry = this.firstString(
-      sanitizedData.Industry,
-      sanitizedData.industry,
-    );
-    // Years in the chosen field, counted from the resume's jobs.
-    const years = yearsInField(sanitizedData);
-    const yearsExperience = years === null ? undefined : String(years);
+    // The ESCO occupation; its title is the text the ranking reads as `industry`.
+    const occupation = resumeOccupation(sanitizedData);
+    const industry = occupation
+      ? (findOccupation(occupation)?.title ?? null)
+      : null;
+    // Years in the occupation, counted from the resume's jobs as the AI counts them.
+    const years = occupation
+      ? occupationYears(cleanResumeJobs(sanitizedData.Jobs), occupation)
+      : null;
+    const yearsExperience = years === null ? undefined : String(years.years);
     const text = [
       user.headline,
       user.bio,
@@ -94,8 +102,11 @@ export class RecommendationPayloadMapperService {
       location: user.location ?? sanitizedData.Location,
       skills,
       summary: user.bio ?? sanitizedData.Summary,
+      occupation,
       industry,
       years_experience: yearsExperience,
+      years_in_occupation: years?.years,
+      related_years: years?.related,
       experience: sanitizedData.Experience,
       education: sanitizedData.Education,
       text: this.redactContactInfo(text),

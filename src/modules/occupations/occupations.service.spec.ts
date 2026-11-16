@@ -54,4 +54,33 @@ describe('OccupationsService', () => {
     expect(service.relatedOverlap('2512.4', '9999.99')).toBe(0);
     expect(service.relatedOverlap('9999.99', '2512.4')).toBe(0);
   });
+
+  it('ranks a prefix hit before a substring hit, even a shorter one', () => {
+    const titles = service.search('sales', 50).map((h) => h.title);
+    const squashed = titles.map((t) => t.toLowerCase().replace(/[\s-]+/g, ''));
+    const prefix = titles.filter((_, i) => squashed[i].startsWith('sales'));
+    const inner = titles.filter((_, i) => squashed[i].indexOf('sales') > 0);
+    expect(prefix.length).toBeGreaterThan(0);
+    expect(inner.length).toBeGreaterThan(0);
+    expect(titles.slice(0, prefix.length)).toEqual(prefix);
+    // The longest prefix hit is longer than the shortest substring hit, so length is not what ordered them.
+    expect(Math.max(...prefix.map((t) => t.length))).toBeGreaterThan(
+      Math.min(...inner.map((t) => t.length)),
+    );
+  });
+
+  it('caps the limit at 50', () => {
+    expect(service.search('e', 500)).toHaveLength(50);
+  });
+
+  it('relatedness is the Jaccard of skill groups for any pair (as in the AI service)', () => {
+    expect(service.relatedness('2513.5', '2512.3')).toBeCloseTo(0.54, 2);
+    expect(service.relatedness('2511.8', '2512.3')).toBeCloseTo(0.34, 2);
+    // Below the stored related list's 0.25 cut-off, still not 0.
+    expect(service.relatedness('2411.1', '2513.5')).toBeCloseTo(0.08, 2);
+    expect(service.relatedOverlap('2411.1', '2513.5')).toBe(0);
+    expect(service.relatedness('2511.2', '2511.3')).toBeCloseTo(0.84, 2);
+    expect(service.relatedness('2513.5', '2513.5')).toBe(1);
+    expect(service.relatedness('2513.5', '9999.9')).toBe(0);
+  });
 });

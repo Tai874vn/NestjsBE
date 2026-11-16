@@ -1,9 +1,17 @@
-import { isCareerField } from '../../../common/career-fields';
+import {
+  findOccupation,
+  occupationRelatedness,
+} from '../../occupations/occupation-catalogue';
 
-/** A job entry from the resume form: months are "YYYY-MM"; a current job has no end month. */
+/**
+ * A job entry from the resume form: months are "YYYY-MM"; a current job has no end month. `occupation` is an ESCO
+ * code, or empty when the title matches none (the job is kept and its months count toward nothing). `legacyField`
+ * is the job's old 37-field value, kept read-only to show "previously: X".
+ */
 export interface ResumeJob {
   title: string;
-  field: string;
+  occupation: string;
+  legacyField?: string;
   start: string;
   end: string;
   current: boolean;
@@ -11,6 +19,8 @@ export interface ResumeJob {
 }
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+/** Other occupations' years count for this share of their relatedness to the main one (AIService RELATED_CREDIT). */
+export const RELATED_CREDIT = 0.3;
 
 /** Same levels as the labeling data and the frontend form. */
 export const DEGREE_LEVELS = [
@@ -24,26 +34,31 @@ function text(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+const given = (value: unknown) =>
+  value !== undefined && value !== null && value !== '';
+
 /** Problems with the career part of resume data, as messages a user can act on. Empty when valid. */
 export function resumeCareerProblems(data: Record<string, unknown>): string[] {
   const problems: string[] = [];
   const degree = data.Degree;
-  if (
-    degree !== undefined &&
-    degree !== null &&
-    degree !== '' &&
-    !DEGREE_LEVELS.some((level) => level === degree)
-  ) {
+  if (given(degree) && !DEGREE_LEVELS.some((level) => level === degree)) {
     problems.push('Choose your highest degree from the list.');
   }
-  const industry = data.Industry;
-  if (
-    industry !== undefined &&
-    industry !== null &&
-    industry !== '' &&
-    !isCareerField(industry)
-  ) {
-    problems.push('Choose your field from the list.');
+  const hasOccupation = given(data.Occupation);
+  const main = findOccupation(data.Occupation);
+  if (hasOccupation && !main) {
+    problems.push('Choose your occupation from the list.');
+  }
+  if (given(data.Specialty)) {
+    if (!hasOccupation) {
+      problems.push('Choose your occupation before its specialty.');
+    } else if (
+      main &&
+      (typeof data.Specialty !== 'string' ||
+        !main.specialties.includes(data.Specialty.trim()))
+    ) {
+      problems.push('Choose a specialty listed under your occupation.');
+    }
   }
   if (data.Jobs === undefined || data.Jobs === null) {
     return problems;
@@ -55,7 +70,9 @@ export function resumeCareerProblems(data: Record<string, unknown>): string[] {
     const label = `Job ${index + 1}`;
     const job = (raw ?? {}) as Record<string, unknown>;
     if (!text(job.title, 120)) problems.push(`${label}: add the job title.`);
-    if (!isCareerField(job.field)) problems.push(`${label}: choose the field.`);
+    if (given(job.occupation) && !findOccupation(job.occupation)) {
+      problems.push(`${label}: choose the occupation from the list.`);
+    }
     const start = text(job.start, 7);
     const end = text(job.end, 7);
     if (!MONTH.test(start)) problems.push(`${label}: add the start month.`);
@@ -68,15 +85,20 @@ export function resumeCareerProblems(data: Record<string, unknown>): string[] {
   return problems;
 }
 
-/** Jobs cleaned to the stored shape. Call only after resumeCareerProblems returned no problems. */
+/**
+ * Jobs cleaned to the stored shape. Call only after resumeCareerProblems returned no problems. A job saved before
+ * occupations (with the old `field`) keeps that value as `legacyField`.
+ */
 export function cleanResumeJobs(value: unknown): ResumeJob[] {
   if (!Array.isArray(value)) return [];
   return value.map((raw) => {
     const job = (raw ?? {}) as Record<string, unknown>;
     const current = job.current === true;
+    const legacyField = text(job.legacyField, 60) || text(job.field, 60);
     return {
       title: text(job.title, 120),
-      field: text(job.field, 60),
+      occupation: findOccupation(job.occupation)?.code ?? '',
+      ...(legacyField ? { legacyField } : {}),
       start: text(job.start, 7),
       end: current ? '' : text(job.end, 7),
       current,
@@ -85,37 +107,43 @@ export function cleanResumeJobs(value: unknown): ResumeJob[] {
   });
 }
 
-function monthIndex(value: string) {
-  const [year, month] = value.split('-').map(Number);
-  return year * 12 + month - 1;
+/** Python's round(): halves go to the even neighbour (round(2.5) == 2). */
+function roundHalfEven(value: number): number {
+  const floor = Math.floor(value);
+  const diff = value - floor;
+  if (diff > 0.5) return floor + 1;
+  if (diff < 0.5) return floor;
+  return floor % 2 === 0 ? floor : floor + 1;
 }
 
-/** Months worked in one field, overlapping jobs counted once; current jobs run to `today`. */
-export function monthsInField(
-  jobs: ResumeJob[],
-  field: string,
-  today = new Date(),
-): number {
-  const now = today.getFullYear() * 12 + today.getMonth();
-  const spans = jobs
-    .filter(
-      (job) =>
-        job.field === field &&
-        MONTH.test(job.start) &&
-        (job.current || MONTH.test(job.end)),
-    )
-    .map(
-      (job) =>
-        [monthIndex(job.start), job.current ? now : monthIndex(job.end)] as [
-          number,
-          number,
-        ],
-    )
-    .filter(([start, end]) => end >= start)
-    .sort((a, b) => a[0] - b[0]);
+/**
+ * Python's round(value, 1) for value >= 0: the double's exact decimal value rounded to one decimal, ties to even.
+ * toFixed rounds the exact value too but sends ties up; an exact tie needs value = odd / 4 (0.25, 0.75, ...).
+ */
+function roundTenthsHalfEven(value: number): number {
+  const quarters = value * 4;
+  if (Number.isInteger(quarters) && quarters % 2 !== 0) {
+    return roundHalfEven(value * 10) / 10;
+  }
+  return Number(value.toFixed(1));
+}
+
+/** Months since year 0 for "YYYY-MM" (one- or two-digit month, as the AI service reads it), else null. */
+function monthIndex(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{1,2})$/.exec(value.trim());
+  if (!match) return null;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return Number(match[1]) * 12 + month - 1;
+}
+
+/** Months covered by the spans, overlaps counted once. */
+function unionMonths(spans: Array<[number, number]>): number {
   let total = 0;
   let span: [number, number] | null = null;
-  for (const [start, end] of spans) {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [start, end] of sorted) {
     if (span && start <= span[1]) {
       span[1] = Math.max(span[1], end);
     } else {
@@ -127,18 +155,82 @@ export function monthsInField(
 }
 
 /**
- * Years in the user's field, counted from the start and end months of their jobs in it (overlaps once; a current job
- * runs to `today`). It is the only source of years: there is no typed-in number. A chosen field with no jobs in it
- * is 0 years, someone starting out. Null until a field from the list is chosen.
+ * Years in the main occupation, and related years credited from other occupations' jobs. The same as
+ * `occupation_years` in AIService app/occupations.py, so the backend and the AI count the same years.
+ *
+ * Months are unioned per occupation, never added across occupations. Main years are in half years
+ * (round(months / 6) / 2, the count the owner's thresholds were set on). Each other occupation gives
+ * relatedness x RELATED_CREDIT x its years; the total is rounded to 0.1 and is at most the main years. Jobs without
+ * a known occupation or valid dates give nothing. An empty end means the job is current and runs to `today`.
  */
-export function yearsInField(
+export function occupationYears(
+  jobs: ReadonlyArray<{ occupation?: unknown; start?: unknown; end?: unknown }>,
+  main: string,
+  today = new Date(),
+): { years: number; related: number } {
+  const now = today.getFullYear() * 12 + today.getMonth();
+  const spans = new Map<string, Array<[number, number]>>();
+  for (const job of jobs) {
+    const code = job.occupation;
+    const start = monthIndex(job.start);
+    const end =
+      job.end === undefined || job.end === null || job.end === ''
+        ? now
+        : monthIndex(job.end);
+    if (
+      typeof code !== 'string' ||
+      !findOccupation(code) ||
+      start === null ||
+      end === null ||
+      end < start
+    ) {
+      continue;
+    }
+    const key = code.trim();
+    spans.set(key, [...(spans.get(key) ?? []), [start, end]]);
+  }
+  const years = roundHalfEven(unionMonths(spans.get(main) ?? []) / 6) / 2;
+  spans.delete(main);
+  let credit = 0;
+  for (const [code, found] of spans) {
+    credit +=
+      (occupationRelatedness(main, code) *
+        RELATED_CREDIT *
+        unionMonths(found)) /
+      12;
+  }
+  return { years, related: roundTenthsHalfEven(Math.min(years, credit)) };
+}
+
+/** The resume's main occupation (ESCO code), or null until one from the catalogue is chosen. */
+export function resumeOccupation(data: Record<string, unknown>): string | null {
+  return findOccupation(data.Occupation)?.code ?? null;
+}
+
+/**
+ * Years in the resume's occupation, counted from the start and end months of its jobs in it (overlaps once; a
+ * current job runs to `today`). There is no typed-in number. An occupation with no jobs in it is 0 years, someone
+ * starting out. Null until an occupation from the catalogue is chosen.
+ */
+export function yearsInOccupation(
   data: Record<string, unknown>,
   today = new Date(),
 ): number | null {
-  const field = data.Industry;
-  if (!isCareerField(field)) return null;
-  const months = monthsInField(cleanResumeJobs(data.Jobs), field, today);
-  return Math.round((months / 12) * 10) / 10;
+  const main = resumeOccupation(data);
+  return main === null
+    ? null
+    : occupationYears(cleanResumeJobs(data.Jobs), main, today).years;
+}
+
+/** Related years credited from the resume's jobs in other occupations; null without an occupation. */
+export function relatedYears(
+  data: Record<string, unknown>,
+  today = new Date(),
+): number | null {
+  const main = resumeOccupation(data);
+  return main === null
+    ? null
+    : occupationYears(cleanResumeJobs(data.Jobs), main, today).related;
 }
 
 /**

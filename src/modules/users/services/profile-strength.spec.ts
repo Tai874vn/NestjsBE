@@ -11,12 +11,12 @@ const fullCandidate = {
   portfolio: 1,
 };
 const fullResume = {
-  Industry: 'Software development',
+  Occupation: '2513.5',
   YearsExperience: '4',
   Degree: 'Bachelor',
   FieldOfStudy: '0613',
   Jobs: [
-    { title: 'Developer', field: 'Software development', start: '2021-01', end: '', current: true, description: '' },
+    { title: 'Developer', occupation: '2513.5', start: '2021-01', end: '', current: true, description: '' },
   ],
 };
 
@@ -25,7 +25,7 @@ describe('profileStrength', () => {
     expect(profileStrength({ ...fullCandidate, resumeData: fullResume })).toBe(100);
   });
 
-  it('weights the resume field and years most', () => {
+  it('weights the resume occupation most', () => {
     expect(profileStrength({ ...fullCandidate, resumeData: null })).toBe(60);
   });
 
@@ -33,10 +33,14 @@ describe('profileStrength', () => {
     expect(profileStrength({ ...fullCandidate, skills: 2, resumeData: fullResume })).toBe(93);
   });
 
-  it('counts years from dated jobs in the main field, and accepts "Not stated" education', () => {
+  it('counts years from dated jobs in the occupation, and accepts "Not stated" education', () => {
     const { YearsExperience: _years, ...withoutYears } = fullResume;
     expect(profileStrength({ ...fullCandidate, resumeData: { ...withoutYears, Degree: 'Not stated', FieldOfStudy: '' } })).toBe(100);
-    expect(profileStrength({ ...fullCandidate, resumeData: { ...fullResume, Industry: 'Rocket surgery' } })).toBe(75);
+    expect(profileStrength({ ...fullCandidate, resumeData: { ...fullResume, Occupation: '9999.9' } })).toBe(75);
+    // A resume saved before occupations (old 37-field Industry) scores without crashing; it lacks the occupation (25) and education (5).
+    const legacy = { LegacyField: 'Software development', Occupation: '', Jobs: [{ title: 'Developer', legacyField: 'Software development', start: '2021-01', end: '', current: true }] };
+    expect(profileStrength({ ...fullCandidate, resumeData: legacy })).toBe(70);
+    expect(profileStrength({ ...fullCandidate, resumeData: { Industry: 'QA', Jobs: [{ title: 'Tester', field: 'QA', start: '2021-01', current: true }] } })).toBe(70);
   });
 
   it('scores recruiters on identity and a hiring post', () => {

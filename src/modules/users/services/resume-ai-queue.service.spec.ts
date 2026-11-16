@@ -105,10 +105,10 @@ describe('ResumeAiQueueService', () => {
   });
 
   it('reads the shared skill list, suggests CV skills, and predicts seniority when the AI is up', async () => {
-    const { queue, written, redisService } = setup({
+    const { queue, written, redisService, aiClient } = setup({
       // An old resume may still carry its own Skills copy; it is dropped in favour of user_skills.
       data: {
-        Industry: 'Software development',
+        Occupation: '2513.5',
         YearsExperience: '3',
         Skills: 'old, copy',
         SkillIds: ['skill:old'],
@@ -127,7 +127,7 @@ describe('ResumeAiQueueService', () => {
       aiClaimedAt: null,
       predictedSeniority: 'Mid',
       data: {
-        Industry: 'Software development',
+        Occupation: '2513.5',
         YearsExperience: '3',
         Text: 'Built apps with ReactJS and docker.',
       },
@@ -137,19 +137,42 @@ describe('ResumeAiQueueService', () => {
       },
     });
     expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
+    // No jobs: 0 years in the occupation is sent, not left for the AI to guess.
+    const [[sent]] = aiClient.predictResumeSeniority.mock.calls as unknown as Array<[{ resume: Record<string, unknown> }]>;
+    expect(sent.resume).toMatchObject({ occupation: '2513.5', years_in_occupation: 0, related_years: 0 });
+    expect(sent.resume).not.toHaveProperty('industry');
+    expect(sent.resume).not.toHaveProperty('career_field');
   });
 
-  it('asks for input instead of predicting when the field or years are missing', async () => {
+  it('asks for input instead of predicting when the occupation is missing', async () => {
     const { queue, aiClient, written } = setup({ data: { Skills: 'SQL' } });
 
     await queue.processQueue();
 
     expect(aiClient.predictResumeSeniority).not.toHaveBeenCalled();
-    expect(written()[0].data.aiStatus).toBe('NEEDS_INPUT');
+    expect(written()[0].data).toMatchObject({
+      aiStatus: 'NEEDS_INPUT',
+      aiStatusMessage:
+        'Choose your occupation to get a seniority preview; your years are counted from the jobs you add in it.',
+    });
+  });
+
+  it('asks a migrated resume (LegacyField, empty Occupation) for its occupation and keeps its data', async () => {
+    const data = {
+      LegacyField: 'QA',
+      Occupation: '',
+      Jobs: [{ title: 'Tester', occupation: '', legacyField: 'QA', start: '2021-01', end: '', current: true, description: '' }],
+    };
+    const { queue, aiClient, written } = setup({ data });
+
+    await queue.processQueue();
+
+    expect(aiClient.predictResumeSeniority).not.toHaveBeenCalled();
+    expect(written()[0].data).toMatchObject({ aiStatus: 'NEEDS_INPUT', data });
   });
 
   it('marks AI failures as "try again" and refused input as failed', async () => {
-    const data = { Industry: 'QA', YearsExperience: '2' };
+    const data = { Occupation: '2513.5', YearsExperience: '2' };
     const down = setup({ data });
     down.aiClient.predictResumeSeniority.mockRejectedValue(
       new ServiceUnavailableException('AI service returned 503'),
@@ -173,7 +196,7 @@ describe('ResumeAiQueueService', () => {
 
   it('skips the write when the resume was saved again during processing', async () => {
     const { queue, prisma, redisService } = setup({
-      data: { Industry: 'QA', YearsExperience: '2' },
+      data: { Occupation: '2513.5', YearsExperience: '2' },
     });
     prisma.userResume.updateMany.mockResolvedValue({ count: 0 });
 

@@ -1,5 +1,7 @@
 // Copies the ESCO occupation catalogue from the AI service into the backend,
-// keeping only what the backend reads (code, isco, title, altLabels, specialties, related).
+// keeping only what the backend reads (code, isco, title, altLabels, specialties, related, groups).
+// `groups` (ESCO skill groups) lets the backend compute relatedness for any pair, as the AI service does;
+// `related` holds only the closest pairs (overlap >= 0.25, at most 15).
 // Usage: node scripts/sync-occupations.mjs [path/to/occupations.json]
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -22,6 +24,7 @@ const slim = {
     altLabels: o.altLabels,
     specialties: o.specialties,
     related: o.related,
+    groups: o.groups,
   })),
 };
 mkdirSync(dirname(target), { recursive: true });

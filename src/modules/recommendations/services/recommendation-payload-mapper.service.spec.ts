@@ -24,3 +24,32 @@ describe('RecommendationPayloadMapperService hiring post payload', () => {
     });
   });
 });
+
+describe('RecommendationPayloadMapperService resume payload', () => {
+  it('sends the occupation, its title as industry, and the years counted per occupation', () => {
+    const payload = new RecommendationPayloadMapperService().buildResumePayload({
+      id: 7,
+      resume: {
+        data: {
+          Occupation: '2513.5',
+          Jobs: [{ title: 'Web developer', occupation: '2513.5', start: '2020-01', end: '2022-01', current: false }],
+        },
+      },
+    });
+    expect(payload).toMatchObject({
+      occupation: '2513.5',
+      industry: 'web developer',
+      years_experience: '2',
+      years_in_occupation: 2,
+      related_years: 0,
+    });
+  });
+
+  it('sends no occupation or years for a resume from before occupations', () => {
+    const payload = new RecommendationPayloadMapperService().buildResumePayload({
+      id: 7,
+      resume: { data: { Occupation: '', LegacyField: 'QA' } },
+    });
+    expect(payload).toMatchObject({ occupation: null, industry: null, years_experience: undefined });
+  });
+});

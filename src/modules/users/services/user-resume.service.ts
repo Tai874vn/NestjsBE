@@ -11,10 +11,10 @@ import {
   UploadedResumeFileMetadata,
 } from '../dto/import-resume.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
-import { isCareerField } from '../../../common/career-fields';
 import {
   cleanResumeJobs,
   resumeCareerProblems,
+  resumeOccupation,
 } from './resume-career';
 import { asRecord, mergeSkills, stringList } from './resume-ai-payload';
 import {
@@ -106,9 +106,9 @@ export class UserResumeService {
       throw new NotFoundException(`Resume for user ID ${userId} not found`);
     }
     const resumeData = asRecord(resume.data);
-    if (!isCareerField(resumeData.Industry)) {
+    if (resumeOccupation(resumeData) === null) {
       throw new BadRequestException(
-        'Choose your field in the resume before requesting AI seniority prediction',
+        'Choose your occupation in the resume before requesting AI seniority prediction',
       );
     }
 
@@ -243,8 +243,19 @@ export class UserResumeService {
     // Skills are stored in `user_skills` (see importResume), not in the resume.
     delete data.Skills;
     delete data.SkillIds;
-    // Years come from the jobs' months (yearsInField); a typed-in number is not kept.
+    // Years come from the jobs' months (yearsInOccupation); a typed-in number is not kept.
     delete data.YearsExperience;
+    // A resume saved before occupations keeps its old 37-field value read-only, as LegacyField.
+    const industry =
+      typeof raw.Industry === 'string' ? raw.Industry.trim() : '';
+    if (industry && !data.LegacyField) data.LegacyField = industry;
+    delete data.Industry;
+    if (typeof data.Occupation === 'string') {
+      data.Occupation = data.Occupation.trim();
+    }
+    if (typeof data.Specialty === 'string') {
+      data.Specialty = data.Specialty.trim();
+    }
     return data;
   }
 }

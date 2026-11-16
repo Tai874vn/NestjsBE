@@ -1,7 +1,11 @@
 import { Prisma } from '@prisma/client';
-import { cleanResumeJobs, yearsInField } from './resume-career';
+import {
+  cleanResumeJobs,
+  occupationYears,
+  resumeOccupation,
+} from './resume-career';
 
-/** The parts of a user the AI seniority payload reads. */
+/** The parts of a user the resume AI work reads (the seniority payload reads only the headline). */
 export interface ResumeOwner {
   headline?: string | null;
   /** Skills from the old single-column `skill` field, already parsed. */
@@ -62,18 +66,22 @@ export function mergeSkills(...skillGroups: string[][]): string[] {
   });
 }
 
-/** The resume payload the AI service's seniority endpoint reads. */
+/**
+ * The resume payload the AI service's seniority endpoint reads (`features_from_resume` in AIService
+ * app/seniority/predictor.py). Years are counted here, as the AI would count them, and always sent: 0 for someone
+ * with no jobs in the occupation.
+ */
 export function buildResumeSeniorityPayload(
   owner: ResumeOwner,
   data: Record<string, unknown>,
+  today = new Date(),
 ): Record<string, unknown> {
-  const skills = mergeSkills(
-    owner.profileSkills?.map((skill) => skill.name) ?? [],
-    owner.legacySkills ?? [],
-    stringList(data.Skills),
-    stringList(data.skills),
-  );
+  const occupation = resumeOccupation(data);
+  const jobs = cleanResumeJobs(data.Jobs);
+  const years = occupation ? occupationYears(jobs, occupation, today) : null;
   const payload: Record<string, unknown> = {
+    occupation,
+    specialty: firstText(data.Specialty),
     role: firstText(
       data.role,
       data.Role,
@@ -85,26 +93,24 @@ export function buildResumeSeniorityPayload(
       data.category,
       owner.headline,
     ),
-    // Counted from the jobs, like years_in_field; there is no typed-in number any more.
-    years_experience: yearsText(data),
-    industry: firstText(data.industry, data.Industry),
-    specialty: firstText(data.specialty, data.Specialty),
     // Free text where seniority evidence is described (leading, mentoring, tools used).
     summary: firstText(data.summary, data.Summary),
     experience: firstText(data.experience, data.Experience),
-    years_in_field: yearsInField(data),
-    jobs: cleanResumeJobs(data.Jobs),
     degree: firstText(data.Degree),
     field_of_study: firstText(data.FieldOfStudy),
-    education: firstText(data.education, data.Education),
-    skills,
+    // The description is evidence text the AI reads with the title; the old field (legacyField) is not sent.
+    jobs: jobs.map((job) => ({
+      title: job.title,
+      occupation: job.occupation,
+      start: job.start,
+      end: job.end,
+      current: job.current,
+      description: job.description,
+    })),
+    years_in_occupation: years?.years,
+    related_years: years?.related,
   };
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => hasValue(value)),
   );
-}
-
-function yearsText(data: Record<string, unknown>): string | undefined {
-  const years = yearsInField(data);
-  return years === null ? undefined : String(years);
 }

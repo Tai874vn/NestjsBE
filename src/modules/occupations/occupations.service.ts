@@ -1,15 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-interface CatalogueOccupation {
-  code: string;
-  isco: string;
-  title: string;
-  altLabels: string[];
-  specialties: string[];
-  related: Array<{ code: string; overlap: number }>;
-}
+import {
+  CatalogueOccupation,
+  occupationCatalogue,
+  occupationRelatedness,
+} from './occupation-catalogue';
 
 export interface OccupationHit {
   code: string;
@@ -32,20 +26,11 @@ interface IndexedOccupation {
 
 @Injectable()
 export class OccupationsService {
-  private readonly byCode = new Map<string, CatalogueOccupation>();
+  private readonly byCode = occupationCatalogue();
   private readonly index: IndexedOccupation[];
 
   constructor() {
-    const catalogue: { occupations: CatalogueOccupation[] } = JSON.parse(
-      readFileSync(
-        join(__dirname, '..', '..', 'common', 'data', 'occupations.json'),
-        'utf8',
-      ),
-    );
-    for (const occupation of catalogue.occupations) {
-      this.byCode.set(occupation.code, occupation);
-    }
-    this.index = catalogue.occupations.map((occupation) => ({
+    this.index = [...this.byCode.values()].map((occupation) => ({
       occupation,
       title: squash(occupation.title),
       altLabels: occupation.altLabels.map(squash),
@@ -73,6 +58,11 @@ export class OccupationsService {
   /** Skill-group overlap (Jaccard) stored for `a` against `b`; 0 when not related. */
   relatedOverlap(a: string, b: string): number {
     return this.byCode.get(a)?.related.find((r) => r.code === b)?.overlap ?? 0;
+  }
+
+  /** Jaccard of the two occupations' skill groups, for any pair (as the AI service computes it). */
+  relatedness(a: string, b: string): number {
+    return occupationRelatedness(a, b);
   }
 
   /**
