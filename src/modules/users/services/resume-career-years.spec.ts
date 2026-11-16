@@ -155,6 +155,40 @@ describe('resumeOccupationYears (the read-only breakdown the resume form shows)'
     expect(accountant.credit).toBeLessThan(analyst.credit);
   });
 
+  it('gives closely related occupations their own share and the rest one share, adding up to related_years', () => {
+    const detail = resumeOccupationYears(data, TODAY)!;
+    const [analyst, accountant] = detail.others;
+    // Real overlaps: ICT business analyst is related to software developer; an accountant shares few skill groups.
+    expect(analyst.closelyRelated).toBe(true);
+    expect(accountant.overlap).toBeCloseTo(0.0455, 4);
+    expect(accountant.closelyRelated).toBe(false);
+    expect(accountant.shownCredit).toBe(0);
+    // 0.204 + 0.136 = 0.34 is 0.3 in tenths: 0.2 from the analyst, 0.1 from the other job.
+    expect(detail.related).toBe(0.3);
+    expect(analyst.shownCredit).toBe(0.2);
+    expect(detail.otherCredit).toBe(0.1);
+    expect(detail.capped).toBe(false);
+  });
+
+  it('splits a capped credit so the shown parts still add up to it', () => {
+    const detail = resumeOccupationYears(
+      {
+        Occupation: '2511.3',
+        Jobs: [
+          resumeJob('Data analyst', '2511.2', '2018-09', '2024-09'),
+          resumeJob('Accountant', '2411.1', '2008-09', '2018-09'),
+          resumeJob('Data scientist', '2511.3', '2025-09'),
+        ],
+      },
+      TODAY,
+    )!;
+    expect(detail.years).toBe(1);
+    expect(detail.related).toBe(1);
+    expect(detail.capped).toBe(true);
+    const shown = detail.others.reduce((sum, other) => sum + other.shownCredit, 0);
+    expect(Math.round((shown + detail.otherCredit) * 10)).toBe(10);
+  });
+
   it('lists no line for a job without an occupation: its months count toward nothing', () => {
     const detail = resumeOccupationYears(data, TODAY)!;
     expect(detail.others.some((other) => other.code === '')).toBe(false);

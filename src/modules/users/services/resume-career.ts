@@ -1,6 +1,7 @@
 import {
   findOccupation,
   occupationRelatedness,
+  RELATED_FROM,
 } from '../../occupations/occupation-catalogue';
 
 /**
@@ -237,11 +238,18 @@ export function occupationYears(
   main: string,
   today = new Date(),
 ): { years: number; related: number } {
-  const spans = spansByOccupation(jobs, today);
+  return yearsFromSpans(spansByOccupation(jobs, today), main);
+}
+
+/** occupationYears on spans already collected per occupation. */
+function yearsFromSpans(
+  spans: ReadonlyMap<string, Array<[number, number]>>,
+  main: string,
+): { years: number; related: number } {
   const years = halfYears(unionMonths(spans.get(main) ?? []));
-  spans.delete(main);
   let credit = 0;
   for (const [code, found] of spans) {
+    if (code === main) continue;
     credit +=
       (occupationRelatedness(main, code) *
         RELATED_CREDIT *
@@ -259,8 +267,12 @@ export interface RelatedOccupationYears {
   years: number;
   /** Share of ESCO skill groups shared with the main occupation (Jaccard, 0 to 1). */
   overlap: number;
+  /** overlap >= RELATED_FROM: the form gives it its own "Related experience" line. */
+  closelyRelated: boolean;
   /** overlap x RELATED_CREDIT x this occupation's unrounded years, before the total is rounded and capped. */
   credit: number;
+  /** Its share of `related` in tenths, after the cap; 0 below RELATED_FROM (that credit is in otherCredit). */
+  shownCredit: number;
 }
 
 /** What the resume form shows under the main occupation: its years, and the related credit line by line. */
@@ -270,13 +282,43 @@ export interface ResumeOccupationYears {
   years: number;
   /** Total related credit, rounded to 0.1 and capped at the main years, as the AI reads it (`related_years`). */
   related: number;
+  /**
+   * The share of `related` from occupations below RELATED_FROM, in tenths, shown on one "Other experience" line.
+   * The closely related shownCredit values plus otherCredit add up to `related` exactly.
+   */
+  otherCredit: number;
+  /** The credit was cut to the main years. */
+  capped: boolean;
   /** Other occupations of the jobs, most credit first. Jobs without an occupation are not listed. */
   others: RelatedOccupationYears[];
 }
 
 /**
- * The years breakdown of a resume, counted by occupationYears from its jobs. Read-only: the resume responses carry
+ * Splits `total` (in tenths) over the buckets in proportion to their raw values, by largest remainder, so the
+ * shown parts always add up to the total.
+ */
+function splitTenths(raw: number[], total: number): number[] {
+  const sum = raw.reduce((a, b) => a + b, 0);
+  const units = Math.round(total * 10);
+  if (!sum || !units) return raw.map(() => 0);
+  const exact = raw.map((value) => (value / sum) * units);
+  const parts = exact.map((value) => Math.floor(value));
+  let left = units - parts.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((value, index) => ({ index, rest: value - Math.floor(value) }))
+    .sort((a, b) => b.rest - a.rest || a.index - b.index);
+  for (const { index } of order) {
+    if (left <= 0) break;
+    parts[index] += 1;
+    left -= 1;
+  }
+  return parts.map((part) => part / 10);
+}
+
+/**
+ * The years breakdown of a resume, counted as occupationYears counts them. Read-only: the resume responses carry
  * it so the form can show the related credit, which needs the catalogue's skill groups. Null without an occupation.
+ * Occupations at or above RELATED_FROM get their own line; the rest share one "Other experience" line.
  */
 export function resumeOccupationYears(
   data: Record<string, unknown>,
@@ -284,27 +326,49 @@ export function resumeOccupationYears(
 ): ResumeOccupationYears | null {
   const main = findOccupation(data.Occupation);
   if (!main) return null;
-  const jobs = cleanResumeJobs(data.Jobs);
-  const { years, related } = occupationYears(jobs, main.code, today);
-  const spans = spansByOccupation(jobs, today);
-  spans.delete(main.code);
-  const others = [...spans].map(([code, found]): RelatedOccupationYears => {
-    const months = unionMonths(found);
-    const overlap = occupationRelatedness(main.code, code);
-    return {
-      code,
-      title: findOccupation(code)?.title ?? code,
-      years: halfYears(months),
-      overlap: Number(overlap.toFixed(4)),
-      credit: Number(((overlap * RELATED_CREDIT * months) / 12).toFixed(4)),
-    };
-  });
-  others.sort((a, b) => b.credit - a.credit || a.code.localeCompare(b.code));
+  const spans = spansByOccupation(cleanResumeJobs(data.Jobs), today);
+  const { years, related } = yearsFromSpans(spans, main.code);
+  const others = [...spans]
+    .filter(([code]) => code !== main.code)
+    .map(([code, found]) => {
+      const months = unionMonths(found);
+      const overlap = occupationRelatedness(main.code, code);
+      return {
+        code,
+        title: findOccupation(code)?.title ?? code,
+        years: halfYears(months),
+        overlap: Number(overlap.toFixed(4)),
+        closelyRelated: overlap >= RELATED_FROM,
+        rawCredit: (overlap * RELATED_CREDIT * months) / 12,
+      };
+    });
+  const close = others.filter((other) => other.closelyRelated);
+  const below = others
+    .filter((other) => !other.closelyRelated)
+    .reduce((sum, other) => sum + other.rawCredit, 0);
+  const shares = splitTenths(
+    [...close.map((other) => other.rawCredit), below],
+    related,
+  );
+  const shownByCode = new Map(
+    close.map((other, index) => [other.code, shares[index]]),
+  );
+  const rawTotal = others.reduce((sum, other) => sum + other.rawCredit, 0);
   return {
     occupation: { code: main.code, title: main.title },
     years,
     related,
-    others,
+    otherCredit: shares[shares.length - 1],
+    capped: rawTotal > years,
+    others: others
+      .map(
+        ({ rawCredit, ...other }): RelatedOccupationYears => ({
+          ...other,
+          credit: Number(rawCredit.toFixed(4)),
+          shownCredit: shownByCode.get(other.code) ?? 0,
+        }),
+      )
+      .sort((a, b) => b.credit - a.credit || a.code.localeCompare(b.code)),
   };
 }
 

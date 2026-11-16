@@ -20,7 +20,7 @@ export class SearchSkillsDto {
   @MaxLength(100)
   q: string;
 
-  /** A JobAura career field; matching skills from that field are listed first. */
+  /** The user's ESCO occupation code; skills of that occupation are listed first (sent to the AI as `occupation`). */
   @Transform(optionalTrimString)
   @IsOptional()
   @IsString()

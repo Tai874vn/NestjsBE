@@ -23,6 +23,11 @@ describe('OccupationsService', () => {
     expect(hit?.matchedLabel).toMatch(/full.?stack/i);
   });
 
+  it('finds the Full Stack Developer specialty under web developer for "fullstack" without a space', () => {
+    const hit = service.search('fullstack', 50).find((h) => h.code === '2513.5');
+    expect(hit?.matchedLabel).toBe('Full Stack Developer');
+  });
+
   it('puts a title hit first and leaves matchedLabel off it', () => {
     const [first] = service.search('web developer');
     expect(first.title.toLowerCase()).toContain('web developer');

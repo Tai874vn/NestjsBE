@@ -14,6 +14,12 @@ export interface CatalogueOccupation {
   groups: number[];
 }
 
+/**
+ * Overlap from which two occupations count as related (AIService RELATED_FROM): the catalogue's `related` lists and
+ * the resume form's "Related experience" lines use it. Credit itself is given for any overlap.
+ */
+export const RELATED_FROM = 0.25;
+
 let cached: Map<string, CatalogueOccupation> | null = null;
 
 /** The catalogue by code, read once. */

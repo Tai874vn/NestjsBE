@@ -297,6 +297,8 @@ describe('UserResumeService', () => {
       occupation: { code: '2513.5', title: 'web developer' },
       years: 3,
       related: 0,
+      otherCredit: 0,
+      capped: false,
       others: [],
     });
   });

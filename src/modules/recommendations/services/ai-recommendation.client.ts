@@ -123,13 +123,14 @@ export class AiRecommendationClient {
     );
   }
 
+  /** Dictionary skills matching `query`; skills of `occupation` (an ESCO code) are listed first. */
   async searchSkills(
     query: string,
-    field?: string,
+    occupation?: string,
     limit = 10,
   ): Promise<AiSkillSummary[]> {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
-    if (field) params.set('field', field);
+    if (occupation) params.set('occupation', occupation);
     const response = await this.get<{ skills: AiSkillSummary[] }>(
       `/api/v1/skills/search?${params.toString()}`,
     );

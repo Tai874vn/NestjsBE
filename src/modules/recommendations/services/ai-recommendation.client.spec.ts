@@ -21,6 +21,27 @@ describe('AiRecommendationClient', () => {
     } as Response);
   });
 
+  it('asks the skill search to rank by the occupation, the parameter the AI reads', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ skills: [] }),
+    } as Response);
+    const client = new AiRecommendationClient(configService as any);
+
+    await client.searchSkills('react', '2513.5', 5);
+    await client.searchSkills('react');
+
+    const urls = (global.fetch as jest.Mock).mock.calls.map(
+      ([url]) => url as string,
+    );
+    expect(urls[0]).toBe(
+      'http://127.0.0.1:8001/api/v1/skills/search?q=react&limit=5&occupation=2513.5',
+    );
+    expect(urls[1]).toBe(
+      'http://127.0.0.1:8001/api/v1/skills/search?q=react&limit=10',
+    );
+  });
+
   it('sends the shared AI service key on match requests', async () => {
     const client = new AiRecommendationClient(configService as any);
     const payload = {
