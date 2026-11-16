@@ -2,6 +2,7 @@ import {
   cleanResumeJobs,
   occupationYears,
   relatedYears,
+  resumeOccupationYears,
   yearsInOccupation,
 } from './resume-career';
 
@@ -117,5 +118,51 @@ describe('yearsInOccupation and relatedYears', () => {
       },
     ]);
     expect(yearsInOccupation({ Occupation: '2513.5', Jobs: jobs }, TODAY)).toBe(0);
+  });
+});
+
+describe('resumeOccupationYears (the read-only breakdown the resume form shows)', () => {
+  const resumeJob = (title: string, occupation: string, start: string, end = '') => ({
+    title,
+    occupation,
+    start,
+    end,
+    current: end === '',
+    description: '',
+  });
+  const data = {
+    Occupation: '2512.3',
+    Jobs: [
+      resumeJob('Business analyst', '2511.8', '2022-11', '2024-11'),
+      resumeJob('Ninja coder', '', '2015-01', '2020-01'),
+      resumeJob('Accountant', '2411.1', '2010-11', '2020-11'),
+      resumeJob('Developer', '2512.3', '2024-11'),
+    ],
+  };
+
+  it('gives the same totals as occupationYears, with each other occupation on its own line', () => {
+    const detail = resumeOccupationYears(data, TODAY);
+    expect(detail).not.toBeNull();
+    expect(detail!.occupation).toEqual({ code: '2512.3', title: 'software developer' });
+    expect({ years: detail!.years, related: detail!.related }).toEqual(
+      occupationYears(cleanResumeJobs(data.Jobs), '2512.3', TODAY),
+    );
+    expect(detail!.others.map((other) => other.code)).toEqual(['2511.8', '2411.1']);
+    const [analyst, accountant] = detail!.others;
+    expect(analyst).toMatchObject({ title: 'ICT business analyst', years: 2 });
+    expect(analyst.credit).toBeCloseTo(analyst.overlap * 0.3 * 2, 3);
+    expect(accountant.years).toBe(10);
+    expect(accountant.credit).toBeLessThan(analyst.credit);
+  });
+
+  it('lists no line for a job without an occupation: its months count toward nothing', () => {
+    const detail = resumeOccupationYears(data, TODAY)!;
+    expect(detail.others.some((other) => other.code === '')).toBe(false);
+    expect(detail.years).toBe(2.0);
+  });
+
+  it('is null without an occupation from the catalogue, as for a resume saved before occupations', () => {
+    expect(resumeOccupationYears({ LegacyField: 'QA', Jobs: data.Jobs }, TODAY)).toBeNull();
+    expect(resumeOccupationYears({ Occupation: 'QA' }, TODAY)).toBeNull();
   });
 });

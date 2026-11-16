@@ -125,7 +125,12 @@ describe('UserResumeService', () => {
     expect(aiQueue.enqueue).toHaveBeenCalledWith(1);
     expect(result).toEqual({
       message: 'Resume queued for AI evaluation',
-      content: { userId: 1, aiStatus: 'QUEUED', data: { Skills: '' } },
+      content: {
+        userId: 1,
+        aiStatus: 'QUEUED',
+        data: { Skills: '' },
+        occupationYears: null,
+      },
     });
   });
 
@@ -266,7 +271,33 @@ describe('UserResumeService', () => {
 
     await expect(service.getMyResume(1)).resolves.toEqual({
       message: 'Get resume successfully',
-      content: { ...storedResume, data: { Industry: 'QA', Skills: 'SQL, Jest' } },
+      content: {
+        ...storedResume,
+        data: { Industry: 'QA', Skills: 'SQL, Jest' },
+        occupationYears: null,
+      },
+    });
+  });
+
+  it('adds the read-only years breakdown counted from the saved jobs', async () => {
+    const { service, prisma } = createService();
+    const data = {
+      Occupation: '2513.5',
+      Jobs: [
+        { title: 'Web developer', occupation: '2513.5', start: '2020-01', end: '2023-01', current: false, description: '' },
+      ],
+    };
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.findUnique.mockResolvedValue({ id: 10, userId: 1, data });
+    prisma.userSkill.findMany.mockResolvedValue([]);
+
+    const result = await service.getMyResume(1);
+
+    expect(result.content.occupationYears).toEqual({
+      occupation: { code: '2513.5', title: 'web developer' },
+      years: 3,
+      related: 0,
+      others: [],
     });
   });
 

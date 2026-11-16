@@ -15,6 +15,7 @@ import {
   cleanResumeJobs,
   resumeCareerProblems,
   resumeOccupation,
+  resumeOccupationYears,
   withStoredLegacy,
 } from './resume-career';
 import { asRecord, mergeSkills, stringList } from './resume-ai-payload';
@@ -147,23 +148,27 @@ export class UserResumeService {
     };
   }
 
-  /** The resume shows the shared skill list under its old Skills key, so the form reads and writes one place. */
+  /**
+   * The resume shows the shared skill list under its old Skills key, so the form reads and writes one place.
+   * `occupationYears` is read-only: the years in the main occupation and the related credit, counted from the saved
+   * jobs as the AI counts them.
+   */
   private async withSharedSkills<
     T extends { userId: number; data: Prisma.JsonValue },
-  >(
-    resume: T,
-  ) {
+  >(resume: T) {
     const skills = await this.prisma.userSkill.findMany({
       where: { userId: resume.userId },
       select: { name: true },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     });
+    const data = asRecord(resume.data);
     return {
       ...resume,
       data: {
-        ...asRecord(resume.data),
+        ...data,
         Skills: skills.map((skill) => skill.name).join(', '),
       },
+      occupationYears: resumeOccupationYears(data),
     };
   }
 

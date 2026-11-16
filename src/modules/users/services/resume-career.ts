@@ -191,20 +191,11 @@ function unionMonths(spans: Array<[number, number]>): number {
   return span ? total + span[1] - span[0] : 0;
 }
 
-/**
- * Years in the main occupation, and related years credited from other occupations' jobs. The same as
- * `occupation_years` in AIService app/occupations.py, so the backend and the AI count the same years.
- *
- * Months are unioned per occupation, never added across occupations. Main years are in half years
- * (round(months / 6) / 2, the count the owner's thresholds were set on). Each other occupation gives
- * relatedness x RELATED_CREDIT x its years; the total is rounded to 0.1 and is at most the main years. Jobs without
- * a known occupation or valid dates give nothing. An empty end means the job is current and runs to `today`.
- */
-export function occupationYears(
+/** Each known occupation's job spans in month indexes. Jobs without a known occupation or valid dates are left out. */
+function spansByOccupation(
   jobs: ReadonlyArray<{ occupation?: unknown; start?: unknown; end?: unknown }>,
-  main: string,
-  today = new Date(),
-): { years: number; related: number } {
+  today: Date,
+): Map<string, Array<[number, number]>> {
   const now = today.getFullYear() * 12 + today.getMonth();
   const spans = new Map<string, Array<[number, number]>>();
   for (const job of jobs) {
@@ -226,7 +217,28 @@ export function occupationYears(
     const key = code.trim();
     spans.set(key, [...(spans.get(key) ?? []), [start, end]]);
   }
-  const years = roundHalfEven(unionMonths(spans.get(main) ?? []) / 6) / 2;
+  return spans;
+}
+
+/** Years from unioned months, in half years (round(months / 6) / 2, the count the owner's thresholds were set on). */
+const halfYears = (months: number) => roundHalfEven(months / 6) / 2;
+
+/**
+ * Years in the main occupation, and related years credited from other occupations' jobs. The same as
+ * `occupation_years` in AIService app/occupations.py, so the backend and the AI count the same years.
+ *
+ * Months are unioned per occupation, never added across occupations. Main years are in half years
+ * (round(months / 6) / 2, the count the owner's thresholds were set on). Each other occupation gives
+ * relatedness x RELATED_CREDIT x its years; the total is rounded to 0.1 and is at most the main years. Jobs without
+ * a known occupation or valid dates give nothing. An empty end means the job is current and runs to `today`.
+ */
+export function occupationYears(
+  jobs: ReadonlyArray<{ occupation?: unknown; start?: unknown; end?: unknown }>,
+  main: string,
+  today = new Date(),
+): { years: number; related: number } {
+  const spans = spansByOccupation(jobs, today);
+  const years = halfYears(unionMonths(spans.get(main) ?? []));
   spans.delete(main);
   let credit = 0;
   for (const [code, found] of spans) {
@@ -237,6 +249,63 @@ export function occupationYears(
       12;
   }
   return { years, related: roundTenthsHalfEven(Math.min(years, credit)) };
+}
+
+/** One other occupation in the resume's jobs, and what it adds to the main one. */
+export interface RelatedOccupationYears {
+  code: string;
+  title: string;
+  /** Years in this occupation, in half years like the main years. */
+  years: number;
+  /** Share of ESCO skill groups shared with the main occupation (Jaccard, 0 to 1). */
+  overlap: number;
+  /** overlap x RELATED_CREDIT x this occupation's unrounded years, before the total is rounded and capped. */
+  credit: number;
+}
+
+/** What the resume form shows under the main occupation: its years, and the related credit line by line. */
+export interface ResumeOccupationYears {
+  occupation: { code: string; title: string };
+  /** Main years, as the AI reads them (`years_in_occupation`). */
+  years: number;
+  /** Total related credit, rounded to 0.1 and capped at the main years, as the AI reads it (`related_years`). */
+  related: number;
+  /** Other occupations of the jobs, most credit first. Jobs without an occupation are not listed. */
+  others: RelatedOccupationYears[];
+}
+
+/**
+ * The years breakdown of a resume, counted by occupationYears from its jobs. Read-only: the resume responses carry
+ * it so the form can show the related credit, which needs the catalogue's skill groups. Null without an occupation.
+ */
+export function resumeOccupationYears(
+  data: Record<string, unknown>,
+  today = new Date(),
+): ResumeOccupationYears | null {
+  const main = findOccupation(data.Occupation);
+  if (!main) return null;
+  const jobs = cleanResumeJobs(data.Jobs);
+  const { years, related } = occupationYears(jobs, main.code, today);
+  const spans = spansByOccupation(jobs, today);
+  spans.delete(main.code);
+  const others = [...spans].map(([code, found]): RelatedOccupationYears => {
+    const months = unionMonths(found);
+    const overlap = occupationRelatedness(main.code, code);
+    return {
+      code,
+      title: findOccupation(code)?.title ?? code,
+      years: halfYears(months),
+      overlap: Number(overlap.toFixed(4)),
+      credit: Number(((overlap * RELATED_CREDIT * months) / 12).toFixed(4)),
+    };
+  });
+  others.sort((a, b) => b.credit - a.credit || a.code.localeCompare(b.code));
+  return {
+    occupation: { code: main.code, title: main.title },
+    years,
+    related,
+    others,
+  };
 }
 
 /** The resume's main occupation (ESCO code), or null until one from the catalogue is chosen. */
