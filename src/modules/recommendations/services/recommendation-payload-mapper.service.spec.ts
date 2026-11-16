@@ -53,3 +53,19 @@ describe('RecommendationPayloadMapperService resume payload', () => {
     expect(payload).toMatchObject({ occupation: null, industry: null, years_experience: undefined });
   });
 });
+
+describe('RecommendationPayloadMapperService cleared level', () => {
+  it('sends no seniority for a resume whose level was cleared', () => {
+    const payload = new RecommendationPayloadMapperService().buildResumePayload({
+      id: 7,
+      resume: {
+        data: { Occupation: '', LegacyField: 'QA' },
+        predictedSeniority: null,
+        predictedSeniorityConfidence: null,
+      },
+    });
+    expect(payload.seniority).toBeNull();
+    expect(payload.seniority_resume).toBeNull();
+    expect(payload.seniority_confidence).toBeNull();
+  });
+});

@@ -107,6 +107,43 @@ export function cleanResumeJobs(value: unknown): ResumeJob[] {
   });
 }
 
+/** Same cap as a job's legacyField. */
+const LEGACY_FIELD_MAX = 60;
+
+/**
+ * The resume data to store with its legacy values taken from the stored resume, never from the client: the old
+ * 37-field values are read-only. `LegacyField` is the stored LegacyField (or, for a resume not yet migrated, its
+ * Industry). A job keeps the stored legacyField (or old field) of the stored job with the same title and start
+ * month; a new or changed job has none. A resume with no stored legacy values gets none.
+ */
+export function withStoredLegacy(
+  data: Record<string, unknown>,
+  stored: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...data };
+  delete next.LegacyField;
+  delete next.Industry;
+  const legacyField =
+    text(stored.LegacyField, LEGACY_FIELD_MAX) ||
+    text(stored.Industry, LEGACY_FIELD_MAX);
+  if (legacyField) next.LegacyField = legacyField;
+  if (Array.isArray(next.Jobs)) {
+    const kept = new Map<string, string[]>();
+    for (const job of cleanResumeJobs(stored.Jobs)) {
+      if (!job.legacyField) continue;
+      const key = `${job.title}\u0000${job.start}`;
+      kept.set(key, [...(kept.get(key) ?? []), job.legacyField]);
+    }
+    next.Jobs = (next.Jobs as ResumeJob[]).map((job) => {
+      const rest: ResumeJob = { ...job };
+      delete rest.legacyField;
+      const found = kept.get(`${job.title}\u0000${job.start}`)?.shift();
+      return found ? { ...rest, legacyField: found } : rest;
+    });
+  }
+  return next;
+}
+
 /** Python's round(): halves go to the even neighbour (round(2.5) == 2). */
 function roundHalfEven(value: number): number {
   const floor = Math.floor(value);

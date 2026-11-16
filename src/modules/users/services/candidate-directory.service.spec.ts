@@ -1,5 +1,8 @@
 import { Role } from '../../../common/constants/roles';
-import { CandidateDirectoryService } from './candidate-directory.service';
+import {
+  CandidateDirectoryService,
+  candidateCareer,
+} from './candidate-directory.service';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 
 describe('CandidateDirectoryService', () => {
@@ -187,5 +190,17 @@ describe('CandidateDirectoryService', () => {
     expect(result.content.data[0]).not.toHaveProperty('email');
     expect(result.content.data[0]).not.toHaveProperty('phone');
     expect(result.content.data[0]).not.toHaveProperty('resume');
+  });
+});
+
+describe('candidateCareer with a cleared level', () => {
+  it('shows no level and no years for a resume whose level was cleared', () => {
+    expect(
+      candidateCareer({
+        data: { Occupation: '', LegacyField: 'QA' },
+        predictedSeniority: null,
+        predictedSeniorityMetadata: null,
+      }),
+    ).toEqual({ careerField: null, level: null, yearsInField: null });
   });
 });

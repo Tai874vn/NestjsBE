@@ -15,6 +15,7 @@ import {
   cleanResumeJobs,
   resumeCareerProblems,
   resumeOccupation,
+  withStoredLegacy,
 } from './resume-career';
 import { asRecord, mergeSkills, stringList } from './resume-ai-payload';
 import {
@@ -43,7 +44,15 @@ export class UserResumeService {
     );
     const schemaVersion =
       this.profileNormalizer.trimOptional(dto.schemaVersion) ?? 'v1';
-    const data = this.normalizeResumeData(dto.data);
+    const stored = await this.prisma.userResume.findUnique({
+      where: { userId },
+      select: { data: true },
+    });
+    // The old 37-field values are read-only: they come from the stored resume, not from the form.
+    const data = withStoredLegacy(
+      this.normalizeResumeData(dto.data),
+      asRecord(stored?.data ?? null),
+    );
     // Skills live in one list shared with the profile (`user_skills`), never as a copy inside the resume.
     // A form that sends Skills sets that list; one that leaves it out keeps it.
     if ('Skills' in dto.data) {
@@ -245,11 +254,9 @@ export class UserResumeService {
     delete data.SkillIds;
     // Years come from the jobs' months (yearsInOccupation); a typed-in number is not kept.
     delete data.YearsExperience;
-    // A resume saved before occupations keeps its old 37-field value read-only, as LegacyField.
-    const industry =
-      typeof raw.Industry === 'string' ? raw.Industry.trim() : '';
-    if (industry && !data.LegacyField) data.LegacyField = industry;
+    // Industry and LegacyField from the form are dropped; importResume takes them from the stored resume.
     delete data.Industry;
+    delete data.LegacyField;
     if (typeof data.Occupation === 'string') {
       data.Occupation = data.Occupation.trim();
     }

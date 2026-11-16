@@ -29,6 +29,15 @@ export const RESUME_AI_STATUS = {
   FAILED: 'FAILED',
 } as const;
 
+/** Every predicted-seniority column, emptied. */
+const CLEARED_SENIORITY = {
+  predictedSeniority: null,
+  predictedSeniorityConfidence: null,
+  predictedSeniorityModel: null,
+  predictedSeniorityMetadata: Prisma.DbNull,
+  predictedSeniorityAt: null,
+} satisfies Prisma.UserResumeUpdateManyMutationInput;
+
 const BATCH_SIZE = 5;
 const MAX_SUGGESTED_SKILLS = 20;
 /** A resume claimed this long ago by a worker that never finished (crash, restart) is claimed again. */
@@ -259,6 +268,8 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         aiStatus: RESUME_AI_STATUS.NEEDS_INPUT,
         aiStatusMessage:
           'Choose your occupation to get a seniority preview; your years are counted from the jobs you add in it.',
+        // A level from before (the old 37 fields) never shows next to "choose your occupation".
+        ...CLEARED_SENIORITY,
       };
     }
     const prediction = await this.aiClient.predictResumeSeniority({

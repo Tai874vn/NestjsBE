@@ -166,9 +166,12 @@ describe('UserResumeService', () => {
     expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({ Occupation: '2513.5' });
   });
 
-  it('still saves a resume from before occupations: Industry and job fields become read-only legacy values', async () => {
+  it('still saves a resume from before occupations: its stored Industry and job fields become read-only legacy values', async () => {
     const { service, prisma } = createService();
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.findUnique.mockResolvedValue({
+      data: { Industry: 'QA', Jobs: [{ title: 'Tester', field: 'QA', start: '2022-05', end: '', current: true }] },
+    });
     prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
 
     await service.importResume(1, {
@@ -183,6 +186,59 @@ describe('UserResumeService', () => {
       Jobs: [
         { title: 'Tester', occupation: '', legacyField: 'QA', start: '2022-05', end: '', current: true, description: '' },
       ],
+    });
+  });
+
+  it('keeps the stored legacy values and ignores the ones the form sends', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.findUnique.mockResolvedValue({
+      data: {
+        Occupation: '',
+        LegacyField: 'QA',
+        Jobs: [
+          { title: 'Tester', occupation: '', legacyField: 'QA', start: '2022-05', end: '', current: true, description: '' },
+        ],
+      },
+    });
+    prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
+
+    await service.importResume(1, {
+      data: {
+        Occupation: '2513.5',
+        LegacyField: 'x'.repeat(500),
+        Industry: 'Finance',
+        Jobs: [
+          { title: 'Tester', occupation: '2513.5', legacyField: 'Forged', start: '2022-05', end: '', current: true },
+          { title: 'Web developer', occupation: '2513.5', legacyField: 'Forged', start: '2024-01', end: '', current: true },
+        ],
+      },
+    });
+
+    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({
+      Occupation: '2513.5',
+      LegacyField: 'QA',
+      Jobs: [
+        { title: 'Tester', occupation: '2513.5', legacyField: 'QA', start: '2022-05', end: '', current: true, description: '' },
+        { title: 'Web developer', occupation: '2513.5', start: '2024-01', end: '', current: true, description: '' },
+      ],
+    });
+  });
+
+  it('stores no legacy values for a new resume, and caps a stored one at 60 characters', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
+
+    prisma.userResume.findUnique.mockResolvedValue(null);
+    await service.importResume(1, { data: { Occupation: '2513.5', LegacyField: 'Forged', Industry: 'QA' } });
+    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({ Occupation: '2513.5' });
+
+    prisma.userResume.findUnique.mockResolvedValue({ data: { LegacyField: 'y'.repeat(200) } });
+    await service.importResume(1, { data: { Occupation: '2513.5' } });
+    expect(prisma.userResume.upsert.mock.calls[1][0].create.data).toEqual({
+      Occupation: '2513.5',
+      LegacyField: 'y'.repeat(60),
     });
   });
 

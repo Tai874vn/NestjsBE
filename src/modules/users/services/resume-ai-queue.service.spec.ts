@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AI_UNAVAILABLE_MESSAGE, ResumeAiQueueService } from './resume-ai-queue.service';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 
@@ -169,6 +170,21 @@ describe('ResumeAiQueueService', () => {
 
     expect(aiClient.predictResumeSeniority).not.toHaveBeenCalled();
     expect(written()[0].data).toMatchObject({ aiStatus: 'NEEDS_INPUT', data });
+  });
+
+  it('clears an old level when it asks for the occupation, so no level shows beside "choose your occupation"', async () => {
+    const { queue, written } = setup({ data: { Occupation: '', LegacyField: 'QA' } });
+
+    await queue.processQueue();
+
+    expect(written()[0].data).toMatchObject({
+      aiStatus: 'NEEDS_INPUT',
+      predictedSeniority: null,
+      predictedSeniorityConfidence: null,
+      predictedSeniorityModel: null,
+      predictedSeniorityMetadata: Prisma.DbNull,
+      predictedSeniorityAt: null,
+    });
   });
 
   it('marks AI failures as "try again" and refused input as failed', async () => {
