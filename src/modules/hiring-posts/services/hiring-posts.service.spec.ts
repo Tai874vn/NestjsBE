@@ -22,7 +22,9 @@ describe('HiringPostsService', () => {
     predictedSeniorityMetadata: null,
     predictedSeniorityAt: null,
     companyName: null,
-    careerField: 'IT and security',
+    occupationCode: '2529.6',
+    specialty: null,
+    legacyField: null,
     yearsRequired: 3,
     skills: ['SIEM'],
     closesAt: null,
@@ -138,7 +140,7 @@ describe('HiringPostsService', () => {
     await service.findOpen({
       page: 1,
       pageSize: 10,
-      careerField: 'Software development',
+      occupation: '2512.3',
       level: 'Mid',
       location: 'Hanoi',
     });
@@ -148,7 +150,7 @@ describe('HiringPostsService', () => {
       expect.arrayContaining([
         { status: HiringPostStatus.OPEN },
         { OR: [{ closesAt: null }, { closesAt: { gt: expect.any(Date) } }] },
-        { careerField: 'Software development' },
+        { occupationCode: '2512.3' },
         { predictedSeniority: 'Mid' },
         { location: { contains: 'Hanoi', mode: 'insensitive' } },
       ]),
@@ -163,7 +165,8 @@ describe('HiringPostsService', () => {
       {
         title: 'Security Analyst',
         description: 'Monitor alerts and respond to incidents quickly',
-        careerField: 'IT and security',
+        occupationCode: ' 2529.6 ',
+        specialty: ' Application Security Analyst ',
         yearsRequired: 3,
         skills: ['SIEM'],
         companyName: ' Acme ',
@@ -173,10 +176,97 @@ describe('HiringPostsService', () => {
 
     expect(prisma.hiringPost.create.mock.calls[0][0].data).toMatchObject({
       companyName: 'Acme',
-      careerField: 'IT and security',
+      occupationCode: '2529.6',
+      specialty: 'Application Security Analyst',
       yearsRequired: 3,
       skills: ['SIEM'],
       closesAt: null,
+    });
+  });
+
+  describe('occupation and specialty', () => {
+    const newPost = {
+      title: 'Security Analyst',
+      description: 'Monitor alerts and respond to incidents quickly',
+      occupationCode: '2529.6',
+      yearsRequired: 3,
+    };
+
+    it('rejects an unknown occupation code with 400', async () => {
+      const { prisma, service } = createService();
+      await expect(
+        service.create({ ...newPost, occupationCode: '9999.99' }, 2),
+      ).rejects.toMatchObject({ status: 400, message: 'Choose the occupation from the list.' });
+      expect(prisma.hiringPost.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a specialty that is not listed under the occupation with 400', async () => {
+      const { prisma, service } = createService();
+      await expect(
+        service.create({ ...newPost, specialty: '.NET Programmer' }, 2),
+      ).rejects.toMatchObject({ status: 400, message: 'Choose a specialty listed under the occupation.' });
+      expect(prisma.hiringPost.create).not.toHaveBeenCalled();
+    });
+
+    it('checks a new specialty against the occupation the post already has', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      await expect(
+        service.update(openPost.id, { specialty: '.NET Programmer' }, 2, Role.EMPLOYER),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(prisma.hiringPost.update).not.toHaveBeenCalled();
+    });
+
+    it('a new occupation clears the AI level, requeues, and drops a specialty not listed under it', async () => {
+      const { prisma, service, aiQueue } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue({
+        ...openPost,
+        specialty: 'Application Security Analyst',
+        predictedSeniority: 'Mid',
+      });
+      prisma.hiringPost.update.mockResolvedValue(openPost);
+
+      await service.update(openPost.id, { occupationCode: '2512.3' }, 2, Role.EMPLOYER);
+
+      expect(prisma.hiringPost.update.mock.calls[0][0].data).toMatchObject({
+        occupationCode: '2512.3',
+        specialty: null,
+        predictedSeniority: null,
+        aiStatus: 'QUEUED',
+      });
+      expect(aiQueue.kick).toHaveBeenCalled();
+    });
+
+    it('an old post without an occupation saves other edits and keeps its legacy field', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue({
+        ...openPost,
+        occupationCode: null,
+        legacyField: 'IT and security',
+      });
+      prisma.hiringPost.update.mockResolvedValue(openPost);
+
+      await service.update(openPost.id, { location: 'Hanoi', specialty: '' }, 2, Role.EMPLOYER);
+
+      const data = prisma.hiringPost.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({ location: 'Hanoi' });
+      expect(data).not.toHaveProperty('occupationCode');
+      expect(data).not.toHaveProperty('legacyField');
+    });
+
+    it('rejects an unknown occupation filter with 400', async () => {
+      const { service } = createService();
+      await expect(service.findOpen({ occupation: '9999.99' })).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('shows the occupation title on the post card', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      const result = await service.findOne(openPost.id, 2, Role.EMPLOYER);
+      expect(result.content).toMatchObject({
+        occupationCode: '2529.6',
+        occupationTitle: 'ICT security consultant',
+      });
     });
   });
 
@@ -187,7 +277,7 @@ describe('HiringPostsService', () => {
         {
           title: 'Security Analyst',
           description: 'Monitor alerts and respond to incidents quickly',
-          careerField: 'IT and security',
+          occupationCode: '2529.6',
           yearsRequired: 3,
           closesAt: '2020-01-01T00:00:00.000Z',
         },
@@ -306,7 +396,7 @@ describe('HiringPostsService', () => {
       {
         title: 'Security Analyst',
         description: 'Monitor alerts and respond to incidents quickly',
-        careerField: 'IT and security',
+        occupationCode: '2529.6',
         yearsRequired: 3,
       },
       2,

@@ -1,10 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
 import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { profileStrength } from './profile-strength';
+import { findOccupation } from '../../occupations/occupation-catalogue';
+import {
+  cleanResumeJobs,
+  occupationYears,
+  resumeOccupation,
+} from './resume-career';
 
 type CandidateDirectoryUser = {
   id: number;
@@ -41,18 +47,55 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-/** What a recruiter filters by, read from the candidate's resume and its AI result. */
-export function candidateCareer(resume: CandidateDirectoryUser['resume']) {
+/**
+ * What a recruiter filters by, read from the candidate's resume and its AI result: the occupation title, the
+ * specialty, years in the occupation and related years (counted from the resume's jobs, as the AI counts them),
+ * shown separately. The level is null when there is none (never predicted, or cleared).
+ */
+export function candidateCareer(
+  resume: CandidateDirectoryUser['resume'],
+  today = new Date(),
+) {
   if (!resume) return null;
-  const field = record(resume.data).Industry;
-  const years = record(
-    record(resume.predictedSeniorityMetadata).features,
-  ).years_in_field;
+  const data = record(resume.data);
+  const code = resumeOccupation(data);
+  const occupation = code ? findOccupation(code) : undefined;
+  const years = code
+    ? occupationYears(cleanResumeJobs(data.Jobs), code, today)
+    : null;
+  const specialty =
+    occupation &&
+    typeof data.Specialty === 'string' &&
+    occupation.specialties.includes(data.Specialty.trim())
+      ? data.Specialty.trim()
+      : null;
+  const legacy = data.LegacyField;
   return {
-    careerField: typeof field === 'string' && field ? field : null,
+    occupationCode: occupation?.code ?? null,
+    occupationTitle: occupation?.title ?? null,
+    specialty,
+    yearsInOccupation: years?.years ?? null,
+    relatedYears: years?.related ?? null,
     level: resume.predictedSeniority ?? null,
-    yearsInField: typeof years === 'number' ? years : null,
+    legacyField: typeof legacy === 'string' && legacy ? legacy : null,
   };
+}
+
+/**
+ * The main occupations a candidate filter accepts: the occupation itself and, with `includeRelated`, the
+ * occupations in its related list. 400 for an unknown code, as resumes and posts reject one.
+ */
+export function occupationFilterCodes(
+  code: string,
+  includeRelated = false,
+): string[] {
+  const occupation = findOccupation(code);
+  if (!occupation) {
+    throw new BadRequestException('Choose the occupation from the list.');
+  }
+  return includeRelated
+    ? [occupation.code, ...occupation.related.map((r) => r.code)]
+    : [occupation.code];
 }
 
 @Injectable()
@@ -195,10 +238,18 @@ export class CandidateDirectoryService {
       filters.push({ profileCertifications: { some: {} } });
     }
 
-    if (query.careerField) {
+    if (query.occupation) {
+      const codes = occupationFilterCodes(
+        query.occupation,
+        query.includeRelated,
+      );
       filters.push({
         resume: {
-          is: { data: { path: ['Industry'], equals: query.careerField } },
+          is: {
+            OR: codes.map((code) => ({
+              data: { path: ['Occupation'], equals: code },
+            })),
+          },
         },
       });
     }
@@ -212,7 +263,7 @@ export class CandidateDirectoryService {
         resume: {
           is: {
             predictedSeniorityMetadata: {
-              path: ['features', 'years_in_field'],
+              path: ['features', 'years_in_occupation'],
               gte: query.minYears,
             },
           },

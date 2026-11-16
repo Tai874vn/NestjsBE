@@ -3,6 +3,7 @@ import {
   CandidateDirectoryService,
   candidateCareer,
 } from './candidate-directory.service';
+import { findOccupation } from '../../occupations/occupation-catalogue';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 
 describe('CandidateDirectoryService', () => {
@@ -22,13 +23,13 @@ describe('CandidateDirectoryService', () => {
     return { service, prisma };
   };
 
-  it('filters by field, AI level and minimum years from the resume', async () => {
+  it('filters by occupation, AI level and minimum years in the occupation', async () => {
     const { service, prisma } = createService();
     prisma.user.findMany.mockResolvedValue([]);
     prisma.user.count.mockResolvedValue(0);
 
     await service.findCandidates({
-      careerField: 'Software development',
+      occupation: '2513.5',
       level: 'Mid',
       minYears: 3,
     });
@@ -37,7 +38,7 @@ describe('CandidateDirectoryService', () => {
     expect(where.AND).toEqual([
       {
         resume: {
-          is: { data: { path: ['Industry'], equals: 'Software development' } },
+          is: { OR: [{ data: { path: ['Occupation'], equals: '2513.5' } }] },
         },
       },
       { resume: { is: { predictedSeniority: 'Mid' } } },
@@ -45,7 +46,7 @@ describe('CandidateDirectoryService', () => {
         resume: {
           is: {
             predictedSeniorityMetadata: {
-              path: ['features', 'years_in_field'],
+              path: ['features', 'years_in_occupation'],
               gte: 3,
             },
           },
@@ -54,16 +55,25 @@ describe('CandidateDirectoryService', () => {
     ]);
   });
 
-  it('shows the field, AI level and years in field on each card', async () => {
+  it('shows the occupation, specialty, years in it and related years separately on each card', async () => {
     const { service, prisma } = createService();
+    const specialty = findOccupation('2513.5')!.specialties[0];
     prisma.user.findMany.mockResolvedValue([
       {
         id: 4,
         name: 'Ava',
         resume: {
-          data: { Industry: 'Data' },
-          predictedSeniority: 'Senior',
-          predictedSeniorityMetadata: { features: { years_in_field: 6.5 } },
+          data: {
+            Occupation: '2513.5',
+            Specialty: specialty,
+            Jobs: [
+              // 3 years as a web developer, 2 as a software developer (relatedness 0.538).
+              { title: 'Web developer', occupation: '2513.5', start: '2020-01', end: '2022-12' },
+              { title: 'Developer', occupation: '2512.3', start: '2023-01', end: '2024-12' },
+            ],
+          },
+          predictedSeniority: 'Mid',
+          predictedSeniorityMetadata: { features: { years_in_occupation: 3 } },
         },
       },
       { id: 5, name: 'Ben', resume: null },
@@ -74,11 +84,66 @@ describe('CandidateDirectoryService', () => {
 
     const byId = new Map(result.content.data.map((card) => [card.id, card]));
     expect(byId.get(4)?.career).toEqual({
-      careerField: 'Data',
-      level: 'Senior',
-      yearsInField: 6.5,
+      occupationCode: '2513.5',
+      occupationTitle: 'web developer',
+      specialty,
+      yearsInOccupation: 3,
+      relatedYears: 0.3,
+      level: 'Mid',
+      legacyField: null,
     });
     expect(byId.get(5)?.career).toBeNull();
+  });
+
+  describe('occupation filter', () => {
+    // A candidate is returned when the where clause's main-occupation condition accepts their resume.
+    const candidates = [
+      { id: 1, name: 'Web', resume: { data: { Occupation: '2513.5' } } },
+      { id: 2, name: 'Software', resume: { data: { Occupation: '2512.3' } } },
+      { id: 3, name: 'Data', resume: { data: { Occupation: '2511.3' } } },
+    ];
+    type OccupationWhere = {
+      AND?: Array<{
+        resume?: { is?: { OR?: Array<{ data: { equals: string } }> } };
+      }>;
+    };
+    const found = async (query: { occupation: string; includeRelated?: boolean }) => {
+      const { service, prisma } = createService();
+      prisma.user.findMany.mockImplementation(({ where }: { where: OccupationWhere }) => {
+        const codes = (where.AND ?? [])
+          .flatMap((filter) => filter.resume?.is?.OR ?? [])
+          .map((condition) => condition.data.equals);
+        return Promise.resolve(
+          candidates.filter((c) => codes.includes(c.resume.data.Occupation)),
+        );
+      });
+      prisma.user.count.mockResolvedValue(0);
+      const result = await service.findCandidates(query);
+      return result.content.data.map((card) => card.career?.occupationCode);
+    };
+
+    it('2512.3 is in the related list of 2513.5 in the synced catalogue, and 2511.3 is not', () => {
+      const related = findOccupation('2513.5')!.related.map((r) => r.code);
+      expect(related).toContain('2512.3');
+      expect(related).not.toContain('2511.3');
+    });
+
+    it('with includeRelated, a filter by 2513.5 finds a 2512.3 candidate', async () => {
+      const codes = await found({ occupation: '2513.5', includeRelated: true });
+      expect(codes).toContain('2512.3');
+      expect(codes).toContain('2513.5');
+      expect(codes).not.toContain('2511.3');
+    });
+
+    it('without includeRelated, a filter by 2513.5 finds only the main occupation, no 2511.3 candidate', async () => {
+      const codes = await found({ occupation: '2513.5' });
+      expect(codes).toEqual(['2513.5']);
+      expect(codes).not.toContain('2511.3');
+    });
+
+    it('rejects an unknown occupation code with 400', async () => {
+      await expect(found({ occupation: '9999.99' })).rejects.toMatchObject({ status: 400 });
+    });
   });
 
   it('paginates candidate rows in the database', async () => {
@@ -201,6 +266,14 @@ describe('candidateCareer with a cleared level', () => {
         predictedSeniority: null,
         predictedSeniorityMetadata: null,
       }),
-    ).toEqual({ careerField: null, level: null, yearsInField: null });
+    ).toEqual({
+      occupationCode: null,
+      occupationTitle: null,
+      specialty: null,
+      yearsInOccupation: null,
+      relatedYears: null,
+      level: null,
+      legacyField: 'QA',
+    });
   });
 });

@@ -9,7 +9,6 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { CAREER_FIELDS } from '../../../common/career-fields';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { optionalTrimString } from '../../../common/dto/string.transforms';
 
@@ -36,17 +35,25 @@ export class CandidateDirectoryQueryDto extends PaginationDto {
   @IsBoolean()
   hasCertification?: boolean;
 
-  /** The field the candidate chose on their resume (one of the 37). */
+  /** ESCO occupation code: candidates whose resume names it as their main occupation. */
+  @Transform(optionalTrimString)
   @IsOptional()
-  @IsIn(CAREER_FIELDS)
-  careerField?: string;
+  @IsString()
+  @MaxLength(20)
+  occupation?: string;
+
+  /** With `occupation`, also candidates whose main occupation is in its related list. */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  includeRelated?: boolean;
 
   /** The level the AI read from the candidate's resume. */
   @IsOptional()
   @IsIn(['Junior', 'Mid', 'Senior'])
   level?: string;
 
-  /** Minimum years in the candidate's field, from their resume's dated jobs. */
+  /** Minimum years in the candidate's main occupation, from their resume's dated jobs. */
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -17,6 +17,7 @@ import {
   RecommendationCacheService,
 } from './recommendation-cache.service';
 import { RecommendationQuotaService } from './recommendation-quota.service';
+import { findOccupation } from '../../occupations/occupation-catalogue';
 import { RecommendationFingerprintService } from './recommendation-fingerprint.service';
 import {
   RecommendationScore,
@@ -206,7 +207,7 @@ export class RecommendationsService {
             resumeSkills: knownSkills,
             resumeText: this.payloadText(resumePayload),
             jobText: this.payloadMapper.hiringPostToText(post),
-            jobCategoryText: post.careerField ?? '',
+            jobCategoryText: findOccupation(post.occupationCode)?.title ?? '',
           });
           const { _count, ...card } = post;
           return {

@@ -21,6 +21,7 @@ import {
 import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
+import { findOccupation } from '../../occupations/occupation-catalogue';
 
 const hiringPostInclude = {
   recruiter: {
@@ -147,6 +148,7 @@ export class HiringPostsService {
   async create(dto: CreateHiringPostDto, recruiterId: number) {
     this.assertSalaryRange(dto.salaryMin, dto.salaryMax);
     this.assertClosesInFuture(dto.closesAt);
+    const occupation = this.occupationChoice(dto.occupationCode, dto.specialty);
 
     const post = await this.prisma.hiringPost.create({
       data: {
@@ -159,7 +161,8 @@ export class HiringPostsService {
         salaryMin: dto.salaryMin,
         salaryMax: dto.salaryMax,
         companyName: this.optionalTrim(dto.companyName),
-        careerField: dto.careerField,
+        occupationCode: occupation.code,
+        specialty: occupation.specialty,
         yearsRequired: dto.yearsRequired,
         skills: dto.skills ?? [],
         closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
@@ -189,9 +192,28 @@ export class HiringPostsService {
       dto.salaryMax ?? post.salaryMax ?? undefined,
     );
     this.assertClosesInFuture(dto.closesAt);
-    // A new field, required years or skill list means the saved AI level no longer describes the post.
+    // A new occupation keeps the specialty only if it is listed under it; a specialty is checked against the
+    // occupation the post will have.
+    // An empty specialty on a post that has no occupation yet (an old post) changes nothing.
+    const occupationSent =
+      dto.occupationCode !== undefined ||
+      (dto.specialty !== undefined &&
+        (post.occupationCode !== null ||
+          this.optionalTrim(dto.specialty) !== null));
+    const occupation = occupationSent
+      ? this.occupationChoice(
+          dto.occupationCode ?? post.occupationCode,
+          dto.specialty !== undefined
+            ? dto.specialty
+            : (dto.occupationCode ?? post.occupationCode) ===
+                post.occupationCode
+              ? post.specialty
+              : null,
+        )
+      : null;
+    // A new occupation, required years or skill list means the saved AI level no longer describes the post.
     const levelInputsChanged =
-      (dto.careerField !== undefined && dto.careerField !== post.careerField) ||
+      (occupation !== null && occupation.code !== post.occupationCode) ||
       (dto.yearsRequired !== undefined &&
         dto.yearsRequired !== post.yearsRequired) ||
       (dto.skills !== undefined &&
@@ -228,8 +250,11 @@ export class HiringPostsService {
         ...(dto.companyName !== undefined
           ? { companyName: this.optionalTrim(dto.companyName) }
           : {}),
-        ...(dto.careerField !== undefined
-          ? { careerField: dto.careerField }
+        ...(occupation !== null
+          ? {
+              occupationCode: occupation.code,
+              specialty: occupation.specialty,
+            }
           : {}),
         ...(dto.yearsRequired !== undefined
           ? { yearsRequired: dto.yearsRequired }
@@ -425,7 +450,13 @@ export class HiringPostsService {
     if (keyword) {
       filters.push(this.keywordWhere(keyword));
     }
-    if (query.careerField) filters.push({ careerField: query.careerField });
+    if (query.occupation) {
+      const occupation = findOccupation(query.occupation);
+      if (!occupation) {
+        throw new BadRequestException('Choose the occupation from the list.');
+      }
+      filters.push({ occupationCode: occupation.code });
+    }
     if (query.level) filters.push({ predictedSeniority: query.level });
     if (query.employmentType) {
       filters.push({
@@ -500,6 +531,7 @@ export class HiringPostsService {
     const { _count, ...rest } = post;
     return {
       ...rest,
+      occupationTitle: findOccupation(post.occupationCode)?.title ?? null,
       applicationCount: _count.applications,
       viewerHasApplied: appliedPostIds.has(post.id),
     };
@@ -555,6 +587,34 @@ export class HiringPostsService {
         'Minimum salary cannot be greater than maximum salary',
       );
     }
+  }
+
+  /**
+   * The occupation and specialty to store, checked against the catalogue (as resumes are): 400 for an unknown
+   * occupation, or a specialty that is not listed under it.
+   */
+  private occupationChoice(
+    code: string | null | undefined,
+    specialty: string | null | undefined,
+  ): { code: string; specialty: string | null } {
+    const occupation = findOccupation(code);
+    const chosenSpecialty = this.optionalTrim(specialty);
+    if (!occupation) {
+      throw new BadRequestException(
+        code
+          ? 'Choose the occupation from the list.'
+          : 'Choose the occupation before its specialty.',
+      );
+    }
+    if (
+      chosenSpecialty !== null &&
+      !occupation.specialties.includes(chosenSpecialty)
+    ) {
+      throw new BadRequestException(
+        'Choose a specialty listed under the occupation.',
+      );
+    }
+    return { code: occupation.code, specialty: chosenSpecialty };
   }
 
   private optionalTrim(value?: string | null) {

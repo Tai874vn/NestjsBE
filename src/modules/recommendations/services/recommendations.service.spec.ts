@@ -151,7 +151,7 @@ describe('RecommendationsService', () => {
         title: 'API Developer',
         description: 'Python FastAPI project',
         requirements: null,
-        careerField: 'Software development',
+        occupationCode: '2512.3',
         yearsRequired: 2,
         skills: [],
         updatedAt: new Date('2026-11-15T00:00:00.000Z'),
@@ -193,7 +193,7 @@ describe('RecommendationsService', () => {
     // Candidates are matched to open hiring posts, shown with their applicant count.
     expect(result.content.data[0]).toMatchObject({
       id: 10,
-      careerField: 'Software development',
+      occupationCode: '2512.3',
       applicationCount: 3,
       recommendation: {
         aiScore: 0.82,

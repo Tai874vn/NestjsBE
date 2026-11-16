@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import { isCareerField } from '../../../common/career-fields';
 import { PrismaService } from '../../../prisma.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
 import { RecommendationPayloadMapperService } from '../../recommendations/services/recommendation-payload-mapper.service';
@@ -27,8 +26,22 @@ const BATCH_SIZE = 5;
 const STALE_CLAIM_MINUTES = 5;
 export const HIRING_POST_AI_UNAVAILABLE_MESSAGE =
   'The AI service is unavailable right now. Try again in a moment.';
+/** The AI's answer (MissingInput in AIService app/seniority/job.py) for a post with no occupation it can use. */
 export const HIRING_POST_NEEDS_INPUT_MESSAGE =
-  'Add the field of work and the years of experience required to get an AI level.';
+  'Choose the occupation for this post.';
+/** Inputs the recruiter can add, as job.py names them: these answers mean NEEDS_INPUT, not FAILED. */
+const NEEDS_INPUT_ANSWERS: readonly string[] = [
+  HIRING_POST_NEEDS_INPUT_MESSAGE,
+  'Add the required years of experience to the post, for example "at least 3 years".',
+];
+
+const CLEARED_SENIORITY = {
+  predictedSeniority: null,
+  predictedSeniorityConfidence: null,
+  predictedSeniorityModel: null,
+  predictedSeniorityMetadata: Prisma.DbNull,
+  predictedSeniorityAt: null,
+} satisfies Prisma.HiringPostUpdateManyMutationInput;
 
 /** Queue fields that put a post (back) in the queue; spread into a create or update. */
 export function queuedHiringPostFields(now = new Date()) {
@@ -49,7 +62,7 @@ interface ClaimedPost {
 /**
  * The AI level (Junior, Mid, Senior) of a hiring post is worked out here, never while saving the post. Saving
  * marks the post QUEUED; this worker, when the AI service answers its health check, predicts the level from the
- * field, required years, skills and text. Rows are claimed with FOR UPDATE SKIP LOCKED, so several backend
+ * occupation, required years, skills and text. Rows are claimed with FOR UPDATE SKIP LOCKED, so several backend
  * instances behind a load balancer never process the same post twice. Mirrors the resume AI queue.
  */
 @Injectable()
@@ -179,16 +192,24 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
     try {
       update = await this.evaluate(post);
     } catch (error) {
-      update =
-        error instanceof BadRequestException
-          ? {
-              aiStatus: HIRING_POST_AI_STATUS.FAILED,
-              aiStatusMessage: error.message,
-            }
-          : {
-              aiStatus: HIRING_POST_AI_STATUS.AI_UNAVAILABLE,
-              aiStatusMessage: HIRING_POST_AI_UNAVAILABLE_MESSAGE,
-            };
+      if (!(error instanceof BadRequestException)) {
+        update = {
+          aiStatus: HIRING_POST_AI_STATUS.AI_UNAVAILABLE,
+          aiStatusMessage: HIRING_POST_AI_UNAVAILABLE_MESSAGE,
+        };
+      } else if (NEEDS_INPUT_ANSWERS.includes(error.message)) {
+        // No level beside "choose the occupation": an old level would describe the post's old inputs.
+        update = {
+          aiStatus: HIRING_POST_AI_STATUS.NEEDS_INPUT,
+          aiStatusMessage: error.message,
+          ...CLEARED_SENIORITY,
+        };
+      } else {
+        update = {
+          aiStatus: HIRING_POST_AI_STATUS.FAILED,
+          aiStatusMessage: error.message,
+        };
+      }
     }
     // Only write if the post wasn't saved again meanwhile; a newer save has its own queue entry.
     await this.prisma.hiringPost.updateMany({
@@ -197,18 +218,16 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** The AI level for one post. Throws when the AI service fails or refuses the input. */
+  /**
+   * The AI level for one post. Throws when the AI service fails or refuses the input. A post without an
+   * occupation is still sent: as job.py does, the AI then matches the job title exactly against ESCO titles and
+   * answers "Choose the occupation for this post." when none matches.
+   */
   private async evaluate(
     post: Parameters<
       RecommendationPayloadMapperService['buildHiringPostPayload']
     >[0],
   ): Promise<Prisma.HiringPostUpdateManyMutationInput> {
-    if (!isCareerField(post.careerField) || post.yearsRequired == null) {
-      return {
-        aiStatus: HIRING_POST_AI_STATUS.NEEDS_INPUT,
-        aiStatusMessage: HIRING_POST_NEEDS_INPUT_MESSAGE,
-      };
-    }
     const prediction = await this.aiClient.predictJobSeniority({
       job: this.payloadMapper.buildHiringPostPayload(post),
     });

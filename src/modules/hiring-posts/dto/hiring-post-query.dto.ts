@@ -1,6 +1,5 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { CAREER_FIELDS } from '../../../common/career-fields';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { optionalTrimString } from '../../../common/dto/string.transforms';
 
@@ -8,9 +7,12 @@ export const HIRING_POST_LEVELS = ['Junior', 'Mid', 'Senior'] as const;
 
 /** Filters a candidate uses to narrow open hiring posts. */
 export class HiringPostQueryDto extends PaginationDto {
+  /** ESCO occupation code; posts for that occupation. */
+  @Transform(optionalTrimString)
   @IsOptional()
-  @IsIn(CAREER_FIELDS)
-  careerField?: string;
+  @IsString()
+  @MaxLength(20)
+  occupation?: string;
 
   @IsOptional()
   @IsIn(HIRING_POST_LEVELS)

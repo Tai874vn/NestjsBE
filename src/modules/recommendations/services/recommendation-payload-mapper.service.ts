@@ -32,7 +32,8 @@ export type HiringPostForRecommendation = {
   employmentType?: string | null;
   salaryMin?: number | null;
   salaryMax?: number | null;
-  careerField?: string | null;
+  /** ESCO occupation code chosen on the post. */
+  occupationCode?: string | null;
   yearsRequired?: number | null;
   skills?: string[];
   predictedSeniority?: string | null;
@@ -137,8 +138,9 @@ export class RecommendationPayloadMapperService {
       employment_type: post.employmentType,
       salary_min: post.salaryMin,
       salary_max: post.salaryMax,
-      // Set by the recruiter on the form; the AI uses them before guessing from the text.
-      career_field: post.careerField,
+      // Set by the recruiter on the form; the AI uses them before guessing from the text. Without an
+      // occupation the AI matches the job title exactly against ESCO titles (app/seniority/job.py).
+      occupation: post.occupationCode ?? null,
       years_required: post.yearsRequired,
       skills: post.skills ?? [],
     };

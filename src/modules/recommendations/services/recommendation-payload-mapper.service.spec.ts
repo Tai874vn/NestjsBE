@@ -7,21 +7,35 @@ describe('RecommendationPayloadMapperService hiring post payload', () => {
     title: 'Platform Engineer',
     description: 'Run our cloud platform and on-call rotation',
     requirements: null,
-    careerField: 'Software development',
+    occupationCode: '2512.3',
     yearsRequired: 5,
     skills: ['Kubernetes', 'Terraform'],
     updatedAt: new Date('2026-11-15T00:00:00.000Z'),
   };
 
-  it('sends the recruiter-set field, years and skills to the AI service', () => {
+  it('sends the recruiter-set occupation, years and skills to the AI service, as job.py reads them', () => {
     const payload = new RecommendationPayloadMapperService().buildHiringPostPayload(post);
 
+    expect(payload).not.toHaveProperty('career_field');
     expect(payload).toMatchObject({
-      career_field: 'Software development',
+      job_title: 'Platform Engineer',
+      title: 'Platform Engineer',
+      description: 'Run our cloud platform and on-call rotation',
+      occupation: '2512.3',
       years_required: 5,
       skills: ['Kubernetes', 'Terraform'],
       required_skills: ['Kubernetes', 'Terraform'],
     });
+  });
+
+  it('sends no occupation for an old post, so the AI matches the job title instead', () => {
+    const payload = new RecommendationPayloadMapperService().buildHiringPostPayload({
+      ...post,
+      occupationCode: null,
+    });
+
+    expect(payload.occupation).toBeNull();
+    expect(payload.job_title).toBe('Platform Engineer');
   });
 });
 

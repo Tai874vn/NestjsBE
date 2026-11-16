@@ -2,7 +2,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
-  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -12,7 +11,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { CAREER_FIELDS } from '../../../common/career-fields';
 import { Transform } from 'class-transformer';
 import {
   optionalTrimString,
@@ -68,9 +66,19 @@ export class CreateHiringPostDto {
   @MaxLength(120)
   companyName?: string;
 
-  /** One of the 37 career fields; the AI reads the level from this and the required years. */
-  @IsIn(CAREER_FIELDS)
-  careerField: string;
+  /** ESCO occupation code from GET /api/occupations; the AI reads the level from this and the required years. */
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  occupationCode: string;
+
+  /** One of the occupation's specialties, optional. */
+  @Transform(optionalTrimString)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  specialty?: string;
 
   @IsInt()
   @Min(0)

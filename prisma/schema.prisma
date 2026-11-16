@@ -473,9 +473,13 @@ model HiringPost {
   salaryMax      Int?
   /// Shown on the post instead of the recruiter's display name.
   companyName    String?
-  /// One of the 37 career fields (src/common/career-fields.ts).
-  careerField    String?
-  /// Minimum years of experience in the field.
+  /// ESCO occupation code (src/common/data/occupations.json) the post hires for.
+  occupationCode String?
+  /// One of the occupation's specialties (O*NET titles listed under it), optional.
+  specialty      String?
+  /// The post's old career field (one of the 37), kept read-only from before occupations.
+  legacyField    String?
+  /// Minimum years of experience in the occupation.
   yearsRequired  Int?
   /// Skill names picked from the dictionary.
   skills         String[]         @default([])
@@ -502,7 +506,7 @@ model HiringPost {
 
   @@index([recruiterId, status, updatedAt, id])
   @@index([status, updatedAt, id])
-  @@index([status, careerField])
+  @@index([status, occupationCode])
   @@index([aiStatus, aiQueuedAt])
   @@map("hiring_posts")
 }

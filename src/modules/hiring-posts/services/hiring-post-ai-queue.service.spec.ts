@@ -15,7 +15,7 @@ const post = {
   title: 'Backend Engineer',
   description: 'Build and run our APIs',
   requirements: null,
-  careerField: 'Software development',
+  occupationCode: '2512.3',
   yearsRequired: 3,
   skills: ['Node.js'],
   updatedAt: QUEUED_AT,
@@ -54,7 +54,7 @@ function setup({ available = true, row = post as Record<string, unknown>, predic
           }),
     ),
   };
-  const payloadMapper = { buildHiringPostPayload: jest.fn(() => ({ id: 10, career_field: 'Software development' })) };
+  const payloadMapper = { buildHiringPostPayload: jest.fn(() => ({ id: 10, occupation: '2512.3' })) };
   const config = { get: jest.fn(() => '0') };
   const queue = new HiringPostAiQueueService(prisma as never, aiClient as never, payloadMapper as never, config as never);
   // The data written for the claimed post (the last updateMany that targets it by id).
@@ -71,7 +71,7 @@ describe('HiringPostAiQueueService', () => {
 
     await queue.processQueue();
 
-    expect(aiClient.predictJobSeniority).toHaveBeenCalledWith({ job: { id: 10, career_field: 'Software development' } });
+    expect(aiClient.predictJobSeniority).toHaveBeenCalledWith({ job: { id: 10, occupation: '2512.3' } });
     expect(written()?.data).toMatchObject({ aiStatus: 'DONE', predictedSeniority: 'Mid', aiClaimedAt: null });
   });
 
@@ -95,13 +95,35 @@ describe('HiringPostAiQueueService', () => {
     });
   });
 
-  it('asks for the field and years when the post has none', async () => {
-    const { queue, written, aiClient } = setup({ row: { ...post, careerField: null } });
+  it('sends a post without an occupation, so the AI can match its title as job.py does', async () => {
+    const { queue, written, aiClient } = setup({ row: { ...post, occupationCode: null, legacyField: 'QA' } });
 
     await queue.processQueue();
 
-    expect(aiClient.predictJobSeniority).not.toHaveBeenCalled();
-    expect(written()?.data).toMatchObject({ aiStatus: 'NEEDS_INPUT', aiStatusMessage: HIRING_POST_NEEDS_INPUT_MESSAGE });
+    expect(aiClient.predictJobSeniority).toHaveBeenCalled();
+    expect(written()?.data).toMatchObject({ aiStatus: 'DONE' });
+  });
+
+  it.each([
+    HIRING_POST_NEEDS_INPUT_MESSAGE,
+    'Add the required years of experience to the post, for example "at least 3 years".',
+  ])('asks the recruiter for input, with no old level, when the AI answers %s', async (answer) => {
+    const { queue, written } = setup({
+      row: { ...post, occupationCode: null, predictedSeniority: 'Mid' },
+      prediction: new BadRequestException(answer),
+    });
+
+    await queue.processQueue();
+
+    expect(written()?.data).toMatchObject({
+      aiStatus: 'NEEDS_INPUT',
+      aiStatusMessage: answer,
+      predictedSeniority: null,
+      predictedSeniorityConfidence: null,
+      predictedSeniorityModel: null,
+      predictedSeniorityAt: null,
+    });
+    expect(written()?.data).toHaveProperty('predictedSeniorityMetadata');
   });
 
   it('records a refused input as FAILED with the reason', async () => {
