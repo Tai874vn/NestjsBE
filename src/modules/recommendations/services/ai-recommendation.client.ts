@@ -55,7 +55,8 @@ export interface AiSkillSummary {
   name: string;
   kind: string;
   reuse: string | null;
-  fields: Record<string, number>;
+  // ISCO-08 unit group -> weight; the old career-field scores (fields) are gone.
+  isco: Record<string, number>;
   hot: boolean;
 }
 
