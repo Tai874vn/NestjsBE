@@ -15,6 +15,8 @@ import { ProfileCompletionService } from './profile-completion.service';
 import { UserLegacyProfileSyncService } from './user-legacy-profile-sync.service';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { SkillService } from '../../skill/services/skill.service';
+import { ResumeAiQueueService } from './resume-ai-queue.service';
+import { resumeEducation } from './resume-career';
 
 @Injectable()
 export class UserProfileService {
@@ -25,6 +27,7 @@ export class UserProfileService {
     private readonly legacyProfileSyncService: UserLegacyProfileSyncService,
     private readonly profileNormalizer: UserProfileNormalizerService,
     private readonly skillService: SkillService,
+    private readonly resumeAiQueue: ResumeAiQueueService,
   ) {}
 
   async getPublicProfile(id: number) {
@@ -56,6 +59,7 @@ export class UserProfileService {
         profileCertifications: {
           orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         },
+        resume: { select: { data: true } },
         portfolioItems: {
           orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         },
@@ -113,12 +117,14 @@ export class UserProfileService {
       }),
     ]);
 
-    const { skill, certification, _count, ...publicUser } = user;
+    const { skill, certification, _count, resume, ...publicUser } = user;
 
     const result = {
       message: 'Get public profile successfully',
       content: {
         ...publicUser,
+        // Only the degree and its field from the resume are public, never the CV itself.
+        education: resumeEducation(resume?.data),
         profileSkills: this.profileNormalizer.withLegacyProfileSkills(
           publicUser.profileSkills,
           skill,
@@ -170,6 +176,7 @@ export class UserProfileService {
         profileCertifications: {
           orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         },
+        resume: { select: { data: true } },
         portfolioItems: {
           orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         },
@@ -180,12 +187,13 @@ export class UserProfileService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const { skill, certification, ...profile } = user;
+    const { skill, certification, resume, ...profile } = user;
 
     return {
       message: 'Get my profile successfully',
       content: {
         ...profile,
+        education: resumeEducation(resume?.data),
         profileSkills: this.profileNormalizer.withLegacyProfileSkills(
           user.profileSkills,
           skill,
@@ -322,11 +330,36 @@ export class UserProfileService {
       }),
     ]);
 
+    // Skills feed the resume's AI level, so a saved resume is evaluated again.
+    const hasResume = await this.prisma.userResume.count({ where: { userId } });
+    if (hasResume) await this.resumeAiQueue.enqueue(userId);
+
     await this.legacyProfileSyncService.sync(userId);
     await this.profileCompletionService.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
     return this.getMyProfile(userId);
+  }
+
+  /**
+   * The resume form edits the same skill list as the profile (`user_skills` is the only copy). Sets the list to
+   * these names in this order, keeping the level of skills the user already had.
+   */
+  async setSkillNames(userId: number, names: string[]) {
+    const existing = await this.prisma.userSkill.findMany({
+      where: { userId },
+      select: { name: true, level: true },
+    });
+    const levels = new Map(
+      existing.map((skill) => [skill.name.toLowerCase(), skill.level]),
+    );
+    return this.replaceProfileSkills(userId, {
+      skills: names.map((name, sortOrder) => ({
+        name,
+        level: levels.get(name.toLowerCase()) ?? undefined,
+        sortOrder,
+      })),
+    });
   }
 
   async replaceProfileCertifications(
@@ -336,6 +369,14 @@ export class UserProfileService {
     const certifications = dto.certifications.map((certification, index) => ({
       name: certification.name.trim(),
       issuer: certification.issuer?.trim(),
+      category: certification.category ?? null,
+      skills: [
+        ...new Set(
+          (certification.skills ?? [])
+            .map((skill) => skill.trim())
+            .filter(Boolean),
+        ),
+      ],
       issuedAt: certification.issuedAt
         ? new Date(certification.issuedAt)
         : null,
@@ -349,6 +390,28 @@ export class UserProfileService {
 
     if (certifications.some((certification) => !certification.name)) {
       throw new BadRequestException('Certification name is required');
+    }
+    if (certifications.some((certification) => !certification.issuer)) {
+      throw new BadRequestException('Add the issuing organization');
+    }
+    const expiresBeforeIssued = certifications.find(
+      (certification) =>
+        certification.issuedAt &&
+        certification.expiresAt &&
+        certification.expiresAt < certification.issuedAt,
+    );
+    if (expiresBeforeIssued) {
+      throw new BadRequestException(
+        `${expiresBeforeIssued.name}: the expiry date is before the issue date`,
+      );
+    }
+    if (
+      certifications.some(
+        (certification) =>
+          certification.issuedAt && certification.issuedAt > new Date(),
+      )
+    ) {
+      throw new BadRequestException('The issue date cannot be in the future');
     }
 
     const uniqueNames = new Set(

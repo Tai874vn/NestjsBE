@@ -10,6 +10,7 @@ const QUEUED_AT = new Date('2026-11-15T00:00:00.000Z');
 function setup({
   available = true,
   data = {} as Record<string, unknown>,
+  skills = [] as string[],
   waiting = 1,
 }) {
   let queued = waiting;
@@ -32,7 +33,7 @@ function setup({
         Promise.resolve({
           headline: null,
           skill: null,
-          profileSkills: [],
+          profileSkills: skills.map((name) => ({ name })),
           resume: { id: 10, data },
         }),
       ),
@@ -103,14 +104,17 @@ describe('ResumeAiQueueService', () => {
     ]);
   });
 
-  it('resolves skills, suggests CV skills, and predicts seniority when the AI is up', async () => {
+  it('reads the shared skill list, suggests CV skills, and predicts seniority when the AI is up', async () => {
     const { queue, written, redisService } = setup({
+      // An old resume may still carry its own Skills copy; it is dropped in favour of user_skills.
       data: {
         Industry: 'Software development',
         YearsExperience: '3',
-        Skills: 'reactjs, SQL, Reakt',
+        Skills: 'old, copy',
+        SkillIds: ['skill:old'],
         Text: 'Built apps with ReactJS and docker.',
       },
+      skills: ['React', 'SQL', 'Reakt'],
     });
 
     await queue.processQueue();
@@ -122,10 +126,11 @@ describe('ResumeAiQueueService', () => {
       aiStatusMessage: null,
       aiClaimedAt: null,
       predictedSeniority: 'Mid',
-      data: expect.objectContaining({
-        Skills: 'React, SQL, Reakt',
-        SkillIds: ['onet:react', 'skill:SQL'],
-      }),
+      data: {
+        Industry: 'Software development',
+        YearsExperience: '3',
+        Text: 'Built apps with ReactJS and docker.',
+      },
       aiInsights: {
         unrecognisedSkills: ['Reakt'],
         suggestedSkills: [{ id: 'onet:docker', name: 'Docker', matched: ['docker'] }],

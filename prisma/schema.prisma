@@ -122,6 +122,10 @@ model UserCertification {
   expiresAt     DateTime?
   credentialUrl String?
   credentialId  String?
+  /// Kind of credential (schema.org credentialCategory): Certification, License, Course, or Badge.
+  category      String?
+  /// Dictionary skills the credential shows.
+  skills        String[]  @default([])
   sortOrder     Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

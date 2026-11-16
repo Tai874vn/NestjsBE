@@ -10,26 +10,30 @@ describe('UserResumeService', () => {
         upsert: jest.fn(),
         findUnique: jest.fn(),
       },
+      userSkill: { findMany: jest.fn(() => Promise.resolve([] as Array<{ name: string }>)) },
     };
     const redisService = { invalidateUserCaches: jest.fn() };
     // Saving and "Try again" only talk to the queue; there is no AI client here at all.
     const aiQueue = {
       kick: jest.fn(),
       enqueue: jest.fn((userId: number) =>
-        Promise.resolve({ userId, aiStatus: 'QUEUED' }),
+        Promise.resolve({ userId, aiStatus: 'QUEUED', data: {} }),
       ),
     };
+    const profileService = { setSkillNames: jest.fn() };
     const service = new UserResumeService(
       prisma as any,
       redisService as any,
       new UserProfileNormalizerService(),
       aiQueue as any,
+      profileService as any,
     );
-    return { service, prisma, redisService, aiQueue };
+    return { service, prisma, redisService, aiQueue, profileService };
   };
 
   it('saves the resume and queues AI work without calling the AI service', async () => {
-    const { service, prisma, redisService, aiQueue } = createService();
+    const { service, prisma, redisService, aiQueue, profileService } =
+      createService();
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
     prisma.userResume.upsert.mockImplementation((args) =>
       Promise.resolve({ id: 10, ...args.create }),
@@ -42,12 +46,12 @@ describe('UserResumeService', () => {
     });
 
     const args = prisma.userResume.upsert.mock.calls[0][0];
-    // Skills are kept as written (deduplicated); the queue puts them under dictionary names later.
-    expect(args.create.data).toEqual({
-      Industry: 'QA',
-      Skills: 'reactjs, SQL',
-      Name: 'Ava',
-    });
+    // Skills go to the shared list (deduplicated), not into the resume.
+    expect(profileService.setSkillNames).toHaveBeenCalledWith(1, [
+      'reactjs',
+      'SQL',
+    ]);
+    expect(args.create.data).toEqual({ Industry: 'QA', Name: 'Ava' });
     expect(args.create).toMatchObject({
       sourceFileName: 'resume.pdf',
       schemaVersion: 'resume-atlas-v1',
@@ -100,7 +104,7 @@ describe('UserResumeService', () => {
     expect(aiQueue.enqueue).toHaveBeenCalledWith(1);
     expect(result).toEqual({
       message: 'Resume queued for AI evaluation',
-      content: { userId: 1, aiStatus: 'QUEUED' },
+      content: { userId: 1, aiStatus: 'QUEUED', data: { Skills: '' } },
     });
   });
 
@@ -124,16 +128,27 @@ describe('UserResumeService', () => {
     expect(aiQueue.enqueue).not.toHaveBeenCalled();
   });
 
-  it('returns the current user resume data', async () => {
+  it('returns the resume with the shared skill list as its Skills', async () => {
     const { service, prisma } = createService();
-    const storedResume = { id: 10, userId: 1, data: { Skills: 'SQL' } };
+    const storedResume = { id: 10, userId: 1, data: { Industry: 'QA', Skills: 'stale' } };
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
     prisma.userResume.findUnique.mockResolvedValue(storedResume);
+    prisma.userSkill.findMany.mockResolvedValue([{ name: 'SQL' }, { name: 'Jest' }]);
 
     await expect(service.getMyResume(1)).resolves.toEqual({
       message: 'Get resume successfully',
-      content: storedResume,
+      content: { ...storedResume, data: { Industry: 'QA', Skills: 'SQL, Jest' } },
     });
+  });
+
+  it('leaves the skill list alone when the form sends no Skills', async () => {
+    const { service, prisma, profileService } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockResolvedValue({ id: 10 });
+
+    await service.importResume(1, { data: { Industry: 'QA' } });
+
+    expect(profileService.setSkillNames).not.toHaveBeenCalled();
   });
 
   it('stores uploaded resume document metadata for the current user', async () => {

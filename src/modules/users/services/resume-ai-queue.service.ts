@@ -223,19 +223,18 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
     data: Record<string, unknown>,
     owner: Parameters<typeof buildResumeSeniorityPayload>[0],
   ): Promise<Prisma.UserResumeUpdateManyMutationInput> {
+    // Skills are the shared list in `user_skills`; drop any copy an old resume still carries.
     const nextData: Record<string, unknown> = { ...data };
+    delete nextData.Skills;
+    delete nextData.SkillIds;
     const insights: Record<string, unknown> = {};
+    const names = mergeSkills(
+      owner.profileSkills?.map((skill) => skill.name) ?? [],
+    );
 
-    // 1. Skills under their dictionary names ("reactjs" -> "React"); unknown names are kept and reported.
-    const names = stringList(data.Skills);
+    // 1. Skills not in the dictionary are reported so the user can choose them from the list.
     if (names.length) {
       const resolved = await this.aiClient.resolveSkills(names);
-      const known = resolved.filter((skill) => skill !== null);
-      nextData.Skills = mergeSkills(
-        known.map((skill) => skill.name),
-        names.filter((_, index) => !resolved[index]),
-      ).join(', ');
-      nextData.SkillIds = [...new Set(known.map((skill) => skill.id))];
       insights.unrecognisedSkills = names.filter(
         (_, index) => !resolved[index],
       );
@@ -244,9 +243,7 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
     // 2. Skills named in the CV text that the user hasn't chosen yet, offered as suggestions.
     const text = typeof data.Text === 'string' ? data.Text : '';
     if (text.trim()) {
-      const chosen = new Set(
-        stringList(nextData.Skills).map((name) => name.toLowerCase()),
-      );
+      const chosen = new Set(names.map((name) => name.toLowerCase()));
       insights.suggestedSkills = (await this.aiClient.extractSkills(text))
         .filter((skill) => !chosen.has(skill.name.toLowerCase()))
         .slice(0, MAX_SUGGESTED_SKILLS);

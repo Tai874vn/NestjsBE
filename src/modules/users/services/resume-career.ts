@@ -146,3 +146,21 @@ export function yearsInField(
   const declared = Number(typed.replace(',', '.'));
   return typed && Number.isFinite(declared) && declared >= 0 ? declared : null;
 }
+
+/**
+ * The highest degree and its ISCED-F field-of-study code from a resume, the part of it a profile shows.
+ * Null without a stated degree.
+ */
+export function resumeEducation(
+  data: unknown,
+): { degree: string; fieldOfStudy: string | null } | null {
+  const record =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  const degree = typeof record.Degree === 'string' ? record.Degree.trim() : '';
+  if (!degree || degree === 'Not stated') return null;
+  const code =
+    typeof record.FieldOfStudy === 'string' ? record.FieldOfStudy.trim() : '';
+  return { degree, fieldOfStudy: /^\d{4}$/.test(code) ? code : null };
+}

@@ -22,6 +22,7 @@ import {
   RESUME_AI_STATUS,
   ResumeAiQueueService,
 } from './resume-ai-queue.service';
+import { UserProfileService } from './user-profile.service';
 
 const ISCED_DETAILED_CODE = /^\d{4}$/;
 
@@ -32,6 +33,7 @@ export class UserResumeService {
     private readonly redisService: RedisService,
     private readonly profileNormalizer: UserProfileNormalizerService,
     private readonly aiQueue: ResumeAiQueueService,
+    private readonly profileService: UserProfileService,
   ) {}
 
   async importResume(userId: number, dto: ImportResumeDto) {
@@ -43,6 +45,14 @@ export class UserResumeService {
     const schemaVersion =
       this.profileNormalizer.trimOptional(dto.schemaVersion) ?? 'v1';
     const data = this.normalizeResumeData(dto.data);
+    // Skills live in one list shared with the profile (`user_skills`), never as a copy inside the resume.
+    // A form that sends Skills sets that list; one that leaves it out keeps it.
+    if ('Skills' in dto.data) {
+      await this.profileService.setSkillNames(
+        userId,
+        mergeSkills(stringList(dto.data.Skills)),
+      );
+    }
     // Saving never waits for the AI service: the resume is queued and a worker evaluates it.
     const queued = {
       aiStatus: RESUME_AI_STATUS.QUEUED,
@@ -80,7 +90,7 @@ export class UserResumeService {
 
     return {
       message: 'Resume imported successfully',
-      content: resume,
+      content: await this.withSharedSkills(resume),
     };
   }
 
@@ -113,7 +123,7 @@ export class UserResumeService {
 
     return {
       message: 'Resume queued for AI evaluation',
-      content: queued,
+      content: await this.withSharedSkills(queued),
     };
   }
 
@@ -130,7 +140,27 @@ export class UserResumeService {
 
     return {
       message: 'Get resume successfully',
-      content: resume,
+      content: await this.withSharedSkills(resume),
+    };
+  }
+
+  /** The resume shows the shared skill list under its old Skills key, so the form reads and writes one place. */
+  private async withSharedSkills<
+    T extends { userId: number; data: Prisma.JsonValue },
+  >(
+    resume: T,
+  ) {
+    const skills = await this.prisma.userSkill.findMany({
+      where: { userId: resume.userId },
+      select: { name: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    });
+    return {
+      ...resume,
+      data: {
+        ...asRecord(resume.data),
+        Skills: skills.map((skill) => skill.name).join(', '),
+      },
     };
   }
 
@@ -169,7 +199,7 @@ export class UserResumeService {
 
     return {
       message: 'Resume file uploaded successfully',
-      content: resume,
+      content: await this.withSharedSkills(resume),
     };
   }
 
@@ -195,8 +225,7 @@ export class UserResumeService {
   }
 
   /**
-   * Checks the career fields without calling the AI service. Skills are kept as written; the AI queue puts
-   * them under their dictionary names later.
+   * Checks the career fields without calling the AI service.
    */
   private normalizeResumeData(
     raw: Record<string, unknown>,
@@ -217,10 +246,9 @@ export class UserResumeService {
     if (raw.Jobs !== undefined && raw.Jobs !== null) {
       data.Jobs = cleanResumeJobs(raw.Jobs);
     }
-    const names = mergeSkills(stringList(raw.Skills));
-    if (names.length) {
-      data.Skills = names.join(', ');
-    }
+    // Skills are stored in `user_skills` (see importResume), not in the resume.
+    delete data.Skills;
+    delete data.SkillIds;
     return data;
   }
 }

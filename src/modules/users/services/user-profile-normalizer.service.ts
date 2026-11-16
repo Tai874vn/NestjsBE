@@ -40,6 +40,8 @@ export class UserProfileNormalizerService {
         expiresAt: null,
         credentialUrl: null,
         credentialId: null,
+        category: null,
+        skills: [],
         sortOrder: index,
         createdAt: null,
         updatedAt: null,

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { validate } from 'class-validator';
-import { UpdateMyProfileDto } from '../profile.dto';
+import { plainToInstance } from 'class-transformer';
+import { ProfileCertificationDto, UpdateMyProfileDto } from '../profile.dto';
 import { UpdateUserDto } from '../update-user.dto';
 
 describe('Profile DTOs', () => {
@@ -35,5 +36,18 @@ describe('Profile DTOs', () => {
         expect.objectContaining({ property: 'candidateDiscoverable' }),
       ]),
     );
+  });
+
+  it('requires a certification issuer and accepts only the listed kinds', async () => {
+    const errorsFor = async (value: Record<string, unknown>) =>
+      (await validate(plainToInstance(ProfileCertificationDto, value))).map(
+        (error) => error.property,
+      );
+
+    await expect(
+      errorsFor({ name: 'CKA', issuer: 'CNCF', category: 'Certification', skills: ['Kubernetes'], issuedAt: '2024-05-01' }),
+    ).resolves.toEqual([]);
+    await expect(errorsFor({ name: 'CKA', issuer: '  ' })).resolves.toEqual(['issuer']);
+    await expect(errorsFor({ name: 'CKA', issuer: 'CNCF', category: 'Diploma' })).resolves.toEqual(['category']);
   });
 });

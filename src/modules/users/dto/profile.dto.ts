@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -102,6 +103,17 @@ export class ReplaceProfileSkillsDto {
   skills: ProfileSkillDto[];
 }
 
+export const CERTIFICATION_CATEGORIES = [
+  'Certification',
+  'License',
+  'Course',
+  'Badge',
+] as const;
+
+/**
+ * One credential, in the shape LinkedIn, Open Badges, and schema.org share: name, issuing organization, issue and
+ * expiry dates, credential ID and URL to verify it, its kind, and the skills it shows.
+ */
 export class ProfileCertificationDto {
   @Transform(trimString)
   @IsString()
@@ -109,11 +121,22 @@ export class ProfileCertificationDto {
   @MaxLength(120)
   name: string;
 
-  @Transform(optionalTrimString)
-  @IsOptional()
+  @Transform(trimString)
   @IsString()
+  @MinLength(1, { message: 'Add the issuing organization' })
   @MaxLength(120)
-  issuer?: string;
+  issuer: string;
+
+  @IsOptional()
+  @IsIn(CERTIFICATION_CATEGORIES)
+  category?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  skills?: string[];
 
   @IsOptional()
   @IsDateString()

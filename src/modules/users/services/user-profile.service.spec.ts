@@ -24,6 +24,7 @@ describe('UserProfileService', () => {
         createMany: jest.fn(),
         findMany: jest.fn(),
       },
+      userResume: { count: jest.fn(() => Promise.resolve(0)) },
       comment: {
         aggregate: jest.fn(),
       },
@@ -61,6 +62,7 @@ describe('UserProfileService', () => {
         );
       }),
     };
+    const resumeAiQueue = { enqueue: jest.fn() };
     const service = new UserProfileService(
       prisma as any,
       redisService as any,
@@ -68,9 +70,10 @@ describe('UserProfileService', () => {
       legacyProfileSyncService,
       profileNormalizer,
       skillService as any,
+      resumeAiQueue as any,
     );
 
-    return { service, prisma, redisService, skillService };
+    return { service, prisma, redisService, skillService, resumeAiQueue };
   };
 
   it('rejects duplicate profile certifications case-insensitively', async () => {
@@ -79,8 +82,8 @@ describe('UserProfileService', () => {
     await expect(
       service.replaceProfileCertifications(1, {
         certifications: [
-          { name: 'AWS Certified Developer' },
-          { name: ' aws certified developer ' },
+          { name: 'AWS Certified Developer', issuer: 'AWS' },
+          { name: ' aws certified developer ', issuer: 'AWS' },
         ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -345,6 +348,64 @@ describe('UserProfileService', () => {
       data: [
         { userId: 1, name: 'React', skillId: null, level: undefined, sortOrder: 0 },
       ],
+    });
+  });
+
+  it('re-evaluates the resume when skills change, and keeps levels when the resume sets the list', async () => {
+    const { service, prisma, resumeAiQueue } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.$transaction.mockResolvedValue([]);
+    prisma.user.update.mockResolvedValue({});
+    prisma.userResume.count.mockResolvedValue(1);
+    prisma.userSkill.findMany.mockResolvedValue([{ name: 'SQL', level: 'Expert' }]);
+    prisma.userCertification.findMany.mockResolvedValue([]);
+    jest.spyOn(service, 'getMyProfile').mockResolvedValue({} as any);
+
+    await service.setSkillNames(1, ['React', 'sql']);
+
+    expect(prisma.userSkill.createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: 1, name: 'React', skillId: 'onet:react', level: undefined, sortOrder: 0 },
+        { userId: 1, name: 'sql', skillId: 'skill:sql', level: 'Expert', sortOrder: 1 },
+      ],
+    });
+    expect(resumeAiQueue.enqueue).toHaveBeenCalledWith(1);
+  });
+
+  it('requires the issuer, an expiry after the issue date, and no future issue date', async () => {
+    const { service, prisma } = createService();
+    const save = (certification: Record<string, unknown>) =>
+      service.replaceProfileCertifications(1, {
+        certifications: [{ name: 'CKA', issuer: 'CNCF', ...certification } as any],
+      });
+
+    await expect(save({ issuer: '' })).rejects.toThrow('Add the issuing organization');
+    await expect(
+      save({ issuedAt: '2024-05-01', expiresAt: '2024-01-01' }),
+    ).rejects.toThrow('CKA: the expiry date is before the issue date');
+    await expect(save({ issuedAt: '2999-01-01' })).rejects.toThrow(
+      'The issue date cannot be in the future',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('saves the kind and the skills of a certification, without repeated skills', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.$transaction.mockResolvedValue([]);
+    prisma.user.update.mockResolvedValue({});
+    prisma.userSkill.findMany.mockResolvedValue([]);
+    prisma.userCertification.findMany.mockResolvedValue([]);
+    jest.spyOn(service, 'getMyProfile').mockResolvedValue({} as any);
+
+    await service.replaceProfileCertifications(1, {
+      certifications: [
+        { name: 'CKA', issuer: 'CNCF', category: 'Certification', skills: ['Kubernetes', ' Kubernetes ', 'Docker'] },
+      ],
+    });
+
+    expect(prisma.userCertification.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ userId: 1, name: 'CKA', issuer: 'CNCF', category: 'Certification', skills: ['Kubernetes', 'Docker'] })],
     });
   });
 });
