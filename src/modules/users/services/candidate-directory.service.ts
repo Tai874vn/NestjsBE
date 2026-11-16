@@ -6,11 +6,7 @@ import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { profileStrength } from './profile-strength';
 import { findOccupation } from '../../occupations/occupation-catalogue';
-import {
-  cleanResumeJobs,
-  occupationYears,
-  resumeOccupation,
-} from './resume-career';
+import { resumeOccupation } from './resume-career';
 
 type CandidateDirectoryUser = {
   id: number;
@@ -47,22 +43,25 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** Where the saved AI prediction keeps the years it was decided on; the minYears filter reads the same path. */
+export const PREDICTED_YEARS_PATH = ['features', 'years_in_occupation'];
+
+function savedNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 /**
  * What a recruiter filters by, read from the candidate's resume and its AI result: the occupation title, the
- * specialty, years in the occupation and related years (counted from the resume's jobs, as the AI counts them),
- * shown separately. The level is null when there is none (never predicted, or cleared).
+ * specialty, years in the occupation and related years, shown separately. The years are the ones saved with the
+ * prediction (features.years_in_occupation / related_years), the numbers the shown level was decided on and the
+ * ones the minYears filter reads. Without a prediction (never predicted, or cleared) level and years are null.
  */
-export function candidateCareer(
-  resume: CandidateDirectoryUser['resume'],
-  today = new Date(),
-) {
+export function candidateCareer(resume: CandidateDirectoryUser['resume']) {
   if (!resume) return null;
   const data = record(resume.data);
   const code = resumeOccupation(data);
   const occupation = code ? findOccupation(code) : undefined;
-  const years = code
-    ? occupationYears(cleanResumeJobs(data.Jobs), code, today)
-    : null;
+  const features = record(record(resume.predictedSeniorityMetadata).features);
   const specialty =
     occupation &&
     typeof data.Specialty === 'string' &&
@@ -74,8 +73,8 @@ export function candidateCareer(
     occupationCode: occupation?.code ?? null,
     occupationTitle: occupation?.title ?? null,
     specialty,
-    yearsInOccupation: years?.years ?? null,
-    relatedYears: years?.related ?? null,
+    yearsInOccupation: savedNumber(features.years_in_occupation),
+    relatedYears: savedNumber(features.related_years),
     level: resume.predictedSeniority ?? null,
     legacyField: typeof legacy === 'string' && legacy ? legacy : null,
   };
@@ -263,7 +262,7 @@ export class CandidateDirectoryService {
         resume: {
           is: {
             predictedSeniorityMetadata: {
-              path: ['features', 'years_in_occupation'],
+              path: PREDICTED_YEARS_PATH,
               gte: query.minYears,
             },
           },

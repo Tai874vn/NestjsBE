@@ -192,8 +192,8 @@ export class HiringPostsService {
       dto.salaryMax ?? post.salaryMax ?? undefined,
     );
     this.assertClosesInFuture(dto.closesAt);
-    // A new occupation keeps the specialty only if it is listed under it; a specialty is checked against the
-    // occupation the post will have.
+    // A changed occupation drops the stored specialty unless a new one is sent; a sent specialty is checked
+    // against the occupation the post will have.
     // An empty specialty on a post that has no occupation yet (an old post) changes nothing.
     const occupationSent =
       dto.occupationCode !== undefined ||

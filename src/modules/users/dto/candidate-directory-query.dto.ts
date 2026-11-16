@@ -53,7 +53,10 @@ export class CandidateDirectoryQueryDto extends PaginationDto {
   @IsIn(['Junior', 'Mid', 'Senior'])
   level?: string;
 
-  /** Minimum years in the candidate's main occupation, from their resume's dated jobs. */
+  /**
+   * Minimum years in the candidate's main occupation, as saved with the AI prediction (the years the shown
+   * level was decided on, the same value the card shows). A resume with no prediction never passes.
+   */
   @IsOptional()
   @Type(() => Number)
   @IsInt()

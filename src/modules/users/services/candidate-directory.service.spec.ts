@@ -73,7 +73,7 @@ describe('CandidateDirectoryService', () => {
             ],
           },
           predictedSeniority: 'Mid',
-          predictedSeniorityMetadata: { features: { years_in_occupation: 3 } },
+          predictedSeniorityMetadata: { features: { years_in_occupation: 3, related_years: 0.3 } },
         },
       },
       { id: 5, name: 'Ben', resume: null },
@@ -93,6 +93,63 @@ describe('CandidateDirectoryService', () => {
       legacyField: null,
     });
     expect(byId.get(5)?.career).toBeNull();
+  });
+
+  describe('card years and the minYears filter read the same saved prediction', () => {
+    // Started in 2015 and still current: counted today this job gives about 11 years, but the prediction saved
+    // 2 years (and 0.4 related) when it was made. Both the card and the filter must read the saved numbers.
+    const grown = {
+      id: 1,
+      name: 'Grown',
+      resume: {
+        data: {
+          Occupation: '2513.5',
+          Jobs: [{ title: 'Web developer', occupation: '2513.5', start: '2015-01', current: true }],
+        },
+        predictedSeniority: 'Mid',
+        predictedSeniorityMetadata: { features: { years_in_occupation: 2, related_years: 0.4 } },
+      },
+    };
+    // Same jobs, no prediction yet: no years on the card, and never passes minYears.
+    const unpredicted = {
+      id: 2,
+      name: 'Queued',
+      resume: { ...grown.resume, predictedSeniority: null, predictedSeniorityMetadata: null },
+    };
+    type YearsWhere = {
+      AND?: Array<{
+        resume?: { is?: { predictedSeniorityMetadata?: { path: string[]; gte: number } } };
+      }>;
+    };
+    const at = (value: unknown, path: string[]) =>
+      path.reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined), value);
+    const listed = async (minYears?: number) => {
+      const { service, prisma } = createService();
+      prisma.user.findMany.mockImplementation(({ where }: { where: YearsWhere }) => {
+        const condition = (where.AND ?? []).map((f) => f.resume?.is?.predictedSeniorityMetadata).find(Boolean);
+        return Promise.resolve(
+          [grown, unpredicted].filter((c) => {
+            if (!condition) return true;
+            const saved = at(c.resume.predictedSeniorityMetadata, condition.path);
+            return typeof saved === 'number' && saved >= condition.gte;
+          }),
+        );
+      });
+      prisma.user.count.mockResolvedValue(0);
+      const result = await service.findCandidates({ minYears });
+      return new Map(result.content.data.map((card) => [card.id, card.career]));
+    };
+
+    it('shows the saved years, not years recounted from a current job that has grown', async () => {
+      const cards = await listed();
+      expect(cards.get(1)).toMatchObject({ yearsInOccupation: 2, relatedYears: 0.4, level: 'Mid' });
+      expect(cards.get(2)).toMatchObject({ yearsInOccupation: null, relatedYears: null, level: null });
+    });
+
+    it('filters on the same saved years the card shows', async () => {
+      expect([...(await listed(2)).keys()]).toEqual([1]);
+      expect([...(await listed(3)).keys()]).toEqual([]);
+    });
   });
 
   describe('occupation filter', () => {

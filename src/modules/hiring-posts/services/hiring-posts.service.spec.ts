@@ -217,7 +217,7 @@ describe('HiringPostsService', () => {
       expect(prisma.hiringPost.update).not.toHaveBeenCalled();
     });
 
-    it('a new occupation clears the AI level, requeues, and drops a specialty not listed under it', async () => {
+    it('a new occupation clears the AI level, requeues, and drops the stored specialty when none is sent', async () => {
       const { prisma, service, aiQueue } = createService();
       prisma.hiringPost.findUnique.mockResolvedValue({
         ...openPost,
