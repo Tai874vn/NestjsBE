@@ -202,16 +202,20 @@ export class RecommendationsService {
           if (!post) {
             return null;
           }
+          const occupationTitle =
+            findOccupation(post.occupationCode)?.title ?? null;
           const score = this.scoringService.scoreJobMatch({
             aiScore: match.score,
             resumeSkills: knownSkills,
             resumeText: this.payloadText(resumePayload),
             jobText: this.payloadMapper.hiringPostToText(post),
-            jobCategoryText: findOccupation(post.occupationCode)?.title ?? '',
+            jobCategoryText: occupationTitle ?? '',
           });
           const { _count, ...card } = post;
           return {
             ...card,
+            // The same catalogue title hiring-post cards carry, so a recommended job names its occupation.
+            occupationTitle,
             applicationCount: _count.applications,
             recommendation: this.toRecommendationPayload(match, score),
           };

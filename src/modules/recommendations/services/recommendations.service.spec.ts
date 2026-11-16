@@ -194,6 +194,8 @@ describe('RecommendationsService', () => {
     expect(result.content.data[0]).toMatchObject({
       id: 10,
       occupationCode: '2512.3',
+      // The catalogue title, as hiring-post cards carry it.
+      occupationTitle: 'software developer',
       applicationCount: 3,
       recommendation: {
         aiScore: 0.82,
