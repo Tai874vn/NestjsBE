@@ -220,8 +220,8 @@ export class CandidateDirectoryService {
     }
 
     return {
+      // A candidate is listed once they turn on "Visible to recruiters"; nothing else gates it.
       role: Role.USER,
-      profileCompleted: true,
       candidateDiscoverable: true,
       ...(filters.length ? { AND: filters } : {}),
     };

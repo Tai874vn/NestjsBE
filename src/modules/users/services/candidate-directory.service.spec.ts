@@ -146,15 +146,15 @@ describe('CandidateDirectoryService', () => {
     expect(prisma.user.count).toHaveBeenCalledWith({
       where: expect.objectContaining({
         role: Role.USER,
-        profileCompleted: true,
         candidateDiscoverable: true,
       }),
     });
+    // Visibility is the candidate's own switch; an incomplete profile is still listed.
+    expect(prisma.user.count.mock.calls[0][0].where).not.toHaveProperty('profileCompleted');
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           role: Role.USER,
-          profileCompleted: true,
           candidateDiscoverable: true,
         }),
       }),

@@ -79,8 +79,8 @@ export class RecommendationDataLoaderService {
   loadCandidates(poolSize: number): Promise<UserForRecommendation[]> {
     return this.prisma.user.findMany({
       where: {
+        // Only candidates who turned on "Visible to recruiters"; AI matching also needs a resume or skills.
         role: Role.USER,
-        profileCompleted: true,
         candidateDiscoverable: true,
         OR: [
           { resume: { isNot: null } },

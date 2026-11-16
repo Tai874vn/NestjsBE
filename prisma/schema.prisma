@@ -25,7 +25,8 @@ model User {
   avatar        String?
   coverImage    String?
   profileCompleted Boolean @default(false)
-  candidateDiscoverable Boolean @default(true)
+  /// Candidates opt in to candidate search and AI matching ("Visible to recruiters").
+  candidateDiscoverable Boolean @default(false)
   refreshToken  String?
   tokenVersion  Int      @default(0)
   bannedAt      DateTime?

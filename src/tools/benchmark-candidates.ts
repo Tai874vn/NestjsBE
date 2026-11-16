@@ -183,7 +183,7 @@ async function main() {
       SELECT current_setting('server_version') AS postgres_version,
              current_setting('transaction_read_only') AS read_only,
              (SELECT COUNT(*) FROM users)::int AS users,
-             (SELECT COUNT(*) FROM users WHERE role = 'user' AND "profileCompleted" AND "candidateDiscoverable")::int AS eligible_candidates,
+             (SELECT COUNT(*) FROM users WHERE role = 'user' AND "candidateDiscoverable")::int AS eligible_candidates,
              (SELECT COUNT(*) FROM user_portfolio_items)::int AS portfolio_items
     `;
     if (environment[0]?.read_only !== 'on') {
