@@ -1,3 +1,4 @@
+import { yearsInField } from '../../users/services/resume-career';
 import { Injectable } from '@nestjs/common';
 
 export type UserForRecommendation = {
@@ -63,12 +64,9 @@ export class RecommendationPayloadMapperService {
       sanitizedData.Industry,
       sanitizedData.industry,
     );
-    const yearsExperience = this.firstString(
-      sanitizedData.YearsExperience,
-      sanitizedData.yearsExperience,
-      sanitizedData.YearsOfExperience,
-      sanitizedData.years_experience,
-    );
+    // Years in the chosen field, counted from the resume's jobs.
+    const years = yearsInField(sanitizedData);
+    const yearsExperience = years === null ? undefined : String(years);
     const text = [
       user.headline,
       user.bio,

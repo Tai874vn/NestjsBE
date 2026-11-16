@@ -126,25 +126,19 @@ export function monthsInField(
   return span ? total + span[1] - span[0] : 0;
 }
 
-/** Years in the user's field: from dated jobs when there are any, else from the YearsExperience box. */
+/**
+ * Years in the user's field, counted from the start and end months of their jobs in it (overlaps once; a current job
+ * runs to `today`). It is the only source of years: there is no typed-in number. A chosen field with no jobs in it
+ * is 0 years, someone starting out. Null until a field from the list is chosen.
+ */
 export function yearsInField(
   data: Record<string, unknown>,
   today = new Date(),
 ): number | null {
   const field = data.Industry;
-  const jobs = cleanResumeJobs(data.Jobs);
-  if (isCareerField(field) && jobs.some((job) => job.field === field)) {
-    return Math.round((monthsInField(jobs, field, today) / 12) * 10) / 10;
-  }
-  const raw = data.YearsExperience;
-  const typed =
-    typeof raw === 'number'
-      ? String(raw)
-      : typeof raw === 'string'
-        ? raw.trim()
-        : '';
-  const declared = Number(typed.replace(',', '.'));
-  return typed && Number.isFinite(declared) && declared >= 0 ? declared : null;
+  if (!isCareerField(field)) return null;
+  const months = monthsInField(cleanResumeJobs(data.Jobs), field, today);
+  return Math.round((months / 12) * 10) / 10;
 }
 
 /**

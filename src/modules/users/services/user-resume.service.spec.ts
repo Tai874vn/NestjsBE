@@ -108,7 +108,7 @@ describe('UserResumeService', () => {
     });
   });
 
-  it('asks for the field and years before queueing an evaluation', async () => {
+  it('asks for the field before queueing an evaluation; years come from the jobs', async () => {
     const { service, prisma, aiQueue } = createService();
 
     prisma.userResume.findUnique.mockResolvedValue(null);
@@ -119,13 +119,23 @@ describe('UserResumeService', () => {
     await expect(service.predictResumeSeniority(1)).rejects.toThrow(
       'Choose your field',
     );
+    expect(aiQueue.enqueue).not.toHaveBeenCalled();
+    // A field with no jobs in it is 0 years, someone starting out, and can be evaluated.
     prisma.userResume.findUnique.mockResolvedValue({
       data: { Industry: 'QA', Specialty: 'Manual testing' },
     });
-    await expect(service.predictResumeSeniority(1)).rejects.toThrow(
-      'Add jobs with dates in your field',
-    );
-    expect(aiQueue.enqueue).not.toHaveBeenCalled();
+    await service.predictResumeSeniority(1);
+    expect(aiQueue.enqueue).toHaveBeenCalledWith(1);
+  });
+
+  it('does not keep a typed-in years number', async () => {
+    const { service, prisma } = createService();
+    prisma.user.findUnique.mockResolvedValue({ id: 1 });
+    prisma.userResume.upsert.mockImplementation((args) => Promise.resolve({ id: 10, userId: 1, ...args.create }));
+
+    await service.importResume(1, { data: { Industry: 'QA', YearsExperience: '7' } });
+
+    expect(prisma.userResume.upsert.mock.calls[0][0].create.data).toEqual({ Industry: 'QA' });
   });
 
   it('returns the resume with the shared skill list as its Skills', async () => {

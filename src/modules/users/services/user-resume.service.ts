@@ -15,7 +15,6 @@ import { isCareerField } from '../../../common/career-fields';
 import {
   cleanResumeJobs,
   resumeCareerProblems,
-  yearsInField,
 } from './resume-career';
 import { asRecord, mergeSkills, stringList } from './resume-ai-payload';
 import {
@@ -110,11 +109,6 @@ export class UserResumeService {
     if (!isCareerField(resumeData.Industry)) {
       throw new BadRequestException(
         'Choose your field in the resume before requesting AI seniority prediction',
-      );
-    }
-    if (yearsInField(resumeData) === null) {
-      throw new BadRequestException(
-        'Add jobs with dates in your field, or your years of experience, before requesting AI seniority prediction',
       );
     }
 
@@ -249,6 +243,8 @@ export class UserResumeService {
     // Skills are stored in `user_skills` (see importResume), not in the resume.
     delete data.Skills;
     delete data.SkillIds;
+    // Years come from the jobs' months (yearsInField); a typed-in number is not kept.
+    delete data.YearsExperience;
     return data;
   }
 }

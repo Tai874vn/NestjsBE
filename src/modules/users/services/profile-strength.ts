@@ -5,7 +5,7 @@ import { cleanResumeJobs, yearsInField } from './resume-career';
  * Profile strength, 0-100: weighted checks that add up to 100. The frontend's `profileStrength`
  * (src/features/users/profile-strength.ts) uses the same table; keep the two in step.
  *
- * Candidates: career field and years 25, a dated job 10, skills 15 (half below 5), headline 10, photo 10,
+ * Candidates: a career field 25 (years are counted from the jobs), a dated job 10, skills 15 (half below 5), headline 10, photo 10,
  * About 10, portfolio 10, education 5, location 5.
  * Recruiters: headline 20, photo 20, About 20, location 10, website 10, a hiring post 20.
  * Website, certifications, and a cover image are extras and don't count for candidates.

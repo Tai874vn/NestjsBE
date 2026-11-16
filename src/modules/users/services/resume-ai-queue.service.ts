@@ -259,7 +259,7 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         ...base,
         aiStatus: RESUME_AI_STATUS.NEEDS_INPUT,
         aiStatusMessage:
-          'Choose your field and add jobs with dates in it (or your years of experience) to get a seniority preview.',
+          'Choose your field to get a seniority preview; your years are counted from the jobs you add in it.',
       };
     }
     const prediction = await this.aiClient.predictResumeSeniority({

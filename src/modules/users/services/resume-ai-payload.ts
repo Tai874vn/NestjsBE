@@ -85,12 +85,8 @@ export function buildResumeSeniorityPayload(
       data.category,
       owner.headline,
     ),
-    years_experience: firstText(
-      data.years_experience,
-      data.yearsExperience,
-      data.YearsExperience,
-      data.YearsOfExperience,
-    ),
+    // Counted from the jobs, like years_in_field; there is no typed-in number any more.
+    years_experience: yearsText(data),
     industry: firstText(data.industry, data.Industry),
     specialty: firstText(data.specialty, data.Specialty),
     // Free text where seniority evidence is described (leading, mentoring, tools used).
@@ -106,4 +102,9 @@ export function buildResumeSeniorityPayload(
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => hasValue(value)),
   );
+}
+
+function yearsText(data: Record<string, unknown>): string | undefined {
+  const years = yearsInField(data);
+  return years === null ? undefined : String(years);
 }
