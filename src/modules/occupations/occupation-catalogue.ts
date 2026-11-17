@@ -8,15 +8,20 @@ export interface CatalogueOccupation {
   title: string;
   altLabels: string[];
   specialties: string[];
-  /** The closest occupations only (overlap >= 0.25, at most 15), for search and filters. */
+  /**
+   * Every other occupation with overlap >= RELATED_FROM, no cap, symmetric (R31), overlap descending then title.
+   * The candidate filter's includeRelated and the occupation endpoint read it; the resume form's "Related
+   * experience" lines use the same threshold on the same Jaccard of `groups`, so all three agree.
+   */
   related: Array<{ code: string; overlap: number }>;
   /** ESCO skill groups; relatedness of any pair is their Jaccard. */
   groups: number[];
 }
 
 /**
- * Overlap from which two occupations count as related (AIService RELATED_FROM): the catalogue's `related` lists and
- * the resume form's "Related experience" lines use it. Credit itself is given for any overlap.
+ * Overlap from which two occupations count as related (AIService RELATED_FROM): the catalogue's `related` lists
+ * (includeRelated, GET /api/occupations/:code) and the resume form's "Related experience" lines use it. Credit
+ * itself is given for any overlap.
  */
 export const RELATED_FROM = 0.25;
 

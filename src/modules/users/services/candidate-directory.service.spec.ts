@@ -3,7 +3,11 @@ import {
   CandidateDirectoryService,
   candidateCareer,
 } from './candidate-directory.service';
-import { findOccupation } from '../../occupations/occupation-catalogue';
+import {
+  RELATED_FROM,
+  findOccupation,
+  occupationRelatedness,
+} from '../../occupations/occupation-catalogue';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 
 describe('CandidateDirectoryService', () => {
@@ -157,7 +161,8 @@ describe('CandidateDirectoryService', () => {
     const candidates = [
       { id: 1, name: 'Web', resume: { data: { Occupation: '2513.5' } } },
       { id: 2, name: 'Software', resume: { data: { Occupation: '2512.3' } } },
-      { id: 3, name: 'Data', resume: { data: { Occupation: '2511.3' } } },
+      { id: 3, name: 'Accountant', resume: { data: { Occupation: '2411.1' } } },
+      { id: 4, name: 'Analyst', resume: { data: { Occupation: '2511.8' } } },
     ];
     type OccupationWhere = {
       AND?: Array<{
@@ -179,23 +184,31 @@ describe('CandidateDirectoryService', () => {
       return result.content.data.map((card) => card.career?.occupationCode);
     };
 
-    it('2512.3 is in the related list of 2513.5 in the synced catalogue, and 2511.3 is not', () => {
+    it('2512.3 and 2511.8 are in the related list of 2513.5 in the synced catalogue, and 2411.1 is not', () => {
       const related = findOccupation('2513.5')!.related.map((r) => r.code);
       expect(related).toContain('2512.3');
-      expect(related).not.toContain('2511.3');
+      expect(related).toContain('2511.8'); // 0.281: past the old top-15 cut (R31)
+      expect(related).not.toContain('2411.1');
     });
 
     it('with includeRelated, a filter by 2513.5 finds a 2512.3 candidate', async () => {
       const codes = await found({ occupation: '2513.5', includeRelated: true });
       expect(codes).toContain('2512.3');
       expect(codes).toContain('2513.5');
-      expect(codes).not.toContain('2511.3');
+      expect(codes).not.toContain('2411.1');
     });
 
-    it('without includeRelated, a filter by 2513.5 finds only the main occupation, no 2511.3 candidate', async () => {
+    it('with includeRelated, a 2513.5 (web developer) post finds a 2511.8 (ICT business analyst) candidate', async () => {
+      // The resume form shows this pair as "Related experience" (overlap 0.281 >= RELATED_FROM), so the filter
+      // must find it too: one threshold for both (R31).
+      expect(occupationRelatedness('2513.5', '2511.8')).toBeGreaterThanOrEqual(RELATED_FROM);
+      const codes = await found({ occupation: '2513.5', includeRelated: true });
+      expect(codes).toContain('2511.8');
+    });
+
+    it('without includeRelated, a filter by 2513.5 finds only the main occupation', async () => {
       const codes = await found({ occupation: '2513.5' });
       expect(codes).toEqual(['2513.5']);
-      expect(codes).not.toContain('2511.3');
     });
 
     it('rejects an unknown occupation code with 400', async () => {

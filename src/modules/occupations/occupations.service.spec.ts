@@ -1,5 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { OccupationsService } from './occupations.service';
+import {
+  RELATED_FROM,
+  occupationCatalogue,
+  occupationRelatedness,
+} from './occupation-catalogue';
 
 describe('OccupationsService', () => {
   const service = new OccupationsService();
@@ -78,10 +83,26 @@ describe('OccupationsService', () => {
     expect(service.search('e', 500)).toHaveLength(50);
   });
 
+  it('the related list is every occupation at overlap >= RELATED_FROM, both ways, no cap: the filter, this endpoint and the resume lines agree (R31)', () => {
+    const all = [...occupationCatalogue().keys()];
+    const sample = all.filter((_, i) => i % 25 === 0).concat('2513.5', '2511.8');
+    for (const code of sample) {
+      const listed = service.occupation(code).related;
+      const expected = all.filter(
+        (other) => other !== code && occupationRelatedness(code, other) >= RELATED_FROM,
+      );
+      expect(listed.map((r) => r.code).sort()).toEqual(expected.sort());
+      for (const r of listed) {
+        expect(service.relatedOverlap(r.code, code)).toBe(r.overlap); // symmetric, same overlap
+      }
+    }
+    expect(Math.max(...all.map((c) => service.occupation(c).related.length))).toBeGreaterThan(15);
+  });
+
   it('relatedness is the Jaccard of skill groups for any pair (as in the AI service)', () => {
     expect(service.relatedness('2513.5', '2512.3')).toBeCloseTo(0.54, 2);
     expect(service.relatedness('2511.8', '2512.3')).toBeCloseTo(0.34, 2);
-    // Below the stored related list's 0.25 cut-off, still not 0.
+    // Below RELATED_FROM, so not in the stored related list, but still not 0.
     expect(service.relatedness('2411.1', '2513.5')).toBeCloseTo(0.08, 2);
     expect(service.relatedOverlap('2411.1', '2513.5')).toBe(0);
     expect(service.relatedness('2511.2', '2511.3')).toBeCloseTo(0.84, 2);
