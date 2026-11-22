@@ -124,12 +124,15 @@ describe('ApplicationsService', () => {
     expect(events.announce).not.toHaveBeenCalled();
   });
 
-  it('another recruiter (not the owner) gets 403', async () => {
-    const { service } = createService();
+  it('another recruiter (not the owner) gets 403 and nothing is written', async () => {
+    const { prisma, events, service } = createService();
 
     await expect(
       service.shortlist(99, { id: 3, role: Role.EMPLOYER }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.hiringApplication.update).not.toHaveBeenCalled();
+    expect(events.record).not.toHaveBeenCalled();
+    expect(events.announce).not.toHaveBeenCalled();
   });
 
   it('an admin acts as the recruiter', async () => {
@@ -431,6 +434,7 @@ describe('ApplicationsService', () => {
       const { prisma, service } = createService(
         lockedApplication({
           status: S.REJECTED,
+          statusReason: 'POSITION_FILLED',
           hiringPost: {
             ...lockedApplication().hiringPost,
             status: HiringPostStatus.CLOSED,
@@ -441,6 +445,19 @@ describe('ApplicationsService', () => {
 
       await expect(service.acceptOffer(99, candidate)).rejects.toThrow(
         new ConflictException('This position has just been filled.'),
+      );
+      expect(prisma.hiringApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('a candidate who is not waiting on an offer gets the normal status answer, not "filled"', async () => {
+      // Every opening is hired, but this candidate withdrew earlier: the status rules answer.
+      const { prisma, service } = createService(
+        lockedApplication({ status: S.WITHDRAWN }),
+      );
+      prisma.hiringApplication.count.mockResolvedValue(1);
+
+      await expect(service.acceptOffer(99, candidate)).rejects.toThrow(
+        new ConflictException('This application was already withdrawn.'),
       );
       expect(prisma.hiringApplication.update).not.toHaveBeenCalled();
     });

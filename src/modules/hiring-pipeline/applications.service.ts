@@ -235,9 +235,15 @@ export class ApplicationsService {
       lockPost: true,
       // When every opening is already hired, say so (409) before the status rules. This is what the
       // second of two candidates taking the last opening sees: the first accept closed the post and
-      // swept this application, but "just been filled" is the true reason.
+      // swept this application (REJECTED with reason POSITION_FILLED), but "just been filled" is the
+      // true reason. Only an offer still waiting, or one swept that way, gets this answer; any other
+      // status (for example withdrawn) gets the normal answer from the status rules.
       before: async ({ tx, application, actor }) => {
         if (actor !== 'candidate') return; // the rules answer 403
+        const sweptAsFilled =
+          application.status === S.REJECTED &&
+          application.statusReason === 'POSITION_FILLED';
+        if (application.status !== S.OFFERED && !sweptAsFilled) return;
         hiredBefore = await tx.hiringApplication.count({
           where: { hiringPostId: application.hiringPostId, status: S.HIRED },
         });
