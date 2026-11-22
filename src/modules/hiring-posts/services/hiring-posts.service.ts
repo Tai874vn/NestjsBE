@@ -37,7 +37,10 @@ import {
   toHiringPostCard,
 } from './hiring-post-card';
 import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
-import { PostSweepService } from '../../hiring-pipeline/post-sweep.service';
+import {
+  PostSweepService,
+  SweepReason,
+} from '../../hiring-pipeline/post-sweep.service';
 
 /** The list filters a facet can leave out to count its own choices. */
 type FacetGroup =
@@ -295,83 +298,98 @@ export class HiringPostsService {
       post.status === HiringPostStatus.OPEN;
 
     // One transaction (a group of changes saved together or not at all) for the edit and the sweep.
-    const { updated, swept } = await this.prisma.$transaction(async (tx) => {
-      let swept: number[] = [];
-      if (closing) {
-        // Claim the close only while the post is still OPEN. The update takes a row lock (the database
-        // keeps this post row for this transaction until it ends), so a second close, or a candidate
-        // accepting an offer (which locks the post row first), waits; the sweep runs once.
-        const claimed = await tx.hiringPost.updateMany({
-          where: { id, status: HiringPostStatus.OPEN },
-          data: { status: HiringPostStatus.CLOSED },
-        });
-        if (claimed.count === 1) {
-          swept = await this.sweeper.sweep(tx, id, 'POST_CLOSED', userId);
+    const { updated, swept, sweepReason } = await this.prisma.$transaction(
+      async (tx) => {
+        // Openings and reopening are checked first, under the post lock; this may close a full post.
+        const fill = await this.checkOpenings(tx, id, dto, userId);
+        let swept = fill.swept;
+        const sweepReason: SweepReason = fill.filled
+          ? 'POSITION_FILLED'
+          : 'POST_CLOSED';
+        if (closing) {
+          // Claim the close only while the post is still OPEN. The update takes a row lock (the database
+          // keeps this post row for this transaction until it ends), so a second close, or a candidate
+          // accepting an offer (which locks the post row first), waits; the sweep runs once.
+          const claimed = await tx.hiringPost.updateMany({
+            where: { id, status: HiringPostStatus.OPEN },
+            data: { status: HiringPostStatus.CLOSED },
+          });
+          if (claimed.count === 1) {
+            swept = await this.sweeper.sweep(tx, id, 'POST_CLOSED', userId);
+          }
         }
-      }
-      const updated = await tx.hiringPost.update({
-        where: { id },
-        data: {
-          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-          ...(dto.description !== undefined
-            ? { description: dto.description.trim() }
-            : {}),
-          ...(dto.requirements !== undefined
-            ? { requirements: this.optionalTrim(dto.requirements) }
-            : {}),
-          ...(dto.location !== undefined
-            ? { location: this.optionalTrim(dto.location) }
-            : {}),
-          ...(dto.employmentType !== undefined
-            ? { employmentType: this.optionalTrim(dto.employmentType) }
-            : {}),
-          ...(dto.salaryMin !== undefined ? { salaryMin: dto.salaryMin } : {}),
-          ...(dto.salaryMax !== undefined ? { salaryMax: dto.salaryMax } : {}),
-          ...(dto.salaryCurrency !== undefined
-            ? { salaryCurrency: dto.salaryCurrency }
-            : {}),
-          ...(dto.salaryPeriod !== undefined
-            ? { salaryPeriod: dto.salaryPeriod }
-            : {}),
-          ...(dto.status !== undefined ? { status: dto.status } : {}),
-          ...(dto.companyName !== undefined
-            ? { companyName: this.optionalTrim(dto.companyName) }
-            : {}),
-          ...(occupation !== null
-            ? {
-                occupationCode: occupation.code,
-                specialty: occupation.specialty,
-              }
-            : {}),
-          ...(dto.yearsRequired !== undefined
-            ? { yearsRequired: dto.yearsRequired }
-            : {}),
-          ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
-          ...(dto.openings !== undefined ? { openings: dto.openings } : {}),
-          ...(dto.closesAt !== undefined
-            ? { closesAt: new Date(dto.closesAt) }
-            : {}),
-          ...(levelInputsChanged
-            ? {
-                predictedSeniority: null,
-                predictedSeniorityConfidence: null,
-                predictedSeniorityModel: null,
-                predictedSeniorityMetadata: Prisma.DbNull,
-                predictedSeniorityAt: null,
-              }
-            : {}),
-          ...(requeue ? queuedHiringPostFields() : {}),
-        },
-        include: hiringPostInclude,
-      });
-      return { updated, swept };
-    });
+        const updated = await tx.hiringPost.update({
+          where: { id },
+          data: {
+            ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+            ...(dto.description !== undefined
+              ? { description: dto.description.trim() }
+              : {}),
+            ...(dto.requirements !== undefined
+              ? { requirements: this.optionalTrim(dto.requirements) }
+              : {}),
+            ...(dto.location !== undefined
+              ? { location: this.optionalTrim(dto.location) }
+              : {}),
+            ...(dto.employmentType !== undefined
+              ? { employmentType: this.optionalTrim(dto.employmentType) }
+              : {}),
+            ...(dto.salaryMin !== undefined
+              ? { salaryMin: dto.salaryMin }
+              : {}),
+            ...(dto.salaryMax !== undefined
+              ? { salaryMax: dto.salaryMax }
+              : {}),
+            ...(dto.salaryCurrency !== undefined
+              ? { salaryCurrency: dto.salaryCurrency }
+              : {}),
+            ...(dto.salaryPeriod !== undefined
+              ? { salaryPeriod: dto.salaryPeriod }
+              : {}),
+            ...(fill.filled
+              ? { status: HiringPostStatus.CLOSED }
+              : dto.status !== undefined
+                ? { status: dto.status }
+                : {}),
+            ...(dto.companyName !== undefined
+              ? { companyName: this.optionalTrim(dto.companyName) }
+              : {}),
+            ...(occupation !== null
+              ? {
+                  occupationCode: occupation.code,
+                  specialty: occupation.specialty,
+                }
+              : {}),
+            ...(dto.yearsRequired !== undefined
+              ? { yearsRequired: dto.yearsRequired }
+              : {}),
+            ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
+            ...(dto.openings !== undefined ? { openings: dto.openings } : {}),
+            ...(dto.closesAt !== undefined
+              ? { closesAt: new Date(dto.closesAt) }
+              : {}),
+            ...(levelInputsChanged
+              ? {
+                  predictedSeniority: null,
+                  predictedSeniorityConfidence: null,
+                  predictedSeniorityModel: null,
+                  predictedSeniorityMetadata: Prisma.DbNull,
+                  predictedSeniorityAt: null,
+                }
+              : {}),
+            ...(requeue ? queuedHiringPostFields() : {}),
+          },
+          include: hiringPostInclude,
+        });
+        return { updated, swept, sweepReason };
+      },
+    );
     if (requeue) this.aiQueue.kick();
     if (swept.length) {
       await this.sweeper.announceSwept(this.prisma, {
         postId: id,
         postTitle: updated.title,
-        reason: 'POST_CLOSED',
+        reason: sweepReason,
         actorId: userId,
         candidateIds: swept,
       });
@@ -385,6 +403,84 @@ export class HiringPostsService {
         await this.pipelineCounts([id]),
       ),
     };
+  }
+
+  /**
+   * The openings rules of an edit, run inside the edit's transaction. Only when the edit sends a number of
+   * openings, or asks to (re)open the post:
+   *  1. Lock the post row first (SELECT ... FOR UPDATE = "this row is mine until the transaction ends").
+   *     Accepting an offer and closing the post also take the post row first, so the counts below cannot
+   *     change while we decide, and everyone takes the locks in the same order (no "deadlock", where two
+   *     requests wait for each other forever).
+   *  2. Openings may not go below the people already HIRED plus those with an offer waiting (OFFERED): 409.
+   *  3. A CLOSED post that is already full (hired >= openings) cannot be reopened: 409.
+   *  4. If the new openings equal the hires exactly (no offer waiting) on an OPEN post, the post is full:
+   *     it closes now and is swept with POSITION_FILLED, the same as when the last offer is accepted.
+   * Returns whether the post was filled and the candidates swept (to tell after commit).
+   */
+  private async checkOpenings(
+    tx: Prisma.TransactionClient,
+    id: number,
+    dto: UpdateHiringPostDto,
+    userId: number,
+  ): Promise<{ filled: boolean; swept: number[] }> {
+    const newOpenings = typeof dto.openings === 'number' ? dto.openings : null;
+    const reopening = dto.status === HiringPostStatus.OPEN;
+    if (newOpenings === null && !reopening) return { filled: false, swept: [] };
+
+    await tx.$queryRaw`SELECT id FROM "hiring_posts" WHERE id = ${id} FOR UPDATE`;
+    // Read the post again after the lock: this is the latest status and openings.
+    const locked = await tx.hiringPost.findUnique({
+      where: { id },
+      select: { status: true, openings: true },
+    });
+    if (!locked) {
+      throw new NotFoundException(`Hiring post with ID ${id} not found`);
+    }
+    const [hired, offered] = await Promise.all([
+      tx.hiringApplication.count({
+        where: { hiringPostId: id, status: HiringApplicationStatus.HIRED },
+      }),
+      tx.hiringApplication.count({
+        where: { hiringPostId: id, status: HiringApplicationStatus.OFFERED },
+      }),
+    ]);
+
+    const taken = hired + offered;
+    if (newOpenings !== null && newOpenings < taken) {
+      const who =
+        taken === 1
+          ? '1 person is hired or has an offer waiting'
+          : `${taken} people are hired or have an offer waiting`;
+      throw new ConflictException(
+        `${who}, so openings cannot be fewer than ${taken}.`,
+      );
+    }
+
+    const openings =
+      dto.openings !== undefined ? dto.openings : locked.openings;
+    if (
+      reopening &&
+      locked.status === HiringPostStatus.CLOSED &&
+      openings !== null &&
+      hired >= openings
+    ) {
+      throw new ConflictException(
+        'This post is already filled. Raise the openings to reopen it.',
+      );
+    }
+
+    const filled =
+      newOpenings !== null &&
+      newOpenings === hired &&
+      locked.status === HiringPostStatus.OPEN;
+    if (!filled) return { filled: false, swept: [] };
+    await tx.hiringPost.update({
+      where: { id },
+      data: { status: HiringPostStatus.CLOSED },
+    });
+    const swept = await this.sweeper.sweep(tx, id, 'POSITION_FILLED', userId);
+    return { filled: true, swept };
   }
 
   async remove(id: number, userId: number, userRole: Role) {
@@ -419,9 +515,7 @@ export class HiringPostsService {
   async apply(id: number, applicantId: number, dto: ApplyHiringPostDto) {
     const post = await this.findPostOrThrow(id);
 
-    if (post.status !== HiringPostStatus.OPEN) {
-      throw new BadRequestException('This hiring post is closed');
-    }
+    this.assertTakesApplications(post);
 
     if (post.recruiterId === applicantId) {
       throw new BadRequestException('You cannot apply to your own hiring post');
@@ -441,6 +535,18 @@ export class HiringPostsService {
     try {
       // The application and its history row are saved together (one transaction).
       application = await this.prisma.$transaction(async (tx) => {
+        // Join the post lock first. FOR SHARE (a "read lock") lets many candidates apply at the same time,
+        // but waits while a recruiter closes the post or fills it (they hold FOR UPDATE, a "write lock").
+        // So an application can never slip in after a close has swept the post.
+        await tx.$queryRaw`SELECT id, status FROM "hiring_posts" WHERE id = ${id} FOR SHARE`;
+        const current = await tx.hiringPost.findUnique({
+          where: { id },
+          select: { status: true, closesAt: true },
+        });
+        if (!current) {
+          throw new NotFoundException(`Hiring post with ID ${id} not found`);
+        }
+        this.assertTakesApplications(current);
         const saved = existing
           ? await tx.hiringApplication.update({
               where: { id: existing.id },
@@ -495,8 +601,22 @@ export class HiringPostsService {
       content: this.toApplicationCard(
         application,
         await this.pipelineCounts([id]),
+        new Set([id]),
       ),
     };
+  }
+
+  /** A post takes applications only while it is OPEN and its closing date has not passed: else 409. */
+  private assertTakesApplications(post: {
+    status: HiringPostStatus;
+    closesAt: Date | null;
+  }) {
+    if (
+      post.status !== HiringPostStatus.OPEN ||
+      (post.closesAt !== null && post.closesAt.getTime() <= Date.now())
+    ) {
+      throw new ConflictException('This hiring post is closed.');
+    }
   }
 
   /**
@@ -586,12 +706,22 @@ export class HiringPostsService {
     const counts = await this.pipelineCounts([
       ...new Set(applications.map((application) => application.hiringPostId)),
     ]);
+    // These are the user's own applications; a withdrawn one can be sent again, so it does not count
+    // as "applied" (the same rule as the post list).
+    const appliedPostIds = new Set(
+      applications
+        .filter(
+          (application) =>
+            application.status !== HiringApplicationStatus.WITHDRAWN,
+        )
+        .map((application) => application.hiringPostId),
+    );
 
     return {
       message: 'Get your hiring applications successfully',
       content: this.toPaginatedContent(
         applications.map((application) =>
-          this.toApplicationCard(application, counts),
+          this.toApplicationCard(application, counts, appliedPostIds),
         ),
         total,
         page,
@@ -907,12 +1037,14 @@ export class HiringPostsService {
       include: ReturnType<HiringPostsService['applicationInclude']>;
     }>,
     counts?: Map<number, PipelineCounts>,
+    /** Posts the viewer has applied to (only for the applicant's own cards; recruiters pass none). */
+    appliedPostIds?: Set<number>,
   ) {
     return {
       ...application,
       hiringPost: this.toHiringPostCard(
         application.hiringPost,
-        undefined,
+        appliedPostIds,
         counts,
       ),
     };

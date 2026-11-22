@@ -695,6 +695,18 @@ describe('ApplicationsQueryService.detail', () => {
 
     expect(detail.viewerRole).toBe('candidate');
     expect(detail.resume).not.toBeNull();
+    expect(detail.hiringPost.viewerHasApplied).toBe(true);
+  });
+
+  it('viewerHasApplied is false for the recruiter and for a withdrawn applicant', async () => {
+    const { prisma, query } = createQuery();
+
+    expect((await query.detail(99, recruiter)).hiringPost.viewerHasApplied).toBe(false);
+    prisma.hiringApplication.findUnique.mockResolvedValue({
+      ...storedApplication(),
+      status: S.WITHDRAWN,
+    });
+    expect((await query.detail(99, candidate)).hiringPost.viewerHasApplied).toBe(false);
   });
 
   it('an admin gets it as the recruiter', async () => {

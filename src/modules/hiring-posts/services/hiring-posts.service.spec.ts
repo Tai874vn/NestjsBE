@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { HiringApplicationStatus, HiringPostStatus } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { HiringPostsService } from './hiring-posts.service';
@@ -505,10 +509,66 @@ describe('HiringPostsService', () => {
       status: HiringPostStatus.CLOSED,
     });
 
-    await expect(service.apply(openPost.id, 7, {})).rejects.toBeInstanceOf(
-      BadRequestException,
+    await expect(service.apply(openPost.id, 7, {})).rejects.toThrow(
+      new ConflictException('This hiring post is closed.'),
     );
     expect(prisma.hiringApplication.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('apply waits for the post lock (FOR SHARE) and refuses when the post closed meanwhile', async () => {
+    const { prisma, service } = createService();
+    // First read (before the transaction): OPEN. Read again after the lock: CLOSED.
+    prisma.hiringPost.findUnique
+      .mockResolvedValueOnce(openPost)
+      .mockResolvedValueOnce({ status: HiringPostStatus.CLOSED, closesAt: null });
+    prisma.hiringApplication.findUnique.mockResolvedValue(null);
+
+    await expect(service.apply(openPost.id, 7, {})).rejects.toThrow(
+      new ConflictException('This hiring post is closed.'),
+    );
+    const sql = prisma.$queryRaw.mock.calls[0][0].join('?');
+    expect(sql).toContain('FROM "hiring_posts"');
+    expect(sql).toContain('FOR SHARE');
+    expect(prisma.hiringApplication.create).not.toHaveBeenCalled();
+  });
+
+  it('apply refuses a post past its closing date with 409', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue({
+      ...openPost,
+      closesAt: new Date(Date.now() - 1000),
+    });
+    prisma.hiringApplication.findUnique.mockResolvedValue(null);
+
+    await expect(service.apply(openPost.id, 7, {})).rejects.toThrow(
+      new ConflictException('This hiring post is closed.'),
+    );
+    expect(prisma.hiringApplication.create).not.toHaveBeenCalled();
+  });
+
+  it('the applicant sees viewerHasApplied: true on the card apply returns and on applications/me', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+    prisma.hiringApplication.findUnique.mockResolvedValue(null);
+    prisma.hiringApplication.create.mockResolvedValue(applicationCard());
+
+    const applied = await service.apply(openPost.id, 7, {});
+    expect(applied.content.hiringPost.viewerHasApplied).toBe(true);
+
+    prisma.hiringApplication.findMany.mockResolvedValue([
+      applicationCard(),
+      applicationCard({
+        id: 100,
+        hiringPostId: 11,
+        hiringPost: { ...openPost, id: 11 },
+        status: HiringApplicationStatus.WITHDRAWN,
+      }),
+    ]);
+    prisma.hiringApplication.count.mockResolvedValue(2);
+    const mine = await service.findMyApplications(7, {});
+    expect(mine.content.data[0].hiringPost.viewerHasApplied).toBe(true);
+    // A withdrawn application can be sent again, so the post does not count as applied.
+    expect(mine.content.data[1].hiringPost.viewerHasApplied).toBe(false);
   });
 
   it('rejects applications to a user own hiring post', async () => {
@@ -728,6 +788,174 @@ describe('HiringPostsService', () => {
       expect(sweeper.sweep).not.toHaveBeenCalled();
       expect(sweeper.announceSwept).not.toHaveBeenCalled();
       expect(prisma.hiringApplication.update).not.toHaveBeenCalled();
+    });
+
+    describe('editing openings', () => {
+      /** The post the update reads after the lock, and how many people are HIRED / OFFERED. */
+      function setup(
+        locked: { status: HiringPostStatus; openings: number | null },
+        hired: number,
+        offered: number,
+      ) {
+        const created = createService();
+        const { prisma } = created;
+        prisma.hiringPost.findUnique
+          .mockResolvedValueOnce({ ...openPost, ...locked })
+          .mockResolvedValue(locked);
+        prisma.hiringApplication.count.mockImplementation(
+          ({ where }: { where: { status: HiringApplicationStatus } }) =>
+            Promise.resolve(
+              where.status === HiringApplicationStatus.HIRED ? hired : offered,
+            ),
+        );
+        prisma.hiringPost.update.mockResolvedValue({ ...openPost, ...locked });
+        return created;
+      }
+
+      it('locks the post row first (FOR UPDATE) before counting', async () => {
+        const { prisma, service } = setup(
+          { status: HiringPostStatus.OPEN, openings: 2 },
+          0,
+          0,
+        );
+
+        await service.update(openPost.id, { openings: 5 }, 2, Role.EMPLOYER);
+
+        const sql = prisma.$queryRaw.mock.calls[0][0].join('?');
+        expect(sql).toContain('FROM "hiring_posts"');
+        expect(sql).toContain('FOR UPDATE');
+        expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+          prisma.hiringApplication.count.mock.invocationCallOrder[0],
+        );
+        expect(prisma.hiringPost.update.mock.calls[0][0].data.openings).toBe(5);
+      });
+
+      it('refuses fewer openings than people hired or with an offer waiting (409)', async () => {
+        const { prisma, service, sweeper } = setup(
+          { status: HiringPostStatus.OPEN, openings: 5 },
+          2,
+          1,
+        );
+
+        await expect(
+          service.update(openPost.id, { openings: 2 }, 2, Role.EMPLOYER),
+        ).rejects.toThrow(
+          new ConflictException(
+            '3 people are hired or have an offer waiting, so openings cannot be fewer than 3.',
+          ),
+        );
+        expect(prisma.hiringPost.update).not.toHaveBeenCalled();
+        expect(sweeper.sweep).not.toHaveBeenCalled();
+      });
+
+      it('says "1 person is" when one person is taken', async () => {
+        const { service } = setup(
+          { status: HiringPostStatus.OPEN, openings: 2 },
+          0,
+          1,
+        );
+
+        // 0 cannot pass the DTO (at least 1), but the service check still has to hold.
+        await expect(
+          service.update(openPost.id, { openings: 0 }, 2, Role.EMPLOYER),
+        ).rejects.toThrow(
+          new ConflictException(
+            '1 person is hired or has an offer waiting, so openings cannot be fewer than 1.',
+          ),
+        );
+      });
+
+      it('openings: null (no limit) is always allowed and never closes the post', async () => {
+        const { prisma, service, sweeper } = setup(
+          { status: HiringPostStatus.OPEN, openings: 2 },
+          2,
+          0,
+        );
+
+        await service.update(openPost.id, { openings: null }, 2, Role.EMPLOYER);
+
+        expect(sweeper.sweep).not.toHaveBeenCalled();
+        expect(prisma.hiringPost.update.mock.calls[0][0].data.openings).toBeNull();
+      });
+
+      it('openings equal to the hires (no offers waiting) closes an open post and sweeps it as filled', async () => {
+        const { prisma, service, sweeper } = setup(
+          { status: HiringPostStatus.OPEN, openings: 5 },
+          2,
+          0,
+        );
+        sweeper.sweep.mockResolvedValue([7]);
+
+        await service.update(openPost.id, { openings: 2 }, 2, Role.EMPLOYER);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(sweeper.sweep).toHaveBeenCalledWith(
+          prisma,
+          openPost.id,
+          'POSITION_FILLED',
+          2,
+        );
+        expect(prisma.hiringPost.update.mock.calls.at(-1)[0].data).toMatchObject({
+          openings: 2,
+          status: HiringPostStatus.CLOSED,
+        });
+        expect(sweeper.announceSwept).toHaveBeenCalledWith(prisma, {
+          postId: openPost.id,
+          postTitle: openPost.title,
+          reason: 'POSITION_FILLED',
+          actorId: 2,
+          candidateIds: [7],
+        });
+      });
+
+      it('raising openings above the hires does not close or sweep', async () => {
+        const { prisma, service, sweeper } = setup(
+          { status: HiringPostStatus.OPEN, openings: 2 },
+          2,
+          0,
+        );
+
+        await service.update(openPost.id, { openings: 3 }, 2, Role.EMPLOYER);
+
+        expect(sweeper.sweep).not.toHaveBeenCalled();
+        expect(prisma.hiringPost.update.mock.calls[0][0].data).not.toHaveProperty(
+          'status',
+        );
+      });
+
+      it('refuses to reopen a filled post (409) unless the openings are raised', async () => {
+        const { prisma, service } = setup(
+          { status: HiringPostStatus.CLOSED, openings: 2 },
+          2,
+          0,
+        );
+
+        await expect(
+          service.update(
+            openPost.id,
+            { status: HiringPostStatus.OPEN },
+            2,
+            Role.EMPLOYER,
+          ),
+        ).rejects.toThrow(
+          new ConflictException(
+            'This post is already filled. Raise the openings to reopen it.',
+          ),
+        );
+        expect(prisma.hiringPost.update).not.toHaveBeenCalled();
+
+        const raised = setup({ status: HiringPostStatus.CLOSED, openings: 2 }, 2, 0);
+        await raised.service.update(
+          openPost.id,
+          { status: HiringPostStatus.OPEN, openings: 3 },
+          2,
+          Role.EMPLOYER,
+        );
+        expect(raised.prisma.hiringPost.update.mock.calls[0][0].data).toMatchObject({
+          status: HiringPostStatus.OPEN,
+          openings: 3,
+        });
+      });
     });
 
     it('apply records an applied event and tells the recruiter', async () => {
