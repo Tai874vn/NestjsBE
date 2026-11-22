@@ -59,6 +59,11 @@ export class PostSweepService {
     reason: SweepReason,
     actorId: number,
   ): Promise<number[]> {
+    // Lock the post's active applications first (SELECT ... FOR UPDATE = "these rows are mine until the
+    // transaction ends"). A candidate who withdraws at the same moment then waits for the sweep, or the
+    // sweep waits for the withdraw; the read below always sees the latest status.
+    // ("status"::text turns the database enum into plain text so it can be compared with the list.)
+    await tx.$queryRaw`SELECT id FROM "hiring_applications" WHERE "hiringPostId" = ${postId} AND "status"::text IN (${Prisma.join(ACTIVE_STATUSES)}) ORDER BY id FOR UPDATE`;
     const applications = await tx.hiringApplication.findMany({
       where: { hiringPostId: postId, status: { in: ACTIVE_STATUSES } },
       select: { id: true, applicantId: true },
@@ -86,7 +91,11 @@ export class PostSweepService {
     });
     if (interviews.length) {
       await tx.interview.updateMany({
-        where: { id: { in: interviews.map((interview) => interview.id) } },
+        // The status filter again, so an interview finished since the read above is not touched.
+        where: {
+          id: { in: interviews.map((interview) => interview.id) },
+          status: { in: ACTIVE_INTERVIEW_STATUSES },
+        },
         data: { status: InterviewStatus.CANCELLED, cancelledAt: new Date() },
       });
     }

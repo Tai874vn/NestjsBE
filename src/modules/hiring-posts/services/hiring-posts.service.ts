@@ -166,7 +166,8 @@ export class HiringPostsService {
       this.prisma.hiringPost.count({ where }),
     ]);
 
-    // One groupBy for the whole page, so the owner sees how many people are at each step.
+    // One groupBy (a single query that counts rows per post and status) for the whole page, so the owner
+    // sees how many people are at each step.
     const counts = await this.pipelineCounts(posts.map((post) => post.id));
 
     return {
@@ -319,8 +320,9 @@ export class HiringPostsService {
     const { updated, swept } = await this.prisma.$transaction(async (tx) => {
       let swept: number[] = [];
       if (closing) {
-        // Claim the close only while the post is still OPEN; the row lock this takes makes a second
-        // close (or an offer being accepted) wait, so the sweep runs once.
+        // Claim the close only while the post is still OPEN. The update takes a row lock (the database
+        // keeps this post row for this transaction until it ends), so a second close, or a candidate
+        // accepting an offer (which locks the post row first), waits; the sweep runs once.
         const claimed = await tx.hiringPost.updateMany({
           where: { id, status: HiringPostStatus.OPEN },
           data: { status: HiringPostStatus.CLOSED },
@@ -858,7 +860,8 @@ export class HiringPostsService {
   }
 
   /**
-   * How many applications of each post are at each pipeline step, from ONE groupBy (no query per post).
+   * How many applications of each post are at each pipeline step, from ONE groupBy (a single query that
+   * counts rows per post and status; no query per post).
    * Every post gets all five keys; a missing one is 0.
    */
   private async pipelineCounts(

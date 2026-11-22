@@ -18,6 +18,8 @@ describe('PostSweepService', () => {
     const inList = (status: string, where: { status?: { in: string[] } }) =>
       !where.status || where.status.in.includes(status);
     return {
+      // The row lock (SELECT ... FOR UPDATE) of the active applications.
+      $queryRaw: jest.fn().mockResolvedValue([]),
       hiringApplication: {
         findMany: jest.fn(
           ({ where }: { where: { status?: { in: string[] } } }) =>
@@ -100,6 +102,29 @@ describe('PostSweepService', () => {
     ).toBe(false);
   });
 
+  it('locks the active applications before reading them, so a withdraw at the same time waits', async () => {
+    const { service } = createService();
+    const tx = fakeTx();
+    const order: string[] = [];
+    tx.$queryRaw.mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve([]);
+    });
+    const read = tx.hiringApplication.findMany.getMockImplementation()!;
+    tx.hiringApplication.findMany.mockImplementation((args) => {
+      order.push('read');
+      return read(args);
+    });
+
+    await service.sweep(tx as never, 8, 'POST_CLOSED', 2);
+
+    expect(order).toEqual(['lock', 'read']);
+    const sql = (tx.$queryRaw.mock.calls[0][0] as string[]).join('?');
+    expect(sql).toContain('"hiring_applications"');
+    expect(sql).toContain('FOR UPDATE');
+    expect(tx.$queryRaw.mock.calls[0]).toContain(8);
+  });
+
   it('cancels only the active interviews of the swept applications', async () => {
     const { service, events } = createService();
     const tx = fakeTx();
@@ -107,7 +132,16 @@ describe('PostSweepService', () => {
     await service.sweep(tx as never, 8, 'POSITION_FILLED', 2);
 
     expect(tx.interview.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: [50] } },
+      where: {
+        id: { in: [50] },
+        status: {
+          in: [
+            InterviewStatus.PROPOSED,
+            InterviewStatus.RESCHEDULE_REQUESTED,
+            InterviewStatus.SCHEDULED,
+          ],
+        },
+      },
       data: { status: InterviewStatus.CANCELLED, cancelledAt: expect.any(Date) },
     });
     expect(events.record).toHaveBeenCalledWith(tx, {
