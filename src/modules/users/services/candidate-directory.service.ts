@@ -104,6 +104,16 @@ export class CandidateDirectoryService {
     private readonly profileNormalizer: UserProfileNormalizerService,
   ) {}
 
+  /**
+   * THE CANDIDATE SEARCH PAGE for recruiters (filters, no AI call here).
+   *  1. buildCandidateDirectoryWhere turns the filters (keyword, skill, location, occupation, level, min years…)
+   *     into a Prisma `where` (the conditions of an SQL WHERE), so the database only returns matching users.
+   *  2. Read one page of them (skip/take = pagination: page 2 with 10 per page skips the first 10), newest
+   *     first, and count all matches at the same time (Promise.all runs both queries together).
+   *  3. toCandidateDirectoryCard builds each card: occupation, the AI level and years saved by the resume AI
+   *     queue, and a simple match score (scoreCandidateDirectoryCard).
+   *  4. The cards of THIS page are sorted by that score, best first.
+   */
   async findCandidates(query: CandidateDirectoryQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -332,6 +342,12 @@ export class CandidateDirectoryService {
     };
   }
 
+  /**
+   * A simple, explainable score from 0 to 1 (a weighted sum, not a trained model):
+   *   keyword found 25% + skill found 35% + location found 15% + profile strength 25%.
+   * With no filters the score is just the profile strength (how complete the profile is).
+   * Labels: 0.75 or more = high match, 0.55 or more = medium match, else low match.
+   */
   private scoreCandidateDirectoryCard(
     candidate: {
       name: string;

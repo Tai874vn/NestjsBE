@@ -25,16 +25,42 @@ type SessionWithUser = AuthSession & { user: SessionUser };
 export type SessionMetadata = { userAgent?: string; ip?: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * We never store a refresh token itself, only its SHA-256 hash (a fixed-length
+ * fingerprint of the text). If the database leaks, the stolen hashes cannot be
+ * used as tokens.
+ */
 export function refreshDigest(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/**
+ * Compare a token with a saved hash. timingSafeEqual takes the same time
+ * whether the first or the last character differs, so an attacker cannot
+ * guess the hash by measuring how fast we answer.
+ */
 function matchesDigest(token: string, hash: string): boolean {
   const digest = Buffer.from(refreshDigest(token), 'hex');
   const expected = Buffer.from(hash, 'hex');
   return expected.length === digest.length && timingSafeEqual(digest, expected);
 }
 
+/**
+ * LOGIN SESSIONS — one session = one logged-in browser.
+ *
+ * Where the data lives:
+ *  - PostgreSQL (the main database) is the source of truth: tables
+ *    auth_sessions and auth_refresh_tokens.
+ *  - Redis (a very fast in-memory key-value store) keeps a copy, so checking
+ *    "is this session still valid?" on every request does not hit the database.
+ *
+ * Main ideas:
+ *  - Refresh token rotation: every refresh gives a NEW refresh token and marks
+ *    the old one as used. If a used one is ever sent again, someone copied it,
+ *    so we cancel the whole session (reuse detection).
+ *  - tokenVersion: a number on the user. Changing the password or banning the
+ *    user increases it, and every session with the old number stops working.
+ */
 @Injectable()
 export class AuthSessionService {
   constructor(
@@ -48,6 +74,15 @@ export class AuthSessionService {
     return this.redis.onRevocation(listener);
   }
 
+  /**
+   * Called on every logged-in request (from JwtStrategy): is this session still alive?
+   *  1. Was this exact access token cancelled? (jti = the token's unique id)
+   *  2. Ask Redis first (fast). If Redis is down, we let the request through —
+   *     the access token is short-lived (10 minutes), so the risk is small.
+   *  3. If Redis does not know the session, read it from the database, check it
+   *     (not revoked, not expired, user not banned, same tokenVersion), and
+   *     save it to Redis for next time.
+   */
   async assertAccessSession(
     sid: string,
     userId: number,
@@ -81,6 +116,15 @@ export class AuthSessionService {
     await this.redis.writeSession(sid, userId, session.expiresAt);
   }
 
+  /**
+   * Start a new session after a successful login.
+   *  1. Pick random ids: sid (session id) and the first refresh token.
+   *  2. In one database transaction (several writes that succeed or fail
+   *     together): lock the user row, check the user may log in, then save the
+   *     session and the hash of its refresh token.
+   *  3. Copy the session to Redis.
+   *  4. Return the signed access token (JWT) and the refresh token.
+   */
   async create(
     userId: number,
     metadata: SessionMetadata = {},
@@ -143,6 +187,18 @@ export class AuthSessionService {
     };
   }
 
+  /**
+   * Swap a refresh token for a new access token + a new refresh token.
+   *  1. Find the token (Redis first, else the database) and check its hash.
+   *  2. Inside a transaction, lock the user and the session rows
+   *     (SELECT ... FOR UPDATE = "nobody else may change these rows until I
+   *     finish"), so two refreshes at the same moment cannot both succeed.
+   *  3. Refuse if the session is revoked/expired or the user is banned.
+   *  4. Token already used before? → it was stolen or copied: cancel the
+   *     whole session (REFRESH_REUSED).
+   *  5. Otherwise save a new refresh token and mark the old one "used".
+   *  6. Update Redis and return the new tokens.
+   */
   async refresh(token: string) {
     const id = this.refreshId(token);
     const cached = await this.redis.readRefresh(id);

@@ -174,6 +174,16 @@ export class NotificationsService {
     };
   }
 
+  /**
+   * Save one notification and push it to the user live.
+   *  - Never notify people about their own action.
+   *  - dedupeKey: for events that can repeat (e.g. the same person likes, unlikes and likes the same post
+   *    again), upsert (update the row if it exists, else insert it) keeps ONE notification and marks it
+   *    unread again, instead of adding a new row each time.
+   *  - Then send it through the WebSocket gateway, with the new unread count.
+   *  A failure is only logged: a missing notification must never make the main action (send a message,
+   *  apply to a job…) fail.
+   */
   async create(input: CreateNotificationInput) {
     if (input.actorId && input.actorId === input.recipientId) return null;
 

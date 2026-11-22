@@ -9,6 +9,15 @@ import { GoogleOAuthRequest } from '../services/google-oauth-state.service';
 
 type UserType = User;
 
+/**
+ * GOOGLE LOGIN using OAuth 2.0 (a standard way to "log in with another
+ * website" without ever seeing the user's Google password).
+ *
+ * Passport is a login library; a "strategy" is one way to log in.
+ * The constructor tells Passport our app's Google id/secret and the address
+ * Google must send the user back to (callbackURL). We only ask Google for the
+ * user's email and basic profile (scope).
+ */
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(
@@ -24,6 +33,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
+  /**
+   * Runs after Google confirmed the user. Turns the Google profile into OUR user:
+   *  1. Already linked to this Google account? → use that user.
+   *  2. Same email already registered with a password? → link Google to it.
+   *  3. Brand new? → create the user with the role they picked on the sign-up
+   *     page (candidate or recruiter). Without a role we refuse.
+   * The returned user becomes req.user in AuthController.googleAuthRedirect.
+   */
   async validate(
     req: GoogleOAuthRequest,
     accessToken: string,

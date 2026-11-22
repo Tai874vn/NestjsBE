@@ -34,7 +34,8 @@ describe('profileStrength', () => {
   });
 
   it('counts years from dated jobs in the occupation, and accepts "Not stated" education', () => {
-    const { YearsExperience: _years, ...withoutYears } = fullResume;
+    const withoutYears: Record<string, unknown> = { ...fullResume };
+    delete withoutYears.YearsExperience;
     expect(profileStrength({ ...fullCandidate, resumeData: { ...withoutYears, Degree: 'Not stated', FieldOfStudy: '' } })).toBe(100);
     expect(profileStrength({ ...fullCandidate, resumeData: { ...fullResume, Occupation: '9999.9' } })).toBe(75);
     // A resume saved before occupations (old 37-field Industry) scores without crashing; it lacks the occupation (25) and education (5).

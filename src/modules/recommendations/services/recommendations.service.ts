@@ -50,6 +50,11 @@ export class RecommendationsService {
     };
   }
 
+  /**
+   * "Jobs for you" for a candidate. Same shape as recommendCandidatesForHiringPost below (cache → saved
+   * snapshot → lock + quota → AI → save), but the AI compares the candidate's CV with open hiring posts using
+   * embeddings (lists of numbers that represent the meaning of a text; similar meaning = close numbers).
+   */
   async recommendJobsForUser(
     userId: number,
     query: RecommendationQueryDto,
@@ -276,6 +281,24 @@ export class RecommendationsService {
     }
   }
 
+  /**
+   * "AI SUGGESTED CANDIDATES" FOR ONE HIRING POST — the matching flow.
+   *
+   *  1. Only the recruiter who owns the post (or an admin) may ask.
+   *  2. Fingerprint = a short code built from the post id and when it was last edited. If the post did not
+   *     change, the old result is still valid.
+   *  3. Look for a saved result: first in Redis (fast cache, kept for a while), then in the database
+   *     (snapshot). If found, return it — no AI call, no quota used.
+   *  4. Otherwise take a run lock (a Redis key that says "this post is being matched right now"), so two
+   *     clicks at once cannot start two AI runs, and reserve one use of the recruiter's daily quota
+   *     (5 AI runs a day; 100 for admins).
+   *  5. Load up to `poolSize` (default 100) candidates, turn the post and every CV into AI payloads, and ask the
+   *     AI service's recruiter model to score them (POST /api/v1/recruiter/match/candidates).
+   *  6. The AI returns the best `topK` (default 10) with a probability (0–1). scoringService marks each one
+   *     "match" or "no_match" by comparing it with the model's threshold (the cut-off value). Save the result
+   *     to the database and Redis, and return it.
+   *  If anything fails, the quota is given back (refund) and the lock is always released (`finally`).
+   */
   async recommendCandidatesForHiringPost(
     hiringPostId: number,
     userId: number,

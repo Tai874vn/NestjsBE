@@ -5,6 +5,21 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { watchRedisErrors } from '../redis/redis-client-errors';
 import { Server, ServerOptions } from 'socket.io';
 
+/**
+ * LETS SEVERAL BACKEND COPIES SHARE ONE REAL-TIME CHAT.
+ *
+ * Socket.IO keeps an open connection (a WebSocket: a two-way line that stays open, so the server can push
+ * a message to the browser at any time, without the browser asking). Each browser is connected to ONE
+ * backend copy. Problem: if user A is on backend 1 and user B is on backend 2, backend 1 cannot reach B.
+ *
+ * Solution: the Redis adapter uses Redis "pub/sub" (publish/subscribe: one side publishes a message on a
+ * channel, everyone subscribed to that channel receives it). When backend 1 sends to a room, the message
+ * also goes through Redis, and backend 2 delivers it to its own connected users in that room.
+ * pubClient sends, subClient listens (Redis needs two separate connections for this).
+ *
+ * If Redis is not reachable, we fall back to the normal in-memory adapter: chat still works, but only
+ * between users on the same backend copy. Set up in main.ts.
+ */
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
   private logger = new Logger('RedisIoAdapter');

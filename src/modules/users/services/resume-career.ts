@@ -232,6 +232,17 @@ const halfYears = (months: number) => roundHalfEven(months / 6) / 2;
  * (round(months / 6) / 2, the count the owner's thresholds were set on). Each other occupation gives
  * relatedness x RELATED_CREDIT x its years; the total is rounded to 0.1 and is at most the main years. Jobs without
  * a known occupation or valid dates give nothing. An empty end means the job is current and runs to `today`.
+ *
+ * Example in simple words. Main occupation = software developer.
+ *   (A job's months = end month − start month, so 2021-01 → 2023-01 is 24 months.)
+ *   Job A: developer 2021-01 → 2023-01   (24 months)
+ *   Job B: developer 2022-07 → 2025-01   (30 months; 6 of them overlap job A)
+ *   Job C: ICT business analyst 2019-01 → 2021-01 (24 months = 2 years)
+ *   Main years   = months covered by A or B, overlap counted once = 48 months = 4 years.
+ *   Related years = relatedness(ICT business analyst, software developer) 0.34 × RELATED_CREDIT 0.3
+ *                   × 2 years ≈ 0.2 years.
+ * "Relatedness" = how many ESCO skill groups the two occupations share (Jaccard:
+ * shared groups ÷ all groups of both), a number from 0 to 1.
  */
 export function occupationYears(
   jobs: ReadonlyArray<{ occupation?: unknown; start?: unknown; end?: unknown }>,

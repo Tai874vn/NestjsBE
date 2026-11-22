@@ -164,7 +164,9 @@ export class UsersController {
   }
 
   @Post('me/resume/seniority')
-  @ApiOperation({ summary: 'Predict and save resume seniority for current user' })
+  @ApiOperation({
+    summary: 'Predict and save resume seniority for current user',
+  })
   predictMyResumeSeniority(@CurrentUser() user: ValidatedUser) {
     return this.userResumeService.predictResumeSeniority(user.id);
   }

@@ -24,6 +24,16 @@ interface IndexedOccupation {
   specialties: string[];
 }
 
+/**
+ * OCCUPATION SEARCH for the "Occupation" box on the CV form, hiring posts and the candidate filter
+ * (GET /api/occupations?q=... and GET /api/occupations/:code).
+ *
+ * The list is the same ESCO catalogue as the AI service (src/common/data/occupations.json, copied from it),
+ * read once into memory when the app starts, so searching needs no database and no AI call.
+ * The constructor builds an index (a ready-to-search copy): every title, other name and specialty in
+ * lower case without spaces or hyphens. Typing "front end" then finds "Front-End Developer", and the
+ * frontend picker shows the occupation it belongs to.
+ */
 @Injectable()
 export class OccupationsService {
   private readonly byCode = occupationCatalogue();

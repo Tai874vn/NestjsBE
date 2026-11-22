@@ -21,14 +21,48 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { AuthRateLimitGuard } from '../session/auth-rate-limit.guard';
 import { clearAuthCookies, setAuthCookies } from '../session/auth-cookies';
 
+/**
+ * LOGIN FLOW — the web addresses under /api/auth.
+ *
+ * A controller (the class that receives web requests and sends answers) only
+ * reads the request and writes cookies. The real work is in AuthService.
+ *
+ * How a user stays logged in:
+ *  1. Sign up / sign in / Google login → the server creates a "session"
+ *     (one row per logged-in browser) and returns three cookies
+ *     (small values the browser stores and sends back automatically):
+ *       - access_token  : a JWT (JSON Web Token, a signed ticket that says
+ *                         "user 5, role USER"). Lives 10 minutes. Sent on
+ *                         every request so the server knows who you are.
+ *       - refresh_token : a long random string. Lives 14 days. Only sent to
+ *                         /auth/refresh, to get a new access_token.
+ *       - logout_session: lets /auth/logout end the session even if the
+ *                         refresh token is gone.
+ *     All three are httpOnly (JavaScript in the page cannot read them), so a
+ *     script injected into the page cannot steal them.
+ *  2. Each request → JwtStrategy checks the access_token (see jwt.strategy.ts).
+ *  3. After 10 minutes the access_token expires → the frontend calls
+ *     /auth/refresh → it gets a new pair of tokens (the old refresh token can
+ *     never be used again; see AuthSessionService.refresh).
+ *  4. Logout → the session is marked revoked (cancelled) and cookies are cleared.
+ */
 @Controller('auth')
 export class AuthController {
+  // Constructor (the function that runs once when the class is created).
+  // NestJS "injects" (passes in automatically) the AuthService for us.
   constructor(private readonly authService: AuthService) {}
 
+  /** Browser name and IP address, saved with the session so a user can see "where am I logged in". */
   private metadata(req?: express.Request) {
     return { userAgent: req?.headers?.['user-agent'], ip: req?.ip };
   }
 
+  // The lines starting with @ are decorators (labels that add behaviour):
+  //  @Public()     → no login needed for this address.
+  //  @Post(...)    → answers HTTP POST /api/auth/signup.
+  //  @UseGuards / @Throttle → rate limit (at most 5 tries per minute), to slow
+  //                  down password guessing.
+  /** Create an account, then log the new user in straight away (sets the cookies). */
   @Public()
   @Post('signup')
   @UseGuards(AuthRateLimitGuard)
@@ -51,6 +85,7 @@ export class AuthController {
     return { message: result.message, content: { user: result.content.user } };
   }
 
+  /** Email + password login. On success the browser receives the login cookies. */
   @Public()
   @Post('signin')
   @UseGuards(AuthRateLimitGuard)
@@ -73,11 +108,21 @@ export class AuthController {
     return { message: result.message, content: { user: result.content.user } };
   }
 
+  /**
+   * Google login, step 1: the guard sends the browser to Google's login page.
+   * The function body is empty on purpose — the guard does all the work.
+   */
   @Public()
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   googleAuth() {}
 
+  /**
+   * Google login, step 2: Google sends the browser back here with a one-time
+   * code. GoogleCallbackGuard swaps that code for the user's Google profile and
+   * finds or creates our user (google.strategy.ts). Then we create a session,
+   * set the cookies and send the browser back to the frontend.
+   */
   @Public()
   @Get('google/callback')
   @UseGuards(GoogleCallbackGuard)
@@ -101,12 +146,19 @@ export class AuthController {
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
   }
 
+  /** Who am I? No @Public(), so the access_token is checked first; req.user is filled by JwtStrategy. */
   @Get('me')
   getCurrentUser(@Req() req: express.Request) {
     if (!req.user) throw new UnauthorizedException('User not authenticated');
     return this.authService.getCurrentUser(req.user.id);
   }
 
+  /**
+   * Swap the refresh_token cookie for a fresh access_token + refresh_token.
+   * The frontend calls this automatically when a request fails with 401
+   * (401 = "not logged in / token expired"). If the refresh token is bad, the
+   * cookies are deleted, so the user is logged out cleanly.
+   */
   @Public()
   @Post('refresh')
   @UseGuards(AuthRateLimitGuard)
@@ -139,6 +191,7 @@ export class AuthController {
     }
   }
 
+  /** End this browser's session on the server, then delete the cookies. */
   @Public()
   @Post(['logout', 'refresh/logout'])
   @UseGuards(AuthRateLimitGuard)

@@ -16,7 +16,6 @@ import {
   asRecord,
   buildResumeSeniorityPayload,
   mergeSkills,
-  stringList,
 } from './resume-ai-payload';
 
 /** Where a resume is in the AI queue. Null in the database means it was never queued. */
@@ -52,10 +51,27 @@ interface ClaimedResume {
 }
 
 /**
- * Resume AI work runs here, never while saving. Saving marks the resume QUEUED; this worker, when the AI
- * service answers its health check, resolves skills to the dictionary, suggests skills found in the CV text,
- * and predicts seniority. Rows are claimed with FOR UPDATE SKIP LOCKED, so several backend instances behind
- * a load balancer never process the same resume twice.
+ * CV → AI FLOW, the "queue" part (a queue = a waiting line of jobs).
+ *
+ * Why a queue? The AI can take seconds, or be switched off. So saving a CV
+ * never waits for the AI: saving only sets aiStatus = QUEUED and answers the
+ * user at once. This worker (a background loop) does the AI work later.
+ *
+ * The life of one CV:
+ *   save CV → QUEUED → (worker picks it) PROCESSING → DONE
+ *                                                    ↘ NEEDS_INPUT  (no occupation chosen yet)
+ *                                                    ↘ AI_UNAVAILABLE (AI service off; user can "Try again")
+ *                                                    ↘ FAILED       (AI refused the data)
+ *
+ * The worker runs every 10 seconds, and also right away when a CV is saved (kick()).
+ * For each CV it asks the AI service (Python, FastAPI) three things:
+ *   1. which of the user's skills are in our skill dictionary,
+ *   2. which skills appear in the CV text (suggestions),
+ *   3. the seniority level (Intern / Junior / Mid / Senior …).
+ * The frontend reads aiStatus and the results and shows them on the CV page.
+ *
+ * Rows are claimed with FOR UPDATE SKIP LOCKED (see claim()), so several backend
+ * instances behind a load balancer never process the same resume twice.
  */
 @Injectable()
 export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
@@ -72,6 +88,9 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
   ) {}
 
+  // onModuleInit / onModuleDestroy are lifecycle hooks (functions NestJS calls
+  // when the app starts and stops). On start we set a timer that checks the
+  // queue every 10 s; on stop we remove it.
   onModuleInit() {
     const intervalMs = Number(
       this.configService.get<string>('RESUME_AI_QUEUE_INTERVAL_MS') ?? 10000,
@@ -128,6 +147,12 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Keep taking up to 5 CVs at a time until none are waiting:
+   *  - nothing waiting → stop;
+   *  - AI service not answering → tell the users (AI_UNAVAILABLE) and stop;
+   *  - otherwise claim 5 CVs and process them one by one.
+   */
   private async processBatches() {
     for (;;) {
       const waiting = await this.prisma.userResume.count({
@@ -165,6 +190,15 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
     return stale > 0;
   }
 
+  /**
+   * Take ("claim") the 5 oldest waiting CVs, in ONE SQL statement:
+   *  - the inner SELECT finds waiting CVs (or CVs stuck in PROCESSING for 5+
+   *    minutes because a worker crashed);
+   *  - FOR UPDATE locks those rows; SKIP LOCKED means "if another backend
+   *    already locked a row, skip it instead of waiting". So two backends
+   *    running at the same time get different CVs — never the same one;
+   *  - the outer UPDATE marks them PROCESSING and RETURNING gives them back.
+   */
   private claim(): Promise<ClaimedResume[]> {
     return this.prisma.$queryRaw<ClaimedResume[]>`
       UPDATE "user_resumes"
@@ -182,6 +216,7 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
       RETURNING "id", "userId", "aiQueuedAt"`;
   }
 
+  /** Load the CV and its owner, run the AI work (evaluate), then save the result. */
   private async processOne(claimed: ClaimedResume) {
     const user = await this.prisma.user.findUnique({
       where: { id: claimed.userId },
@@ -217,6 +252,9 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
             };
     }
     // Only write if the resume wasn't saved again meanwhile; a newer save has its own queue entry.
+    // (aiQueuedAt works like a version number: if the user saved again while the AI
+    // was working, aiQueuedAt changed, so this old result is thrown away.)
+    // Then clear the cached copies in Redis so pages show the new result.
     const written = await this.prisma.userResume.updateMany({
       where: { id: claimed.id, aiQueuedAt: claimed.aiQueuedAt },
       data: { ...update, aiClaimedAt: null },
@@ -272,6 +310,9 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         ...CLEARED_SENIORITY,
       };
     }
+    // Send the CV facts (occupation, years per job, degree, skills…) to the AI
+    // service's POST /predict/resume-seniority and save the level it returns,
+    // how sure it is (confidence 0–1), and the numbers it used (features).
     const prediction = await this.aiClient.predictResumeSeniority({
       resume: buildResumeSeniorityPayload(owner, nextData),
     });

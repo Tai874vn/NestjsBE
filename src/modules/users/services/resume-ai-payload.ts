@@ -70,6 +70,15 @@ export function mergeSkills(...skillGroups: string[][]): string[] {
  * The resume payload the AI service's seniority endpoint reads (`features_from_resume` in AIService
  * app/seniority/predictor.py). Years are counted here, as the AI would count them, and always sent: 0 for someone
  * with no jobs in the occupation.
+ *
+ * In simple words: this builds the "package" of CV facts we send to the AI.
+ *  - occupation: the main ESCO occupation the user chose (e.g. "2512.3" = software developer).
+ *  - jobs: each job with its own occupation and dates.
+ *  - years_in_occupation: years worked in the MAIN occupation (from the job dates).
+ *  - related_years: a small extra credit for jobs in RELATED occupations
+ *    (e.g. ICT business analyst years count a little for a software developer). See resume-career.ts.
+ *  - degree, field_of_study, summary, experience: extra evidence the model reads.
+ * Empty values are removed at the end, so the AI only gets what the user filled in.
  */
 export function buildResumeSeniorityPayload(
   owner: ResumeOwner,

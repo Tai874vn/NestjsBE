@@ -17,6 +17,15 @@ import {
 
 type UserType = User;
 
+/**
+ * The business logic (the actual rules) behind login.
+ * @Injectable() means NestJS can create this class and pass it into others.
+ *
+ * - PrismaService  = Prisma, our ORM (Object-Relational Mapper: a library that
+ *                    lets us read/write database tables with TypeScript code
+ *                    instead of writing SQL by hand).
+ * - AuthSessionService = creates, refreshes and cancels login sessions.
+ */
 @Injectable()
 export class AuthService {
   constructor(
@@ -36,6 +45,7 @@ export class AuthService {
       refreshExpiresAt: Date;
     }>
   > {
+    // 1. One account per email ("A@x.com" and "a@x.com" count as the same).
     const email = this.normalizeEmail(signUpDto.email);
     const existingUser: UserType | null = await this.findUserByEmail(email);
 
@@ -43,8 +53,13 @@ export class AuthService {
       throw new ConflictException('Email already exists');
     }
 
+    // 2. Never store the real password. bcrypt turns it into a hash
+    //    (a scrambled value that cannot be turned back into the password).
+    //    At login we hash what the user typed and compare the two hashes.
+    //    10 = "cost": how slow hashing is, which makes guessing very slow.
     const hashedPassword: string = await bcrypt.hash(signUpDto.password, 10);
 
+    // 3. Save the user. New users can be found by recruiters by default.
     const user: UserType = await this.prisma.user.create({
       data: {
         name: signUpDto.name,
@@ -64,9 +79,11 @@ export class AuthService {
       },
     });
 
+    // 4. Log the new user in: create a session and its tokens.
     const { token, refreshToken, logoutToken, refreshExpiresAt } =
       await this.sessions.create(user.id, metadata);
 
+    // 5. Remove the password hash before sending the user back to the browser.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken: _, ...result } = user;
 
@@ -98,10 +115,13 @@ export class AuthService {
       this.normalizeEmail(signInDto.email),
     );
 
+    // Same message for "no such email", "Google-only account", "banned" and
+    // "wrong password", so an attacker cannot learn which emails exist.
     if (!user || !user.password || user.bannedAt) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Hash what the user typed and compare it with the saved hash.
     const isPasswordValid: boolean = await bcrypt.compare(
       signInDto.password,
       user.password,
@@ -111,6 +131,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Passing the password hash lets the session service refuse the login if
+    // the password was changed in the same moment (a race condition: two
+    // actions happening at the same time and stepping on each other).
     const { token, refreshToken, logoutToken, refreshExpiresAt } =
       await this.sessions.create(user.id, metadata, user.password);
 
@@ -129,6 +152,7 @@ export class AuthService {
     };
   }
 
+  /** Google already proved who the user is (google.strategy.ts), so we only create a session. */
   async googleLogin(
     user: { id: number },
     metadata: SessionMetadata = {},
@@ -149,6 +173,12 @@ export class AuthService {
     };
   }
 
+  /**
+   * The logged-in user's profile for GET /auth/me.
+   * `select` lists exactly which columns to read, so the password hash is never loaded.
+   * Old accounts kept skills/certifications as one text column; withLegacyProfileRows
+   * turns that old text into the same list shape the new tables use.
+   */
   async getCurrentUser(userId: number) {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
@@ -236,6 +266,7 @@ export class AuthService {
     return this.sessions.refresh(refreshToken);
   }
 
+  /** Cancel the session using whichever logout cookie the browser still has. */
   async logout(
     refreshToken?: string,
     logoutCredential?: string,
