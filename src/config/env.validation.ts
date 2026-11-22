@@ -46,6 +46,8 @@ export const envValidationSchema = Joi.object({
 
   // Frontend
   FRONTEND_URL: Joi.string().uri().required(),
+  // Extra trusted frontend origins for local testing, comma-separated; leave unset in production.
+  DEV_FRONTEND_ORIGINS: Joi.string().optional(),
 
   // Server
   PORT: Joi.number().required(),

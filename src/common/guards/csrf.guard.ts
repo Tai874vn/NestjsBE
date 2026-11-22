@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
+import { trustedOrigins } from '../config/trusted-origins';
 
 type CsrfRequest = {
   method?: string;
@@ -20,12 +21,16 @@ const COOKIE_ISSUING_PATHS = ['/auth/signin', '/auth/signup'];
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
-  private readonly frontendOrigin: string;
+  private readonly trustedOrigins: Set<string>;
 
   constructor(configService: ConfigService) {
-    this.frontendOrigin = new URL(
-      configService.getOrThrow<string>('FRONTEND_URL'),
-    ).origin;
+    this.trustedOrigins = new Set(
+      trustedOrigins({
+        FRONTEND_URL: configService.getOrThrow<string>('FRONTEND_URL'),
+        NODE_ENV: configService.get<string>('NODE_ENV'),
+        DEV_FRONTEND_ORIGINS: configService.get<string>('DEV_FRONTEND_ORIGINS'),
+      }),
+    );
   }
 
   canActivate(context: ExecutionContext): boolean {
@@ -65,7 +70,7 @@ export class CsrfGuard implements CanActivate {
   }
 
   private requireTrustedOrigin(origin?: string): void {
-    if (origin !== this.frontendOrigin) {
+    if (!origin || !this.trustedOrigins.has(origin)) {
       throw new ForbiddenException('Untrusted request origin');
     }
   }

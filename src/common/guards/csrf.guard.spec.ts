@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { CsrfGuard } from './csrf.guard';
 
 describe('CsrfGuard', () => {
-  const guard = new CsrfGuard({
-    getOrThrow: () => 'http://localhost:3001',
-  } as unknown as ConfigService);
+  const configFor = (env: Record<string, string | undefined>) =>
+    ({
+      getOrThrow: () => 'http://localhost:3001',
+      get: (key: string) => env[key],
+    }) as unknown as ConfigService;
+  const guard = new CsrfGuard(configFor({ NODE_ENV: 'production' }));
 
   const context = (request: Record<string, unknown>) =>
     ({
@@ -65,5 +68,35 @@ describe('CsrfGuard', () => {
     expect(() => guard.canActivate(context(request))).toThrow(
       ForbiddenException,
     );
+  });
+
+  describe('local frontend', () => {
+    const localRequest = {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000', 'x-csrf-token': 'expected' },
+      cookies: { access_token: 'access', csrf_token: 'expected' },
+      originalUrl: '/api/posts',
+    };
+
+    it('is rejected in production', () => {
+      expect(() => guard.canActivate(context(localRequest))).toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('is trusted when NODE_ENV=development', () => {
+      const devGuard = new CsrfGuard(configFor({ NODE_ENV: 'development' }));
+      expect(devGuard.canActivate(context(localRequest))).toBe(true);
+    });
+
+    it('is trusted when listed in DEV_FRONTEND_ORIGINS', () => {
+      const listedGuard = new CsrfGuard(
+        configFor({
+          NODE_ENV: 'production',
+          DEV_FRONTEND_ORIGINS: ' http://localhost:3000/ , not a url',
+        }),
+      );
+      expect(listedGuard.canActivate(context(localRequest))).toBe(true);
+    });
   });
 });

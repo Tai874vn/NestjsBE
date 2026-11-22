@@ -1,3 +1,4 @@
+import { trustedOrigins } from '../../../common/config/trusted-origins';
 import {
   OnGatewayConnection,
   OnGatewayInit,
@@ -22,9 +23,18 @@ type NotificationPayload = {
   [key: string]: unknown;
 };
 
+/**
+ * REAL-TIME NOTIFICATIONS (the bell icon). Works like the chat gateway, on its own namespace
+ * /notifications (a namespace = a separate channel on the same Socket.IO server).
+ *
+ * On connect, the login token is checked and the socket joins a room just for this user (userRoom),
+ * so "send to user 7" reaches every open tab of user 7 — on any backend copy, thanks to the Redis adapter.
+ * NotificationsService.create saves a notification in the database, then calls emitNotification and
+ * emitUnreadCount here, so the bell updates at once without reloading the page.
+ */
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: trustedOrigins(),
     credentials: true,
   },
   namespace: '/notifications',

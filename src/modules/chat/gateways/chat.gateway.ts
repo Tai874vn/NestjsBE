@@ -1,3 +1,4 @@
+import { trustedOrigins } from '../../../common/config/trusted-origins';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -38,9 +39,30 @@ import {
   MarkAsReadDto,
 } from '../dto/chat.dto';
 
+/**
+ * REAL-TIME CHAT. A gateway is the WebSocket version of a controller: instead of answering web requests,
+ * it reacts to named events the browser sends ("send-message", "typing", …) and can push events back
+ * ("new-message", "user-online", …) at any time.
+ *
+ * The flow:
+ *  1. Connect: the browser opens a Socket.IO connection to /chat. Before it is accepted,
+ *     ChatSocketAuthService checks the login token (same JWT as the website) — see afterInit.
+ *  2. handleConnection: mark the user online (in Redis), join a Socket.IO "room" for each chat they are in
+ *     (a room = a named group of connections; sending to `room:5` reaches everyone in chat 5), and tell
+ *     their contacts "this user is online".
+ *  3. send-message: check the rate limit (at most 20 messages a minute), save the message in the database
+ *     (only if the sender is a member of the chat), create notifications for the others, then push
+ *     "new-message" to everyone in the room.
+ *  4. Logout or ban anywhere → the session is revoked → onRevoked disconnects that session's sockets here.
+ *  5. handleDisconnect: remove the user from the online list and tell the others "offline".
+ *
+ * With two or more backend copies, RedisIoAdapter (common/adapters/redis-io.adapter.ts) makes
+ * `server.to(room).emit(...)` reach users connected to the other copies too.
+ * cors = which website may connect (only our frontend). ValidationPipe checks every event's data shape.
+ */
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: trustedOrigins(),
     credentials: true,
   },
   namespace: '/chat',
@@ -89,7 +111,8 @@ export class ChatGateway
       server.local.in(`auth-session:${sid}`).disconnectSockets(true);
     });
 
-    // Authentication middleware
+    // Authentication middleware (a function that runs before a connection is accepted):
+    // no valid token → the connection is refused.
     server.use((socket: AuthenticatedSocket, next) => {
       void this.socketAuth.authenticateSocket(socket, next);
     });
@@ -103,6 +126,8 @@ export class ChatGateway
     this.presenceRefreshTimers.clear();
   }
 
+  // The many `if (!client.connected) return;` lines: every `await` is a pause, and the user may close the
+  // tab during it. We stop as soon as the connection is gone, so we never mark a closed tab as online.
   async handleConnection(client: AuthenticatedSocket) {
     const user = client.data.user;
     const sessionId = client.data.sessionId;
@@ -323,6 +348,12 @@ export class ChatGateway
     }
   }
 
+  /**
+   * The browser sent "send-message" { roomId, content }.
+   * @SubscribeMessage = "run this function when this event arrives".
+   * Save → notify the other members → push "new-message" to the whole room (the sender too, so all
+   * their open tabs update). The return value is the acknowledgement (the answer to the sender only).
+   */
   @SubscribeMessage('send-message')
   async handleMessage(
     @MessageBody() data: SendMessageDto,
