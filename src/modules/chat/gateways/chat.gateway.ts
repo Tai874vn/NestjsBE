@@ -394,6 +394,15 @@ export class ChatGateway
     }
   }
 
+  /**
+   * Push "new-message" to everyone in the room for a message the server made itself
+   * (for example the hiring pipeline's interview request). It does the same as the last
+   * step of handleMessage, so the open chat windows update at once.
+   */
+  broadcastNewMessage(roomId: number, message: unknown): void {
+    this.server.to(`room:${roomId}`).emit('new-message', message);
+  }
+
   @SubscribeMessage('get-messages')
   async handleGetMessages(
     @MessageBody() data: GetMessagesDto,

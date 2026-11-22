@@ -21,6 +21,6 @@ import { ObservabilityModule } from '../../common/observability/observability.mo
     ChatSocketAuthService,
     ChatSocketRateLimitService,
   ],
-  exports: [ChatService],
+  exports: [ChatService, ChatGateway, ChatMessageFanoutService],
 })
 export class ChatModule {}

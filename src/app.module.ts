@@ -26,6 +26,7 @@ import { SavedItemsModule } from './modules/saved-items/saved-items.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { HiringPipelineModule } from './modules/hiring-pipeline/hiring-pipeline.module';
 import { ObservabilityModule } from './common/observability/observability.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -68,6 +69,7 @@ import { DatabaseModule } from './database/database.module';
     SavedItemsModule,
     ConnectionsModule,
     NotificationsModule,
+    HiringPipelineModule,
     AdminModule,
   ],
   controllers: [AppController],

@@ -88,6 +88,17 @@ describe('ChatGateway socket events', () => {
     };
   };
 
+  it('broadcasts a server-made message as new-message to its room', () => {
+    const { gateway, serverTo } = createGateway();
+    const message = { id: 5, roomId: 12, content: 'Hello' };
+
+    gateway.broadcastNewMessage(12, message);
+
+    expect(serverTo).toHaveBeenCalledWith('room:12');
+    const emit = (serverTo.mock.results[0].value as { emit: jest.Mock }).emit;
+    expect(emit).toHaveBeenCalledWith('new-message', message);
+  });
+
   it('joins room IDs without loading or emitting room responses', async () => {
     const { gateway, chatMocks } = createGateway();
     const join = jest.fn();

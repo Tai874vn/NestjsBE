@@ -2,6 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
 import { CreateNotificationInput } from './notification.types';
 
+/**
+ * Input for the hiring pipeline notifications. `forRecruiter` picks the link: the recruiter
+ * opens the applicants page of the post, the candidate opens My applications.
+ */
+export type HiringPipelineTemplateInput = {
+  recipientId: number;
+  actorId: number;
+  title: string;
+  body: string;
+  applicationId: number;
+  postId: number;
+  forRecruiter: boolean;
+};
+
 @Injectable()
 export class NotificationTemplateService {
   connectionRequest(input: {
@@ -163,6 +177,45 @@ export class NotificationTemplateService {
         unreadCount: input.unreadCount,
       },
       dedupeKey: `chat_message:${input.roomId}:${input.recipientId}`,
+    };
+  }
+
+  /** A candidate applied to the recruiter's hiring post. */
+  applicationReceived(input: HiringPipelineTemplateInput) {
+    return this.hiringPipeline(NotificationType.APPLICATION_RECEIVED, input);
+  }
+
+  /** An application changed (shortlisted, offer sent, offer accepted, withdrawn, ...). */
+  applicationUpdate(input: HiringPipelineTemplateInput) {
+    return this.hiringPipeline(NotificationType.APPLICATION_UPDATE, input);
+  }
+
+  /** An interview changed (requested, time picked, new times, cancelled, ...). */
+  interviewUpdate(input: HiringPipelineTemplateInput) {
+    return this.hiringPipeline(NotificationType.INTERVIEW_UPDATE, input);
+  }
+
+  /**
+   * Shared shape for the three hiring pipeline notifications.
+   * No dedupeKey (a key that merges repeated notifications into one): every step of the
+   * pipeline should show as its own notification in the bell.
+   */
+  private hiringPipeline(
+    type: NotificationType,
+    input: HiringPipelineTemplateInput,
+  ): CreateNotificationInput {
+    return {
+      recipientId: input.recipientId,
+      actorId: input.actorId,
+      type,
+      title: input.title,
+      body: input.body,
+      entityType: 'hiring_application',
+      entityId: input.applicationId,
+      actionUrl: input.forRecruiter
+        ? `/my-hiring-posts/${input.postId}/applicants?application=${input.applicationId}`
+        : `/my-applications?application=${input.applicationId}`,
+      metadata: { applicationId: input.applicationId, postId: input.postId },
     };
   }
 
