@@ -49,7 +49,8 @@ export class PostSweepService {
    * Inside the caller's transaction (tx = a group of database changes saved together or not at all):
    *  1. every active application of the post becomes REJECTED with `statusReason` = reason;
    *  2. their interviews that are not finished become CANCELLED;
-   *  3. one history row per rejected application and per cancelled interview.
+   *  3. one history row per rejected application and per cancelled interview, written with one
+   *     createMany (one database call for many rows) per kind.
    * HIRED, REJECTED, DECLINED and WITHDRAWN applications are left alone.
    * Returns the candidate (applicant) ids to notify after the transaction is saved (committed).
    */
@@ -100,22 +101,25 @@ export class PostSweepService {
       });
     }
 
-    for (const application of applications) {
-      await this.events.record(tx, {
+    // One write per kind (createMany), not one query per row: a big post may sweep many applications.
+    await this.events.recordMany(
+      tx,
+      applications.map((application) => ({
         applicationId: application.id,
         actorId,
-        type: 'rejected',
+        type: 'rejected' as const,
         data: { reason },
-      });
-    }
-    for (const interview of interviews) {
-      await this.events.record(tx, {
+      })),
+    );
+    await this.events.recordMany(
+      tx,
+      interviews.map((interview) => ({
         applicationId: interview.applicationId,
         actorId,
-        type: 'interview_cancelled',
-        data: { interviewId: interview.id, reason },
-      });
-    }
+        type: 'interview_cancelled' as const,
+        data: { interviewId: interview.id, by: 'system' as const, reason },
+      })),
+    );
 
     return applications.map((application) => application.applicantId);
   }

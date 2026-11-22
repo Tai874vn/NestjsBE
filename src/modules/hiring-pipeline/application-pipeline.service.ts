@@ -23,6 +23,7 @@ import { AnnounceInput, HiringEventsService } from './hiring-events.service';
 import {
   ACTIVE_INTERVIEW_STATUSES,
   PostSweepService,
+  SweepReason,
 } from './post-sweep.service';
 
 const S = HiringApplicationStatus;
@@ -59,6 +60,8 @@ export type StepInput = {
 export type Swept = {
   postId: number;
   postTitle: string;
+  /** Why the post was swept; the candidates' notification says it ("Position filled" or "Post closed"). */
+  reason: SweepReason;
   candidateIds: number[];
 };
 
@@ -136,7 +139,6 @@ export class ApplicationPipelineService {
     if (swept && swept.candidateIds.length) {
       await this.sweeper.announceSwept(this.prisma, {
         ...swept,
-        reason: 'POSITION_FILLED',
         actorId: viewer.id,
       });
     }

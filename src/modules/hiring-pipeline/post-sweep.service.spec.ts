@@ -53,7 +53,10 @@ describe('PostSweepService', () => {
   }
 
   function createService() {
-    const events = { record: jest.fn().mockResolvedValue(undefined) };
+    const events = {
+      record: jest.fn().mockResolvedValue(undefined),
+      recordMany: jest.fn().mockResolvedValue(undefined),
+    };
     return { events, service: new PostSweepService(events as never) };
   }
 
@@ -82,24 +85,22 @@ describe('PostSweepService', () => {
         statusNote: null,
       },
     });
-    expect(events.record).toHaveBeenCalledWith(tx, {
-      applicationId: 1,
-      actorId: 2,
-      type: 'rejected',
-      data: { reason: 'POST_CLOSED' },
-    });
-    expect(events.record).toHaveBeenCalledWith(tx, {
-      applicationId: 2,
-      actorId: 2,
-      type: 'rejected',
-      data: { reason: 'POST_CLOSED' },
-    });
-    expect(
-      events.record.mock.calls.some(
-        ([, event]: [unknown, { applicationId: number }]) =>
-          event.applicationId === 3 || event.applicationId === 4,
-      ),
-    ).toBe(false);
+    // One write (createMany) for all the rejected rows; nothing for HIRED (3) or WITHDRAWN (4).
+    expect(events.record).not.toHaveBeenCalled();
+    expect(events.recordMany).toHaveBeenCalledWith(tx, [
+      {
+        applicationId: 1,
+        actorId: 2,
+        type: 'rejected',
+        data: { reason: 'POST_CLOSED' },
+      },
+      {
+        applicationId: 2,
+        actorId: 2,
+        type: 'rejected',
+        data: { reason: 'POST_CLOSED' },
+      },
+    ]);
   });
 
   it('locks the active applications before reading them, so a withdraw at the same time waits', async () => {
@@ -144,13 +145,16 @@ describe('PostSweepService', () => {
       },
       data: { status: InterviewStatus.CANCELLED, cancelledAt: expect.any(Date) },
     });
-    expect(events.record).toHaveBeenCalledWith(tx, {
-      applicationId: 2,
-      actorId: 2,
-      type: 'interview_cancelled',
-      data: { interviewId: 50, reason: 'POSITION_FILLED' },
-    });
-    expect(events.record).toHaveBeenCalledTimes(3);
+    // One write per kind: the rejected rows, then the cancelled interviews.
+    expect(events.recordMany).toHaveBeenCalledTimes(2);
+    expect(events.recordMany).toHaveBeenLastCalledWith(tx, [
+      {
+        applicationId: 2,
+        actorId: 2,
+        type: 'interview_cancelled',
+        data: { interviewId: 50, by: 'system', reason: 'POSITION_FILLED' },
+      },
+    ]);
   });
 
   it('does nothing when no application is active', async () => {
@@ -161,7 +165,7 @@ describe('PostSweepService', () => {
     await expect(service.sweep(tx as never, 8, 'POST_CLOSED', 2)).resolves.toEqual([]);
     expect(tx.hiringApplication.updateMany).not.toHaveBeenCalled();
     expect(tx.interview.findMany).not.toHaveBeenCalled();
-    expect(events.record).not.toHaveBeenCalled();
+    expect(events.recordMany).not.toHaveBeenCalled();
   });
 
   it('tells each swept candidate after commit, in plain English', async () => {

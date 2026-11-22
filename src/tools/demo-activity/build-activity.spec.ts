@@ -174,6 +174,14 @@ describe('buildActivity hiring pipeline', () => {
     }
   });
 
+  it('gives ONLINE interviews no location: the call runs inside the app, not on an outside link', () => {
+    for (const { interviews } of big.applications) {
+      for (const interview of interviews.filter((item) => item.mode === 'ONLINE')) {
+        expect(interview.location).toBeNull();
+      }
+    }
+  });
+
   it('has at most one active interview per application, and one for each INTERVIEWING', () => {
     for (const application of big.applications) {
       const open = application.interviews.filter((item) => active.includes(item.status));

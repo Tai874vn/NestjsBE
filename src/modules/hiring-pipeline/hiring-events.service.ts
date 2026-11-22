@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { InterviewMode, Prisma } from '@prisma/client';
 import { ChatGateway } from '../chat/gateways/chat.gateway';
 import { ChatMessageFanoutService } from '../chat/services/chat-message-fanout.service';
 import { ChatService } from '../chat/services/chat.service';
@@ -9,13 +9,61 @@ import {
 } from '../notifications/services/notification-template.service';
 import { NotificationsService } from '../notifications/services/notifications.service';
 
-/** One row of the application's history (who did what, and when). */
-export type PipelineEvent = {
-  applicationId: number;
-  actorId: number | null;
-  type: string;
-  data?: Prisma.InputJsonValue;
+/**
+ * Every kind of history row (HiringApplicationEvent.type) and the `data` it carries.
+ * The frontend draws the application's timeline from these, so one list keeps both sides in step.
+ * A key with `?` may be left out; `undefined` as the whole value means the row has no data.
+ */
+export type HiringEventDataMap = {
+  applied: undefined;
+  reapplied: undefined;
+  shortlisted: undefined;
+  /** reason: why the post rejected everyone (a "sweep"); null when the recruiter chose to reject. */
+  rejected: {
+    reason: 'POSITION_FILLED' | 'POST_CLOSED' | null;
+    note?: string;
+  };
+  offer_sent: { note: string } | undefined;
+  offer_withdrawn: undefined;
+  hired: undefined;
+  offer_declined: { note: string } | undefined;
+  withdrawn: undefined;
+  interview_requested: {
+    interviewId: number;
+    round: number;
+    mode: InterviewMode;
+    /** ISO date-time strings (for example 2026-11-23T09:00:00.000Z). */
+    proposedTimes: string[];
+  };
+  interview_times_proposed: { interviewId: number; proposedTimes: string[] };
+  interview_booked: { interviewId: number; scheduledAt: string };
+  interview_reschedule_requested: { interviewId: number; note?: string };
+  /**
+   * by: who cancelled. 'system' is the sweep (the post closed or filled), and then `reason` says why.
+   * Rejecting cancels the interview as 'recruiter'; withdrawing cancels it as 'candidate'.
+   */
+  interview_cancelled: {
+    interviewId: number;
+    by: 'recruiter' | 'candidate' | 'system';
+    reason?: 'POSITION_FILLED' | 'POST_CLOSED';
+    note?: string;
+  };
+  interview_completed: { interviewId: number };
 };
+
+/** The names of all history rows: applied, reapplied, shortlisted, rejected, offer_sent, ... */
+export type HiringEventType = keyof HiringEventDataMap;
+
+/** One row of the application's history (who did what, and when), with the data its type carries. */
+export type PipelineEvent = {
+  [T in HiringEventType]: {
+    applicationId: number;
+    actorId: number | null;
+    type: T;
+  } & (undefined extends HiringEventDataMap[T]
+    ? { data?: HiringEventDataMap[T] }
+    : { data: HiringEventDataMap[T] });
+}[HiringEventType];
 
 /**
  * Which notification type to send:
@@ -66,14 +114,33 @@ export class HiringEventsService {
     tx: Prisma.TransactionClient,
     event: PipelineEvent,
   ): Promise<void> {
-    await tx.hiringApplicationEvent.create({
-      data: {
-        applicationId: event.applicationId,
-        actorId: event.actorId,
-        type: event.type,
-        ...(event.data !== undefined ? { data: event.data } : {}),
-      },
+    await tx.hiringApplicationEvent.create({ data: this.row(event) });
+  }
+
+  /**
+   * Save many history rows in one database call (createMany), inside the caller's transaction.
+   * Used by the sweep, which may reject many applications at once. An empty list writes nothing.
+   */
+  async recordMany(
+    tx: Prisma.TransactionClient,
+    events: PipelineEvent[],
+  ): Promise<void> {
+    if (!events.length) return;
+    await tx.hiringApplicationEvent.createMany({
+      data: events.map((event) => this.row(event)),
     });
+  }
+
+  /** The database row of an event; `data` is left out when the event has none. */
+  private row(event: PipelineEvent) {
+    return {
+      applicationId: event.applicationId,
+      actorId: event.actorId,
+      type: event.type,
+      ...(event.data !== undefined
+        ? { data: event.data as Prisma.InputJsonValue }
+        : {}),
+    };
   }
 
   /**

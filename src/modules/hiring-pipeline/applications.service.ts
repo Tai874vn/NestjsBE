@@ -9,6 +9,7 @@ import {
   ApplicationPipelineService,
   LockedApplication,
 } from './application-pipeline.service';
+import { Actor } from './application-transitions';
 import { ApplicationsQueryService, Viewer } from './applications-query.service';
 import { HiringEventsService } from './hiring-events.service';
 import {
@@ -70,7 +71,7 @@ export class ApplicationsService {
     return this.pipeline.run(id, viewer, {
       action: 'reject',
       message: 'Applicant rejected',
-      write: async ({ tx, application, now }) => {
+      write: async ({ tx, application, actor, now }) => {
         await this.setStatus(tx, application.id, {
           status: S.REJECTED,
           statusReason: null,
@@ -82,7 +83,13 @@ export class ApplicationsService {
           type: 'rejected',
           data: { reason: null, ...(note ? { note } : {}) },
         });
-        await this.cancelActiveInterview(tx, application, viewer.id, now);
+        await this.cancelActiveInterview(
+          tx,
+          application,
+          viewer.id,
+          now,
+          actor,
+        );
       },
       notice: (application) => ({
         recipientId: application.applicantId,
@@ -214,7 +221,12 @@ export class ApplicationsService {
           'POSITION_FILLED',
           viewer.id,
         );
-        return { postId, postTitle: title, candidateIds };
+        return {
+          postId,
+          postTitle: title,
+          reason: 'POSITION_FILLED',
+          candidateIds,
+        };
       },
       notice: (application) => ({
         recipientId: application.hiringPost.recruiterId,
@@ -260,7 +272,7 @@ export class ApplicationsService {
     return this.pipeline.run(id, viewer, {
       action: 'withdraw',
       message: 'Application withdrawn',
-      write: async ({ tx, application, now }) => {
+      write: async ({ tx, application, actor, now }) => {
         await this.setStatus(tx, application.id, {
           status: S.WITHDRAWN,
           statusReason: null,
@@ -271,7 +283,13 @@ export class ApplicationsService {
           actorId: viewer.id,
           type: 'withdrawn',
         });
-        await this.cancelActiveInterview(tx, application, viewer.id, now);
+        await this.cancelActiveInterview(
+          tx,
+          application,
+          viewer.id,
+          now,
+          actor,
+        );
       },
       notice: (application) => ({
         recipientId: application.hiringPost.recruiterId,
@@ -294,12 +312,14 @@ export class ApplicationsService {
   /**
    * Cancel the interview in progress (PROPOSED, RESCHEDULE_REQUESTED or SCHEDULED), if any, with its
    * history row. The status filter is there again so a finished interview is never changed.
+   * `by` is the side that caused it: 'recruiter' when rejecting, 'candidate' when withdrawing.
    */
   private async cancelActiveInterview(
     tx: Prisma.TransactionClient,
     application: LockedApplication,
     actorId: number,
     now: Date,
+    by: Actor,
   ) {
     const active = application.interviews.find((interview) =>
       ACTIVE_INTERVIEW_STATUSES.includes(interview.status),
@@ -313,7 +333,7 @@ export class ApplicationsService {
       applicationId: application.id,
       actorId,
       type: 'interview_cancelled',
-      data: { interviewId: active.id },
+      data: { interviewId: active.id, by },
     });
   }
 }

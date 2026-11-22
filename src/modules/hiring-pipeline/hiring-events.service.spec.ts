@@ -41,17 +41,37 @@ describe('HiringEventsService', () => {
     await service.record(tx as never, {
       applicationId: 21,
       actorId: 3,
-      type: 'SHORTLISTED',
-      data: { note: 'good fit' },
+      type: 'rejected',
+      data: { reason: null, note: 'good fit' },
     });
 
     expect(tx.hiringApplicationEvent.create).toHaveBeenCalledWith({
       data: {
         applicationId: 21,
         actorId: 3,
-        type: 'SHORTLISTED',
-        data: { note: 'good fit' },
+        type: 'rejected',
+        data: { reason: null, note: 'good fit' },
       },
+    });
+  });
+
+  it('records many event rows with one createMany, and nothing for an empty list', async () => {
+    const { service } = createService();
+    const tx = { hiringApplicationEvent: { createMany: jest.fn() } };
+
+    await service.recordMany(tx as never, []);
+    expect(tx.hiringApplicationEvent.createMany).not.toHaveBeenCalled();
+
+    await service.recordMany(tx as never, [
+      { applicationId: 1, actorId: 3, type: 'rejected', data: { reason: 'POST_CLOSED' } },
+      { applicationId: 2, actorId: null, type: 'withdrawn' },
+    ]);
+    expect(tx.hiringApplicationEvent.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.hiringApplicationEvent.createMany).toHaveBeenCalledWith({
+      data: [
+        { applicationId: 1, actorId: 3, type: 'rejected', data: { reason: 'POST_CLOSED' } },
+        { applicationId: 2, actorId: null, type: 'withdrawn' },
+      ],
     });
   });
 

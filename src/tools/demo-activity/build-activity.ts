@@ -21,6 +21,7 @@ import {
   formatVietnamTime,
   interviewTimesText,
 } from '../../modules/hiring-pipeline/interview-times';
+import type { HiringEventType } from '../../modules/hiring-pipeline/hiring-events.service';
 
 export const LEVELS = ['Junior', 'Mid', 'Senior'] as const;
 export type Level = (typeof LEVELS)[number];
@@ -99,7 +100,7 @@ export type InterviewFact = {
 
 /** One step in the history of an application. `interview` is the index in `interviews` it belongs to. */
 export type EventFact = {
-  type: string;
+  type: HiringEventType;
   actorId: number;
   createdAt: Date;
   data?: Record<string, unknown>;
@@ -416,7 +417,8 @@ export function buildActivity(input: ActivityInput): Activity {
       round: 1,
       mode: 'ONLINE',
       durationMinutes: 45,
-      location: `https://meet.jit.si/jobaura-${post.id}-${candidate.id}`,
+      // An online interview has no link: the video call runs inside the app (LiveKit).
+      location: null,
       note: null,
       createdById: post.recruiterId,
       ...fields,
@@ -433,7 +435,7 @@ export function buildActivity(input: ActivityInput): Activity {
       },
     });
     const event = (
-      type: string,
+      type: HiringEventType,
       actorId: number,
       createdAt: Date,
       extra: Partial<EventFact> = {},

@@ -92,6 +92,37 @@ describe('ApplicationsService', () => {
     });
   }
 
+  it('run() announces a sweep with the reason the step gives (not always POSITION_FILLED)', async () => {
+    const { sweeper } = createService();
+    const { prisma } = createService();
+    const pipeline = new ApplicationPipelineService(
+      prisma as never,
+      { record: jest.fn(), announce: jest.fn() } as never,
+      sweeper as never,
+      { detail: jest.fn().mockResolvedValue({ id: 99 }) } as never,
+    );
+
+    await pipeline.run(99, recruiter, {
+      message: 'done',
+      write: () =>
+        Promise.resolve({
+          postId: 10,
+          postTitle: 'Senior Test Engineer',
+          reason: 'POST_CLOSED' as const,
+          candidateIds: [5],
+        }),
+      notice: () => null,
+    });
+
+    expect(sweeper.announceSwept).toHaveBeenCalledWith(prisma, {
+      postId: 10,
+      postTitle: 'Senior Test Engineer',
+      reason: 'POST_CLOSED',
+      actorId: 2,
+      candidateIds: [5],
+    });
+  });
+
   it('shortlists: locks the row, writes REVIEWING and the event, then tells the candidate', async () => {
     const { prisma, events, query, service } = createService();
 
@@ -206,7 +237,7 @@ describe('ApplicationsService', () => {
       applicationId: 99,
       actorId: 2,
       type: 'interview_cancelled',
-      data: { interviewId: 6 },
+      data: { interviewId: 6, by: 'recruiter' },
     });
     expect(events.announce).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -553,7 +584,7 @@ describe('ApplicationsService', () => {
       applicationId: 99,
       actorId: 7,
       type: 'interview_cancelled',
-      data: { interviewId: 6 },
+      data: { interviewId: 6, by: 'candidate' },
     });
     expect(events.announce).toHaveBeenCalledWith(
       expect.objectContaining({
