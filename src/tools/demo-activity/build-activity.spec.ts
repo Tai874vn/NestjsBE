@@ -117,3 +117,140 @@ describe('buildActivity', () => {
     }
   });
 });
+
+// A bigger site, so every step of the pipeline shows up: 60 candidates, 14 posts with one recruiter each.
+function bigInput(): ActivityInput {
+  const base = input();
+  const levels = ['Junior', 'Mid', 'Senior'] as const;
+  return {
+    ...base,
+    people: [
+      ...Array.from({ length: 60 }, (_, index) =>
+        person(index + 1, { years: 2 + (index % 7), level: levels[index % 3] }),
+      ),
+      ...Array.from({ length: 14 }, (_, index) =>
+        person(100 + index, { kind: 'recruiter', occupation: null, level: null, years: 0, company: `Company${index}` }),
+      ),
+    ],
+    hiringPosts: Array.from({ length: 14 }, (_, index) => ({
+      id: 10 + index,
+      recruiterId: 100 + index,
+      title: `Software Developer ${index}`,
+      occupationCode: '2512.3',
+      level: levels[index % 3],
+      yearsRequired: 3,
+      skills: ['TypeScript'],
+      location: 'Hanoi',
+      employmentType: 'Full-time',
+    })),
+    services: [],
+  };
+}
+
+describe('buildActivity hiring pipeline', () => {
+  const big = buildActivity(bigInput());
+  const DAYS = 86_400_000;
+  const statuses = (status: string) => big.applications.filter((item) => item.status === status);
+  const active = ['PROPOSED', 'RESCHEDULE_REQUESTED', 'SCHEDULED'];
+
+  it('shows every step of the pipeline', () => {
+    expect(statuses('HIRED').length).toBeGreaterThan(0);
+    expect(statuses('OFFERED').length).toBeLessThanOrEqual(5);
+    expect(statuses('OFFERED').length).toBeGreaterThan(0);
+    expect(statuses('INTERVIEWING').length).toBeGreaterThan(0);
+    expect(statuses('REVIEWING').length).toBeGreaterThan(0);
+    expect(statuses('ACCEPTED').length).toBe(0);
+  });
+
+  it('gives every HIRED or OFFERED application a COMPLETED online interview and offer fields', () => {
+    for (const application of [...statuses('HIRED'), ...statuses('OFFERED')]) {
+      const done = application.interviews.filter((item) => item.status === 'COMPLETED');
+      expect(done.length).toBeGreaterThanOrEqual(1);
+      expect(done[0].mode).toBe('ONLINE');
+      expect(done[0].round).toBe(1);
+      expect(application.offerNote).toBeTruthy();
+      expect(application.offeredAt).not.toBeNull();
+      expect(application.decidedAt === null).toBe(application.status === 'OFFERED');
+    }
+  });
+
+  it('has at most one active interview per application, and one for each INTERVIEWING', () => {
+    for (const application of big.applications) {
+      const open = application.interviews.filter((item) => active.includes(item.status));
+      expect(open.length).toBe(application.status === 'INTERVIEWING' ? 1 : 0);
+      expect(application.interviews.map((item) => item.round)).toEqual(
+        application.interviews.map((_, index) => index + 1),
+      );
+    }
+  });
+
+  it('puts interview times in the future only for PROPOSED and SCHEDULED, 1 to 5 days ahead', () => {
+    for (const { interviews } of big.applications) {
+      for (const interview of interviews) {
+        const times = [...interview.proposedTimes, ...(interview.scheduledAt ? [interview.scheduledAt] : [])];
+        for (const time of times) {
+          if (interview.status === 'COMPLETED') {
+            expect(time.getTime()).toBeLessThanOrEqual(now.getTime() - 3 * DAYS);
+            expect(time.getTime()).toBeGreaterThanOrEqual(now.getTime() - 11 * DAYS);
+          } else {
+            expect(time.getTime()).toBeGreaterThan(now.getTime());
+            expect(time.getTime()).toBeLessThanOrEqual(now.getTime() + 6 * DAYS);
+          }
+        }
+        if (interview.status === 'PROPOSED') expect(interview.proposedTimes).toHaveLength(3);
+        if (interview.status === 'SCHEDULED') expect(interview.scheduledAt).not.toBeNull();
+        if (interview.status === 'COMPLETED') expect(interview.completedAt).not.toBeNull();
+      }
+    }
+  });
+
+  it('keeps hired and offered people within the openings of their post', () => {
+    for (const post of bigInput().hiringPosts) {
+      const mine = big.applications.filter((item) => item.hiringPostId === post.id);
+      const taken = mine.filter((item) => item.status === 'HIRED' || item.status === 'OFFERED');
+      expect(taken.length).toBeLessThanOrEqual(big.openings.get(post.id)!);
+      expect(big.openings.get(post.id)).toBe(mine.some((item) => item.status === 'HIRED') ? 2 : 1);
+    }
+  });
+
+  it('writes events in time order, all in the past, ending with the step that matches the status', () => {
+    const last: Record<string, string> = {
+      HIRED: 'hired',
+      OFFERED: 'offer_sent',
+      REJECTED: 'rejected',
+      WITHDRAWN: 'withdrawn',
+    };
+    for (const application of big.applications) {
+      const { events } = application;
+      expect(events[0].type).toBe('applied');
+      for (let index = 1; index < events.length; index += 1) {
+        expect(events[index].createdAt.getTime()).toBeGreaterThanOrEqual(events[index - 1].createdAt.getTime());
+      }
+      for (const event of events) expect(event.createdAt.getTime()).toBeLessThanOrEqual(now.getTime());
+      if (last[application.status]) expect(events.at(-1)!.type).toBe(last[application.status]);
+      expect(application.updatedAt.getTime()).toBeGreaterThanOrEqual(events.at(-1)!.createdAt.getTime());
+      expect(events.filter((event) => event.type === 'interview_requested').length).toBe(application.interviews.length);
+    }
+  });
+
+  it('keeps every application date in the past and after the application was sent', () => {
+    for (const application of big.applications) {
+      for (const date of [application.updatedAt, application.offeredAt, application.decidedAt]) {
+        if (date) expect(date.getTime()).toBeLessThanOrEqual(now.getTime());
+      }
+      expect(application.updatedAt.getTime()).toBeGreaterThanOrEqual(application.createdAt.getTime());
+    }
+  });
+
+  it('adds one notice for the latest step, and chat lines that match the interview and offer texts', () => {
+    for (const application of big.applications) expect(application.notices.length).toBe(1);
+    const texts = big.chats.flatMap((chat) => chat.messages.map((message) => message.content));
+    expect(texts.some((text) => /^Interview request for .+: .+ \(online, 45 min\) \(Vietnam time\)$/.test(text))).toBe(true);
+    expect(texts.some((text) => text.startsWith('Offer for '))).toBe(true);
+    for (const chat of big.chats) {
+      const times = chat.messages.map((message) => message.createdAt.getTime());
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+      expect(chat.createdAt.getTime()).toBeLessThanOrEqual(times[0]);
+    }
+  });
+});
