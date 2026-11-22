@@ -151,6 +151,18 @@ describe('nextStatus', () => {
     expect(err.message).toBe('This application was already hired.');
   });
 
+  it('says what the status is for a non-final status', () => {
+    const err = thrown(() => nextStatus('shortlist', 'recruiter', S.INTERVIEWING, ctx()));
+    expect(err.message).toBe('This application is in the interview stage right now.');
+  });
+
+  it('pins the message for sendOffer with an active interview', () => {
+    const err = thrown(() =>
+      nextStatus('sendOffer', 'recruiter', S.INTERVIEWING, ctx({ hasActiveInterview: true })),
+    );
+    expect(err.message).toBe('Finish the interview in progress before sending an offer.');
+  });
+
   it('says what the status is when withdrawing twice', () => {
     const err = thrown(() => nextStatus('withdraw', 'candidate', S.WITHDRAWN, ctx()));
     expect(err.message).toBe('This application was already withdrawn.');

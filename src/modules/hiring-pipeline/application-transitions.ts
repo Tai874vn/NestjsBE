@@ -37,12 +37,13 @@ export class TransitionError extends Error {
 
 const S = HiringApplicationStatus;
 
-// Words used in the sentence "This application was already <label>."
+// Words used in the wrong-status sentence. Final statuses read "was already <label>",
+// the others read "is <label> right now".
 export const STATUS_LABEL: Record<HiringApplicationStatus, string> = {
-  APPLIED: 'applied',
-  REVIEWING: 'under review',
+  APPLIED: 'new',
+  REVIEWING: 'on the shortlist',
   INTERVIEWING: 'in the interview stage',
-  OFFERED: 'offered',
+  OFFERED: 'waiting for an answer to an offer',
   HIRED: 'hired',
   REJECTED: 'rejected',
   DECLINED: 'declined',
@@ -105,7 +106,9 @@ export function nextStatus(
   if (!rule.from.includes(from)) {
     throw new TransitionError(
       'conflict',
-      `This application was already ${STATUS_LABEL[from]}.`,
+      isActive(from)
+        ? `This application is ${STATUS_LABEL[from]} right now.`
+        : `This application was already ${STATUS_LABEL[from]}.`,
     );
   }
 
