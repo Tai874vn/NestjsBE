@@ -116,15 +116,26 @@ describe('VideoCallService', () => {
     );
   });
 
-  it('an interview that is not scheduled is 409 and names the status', async () => {
-    const { service } = createService({ status: InterviewStatus.PROPOSED });
+  it.each([
+    [
+      InterviewStatus.PROPOSED,
+      'This interview has no agreed time yet, so there is no call to join.',
+    ],
+    [
+      InterviewStatus.RESCHEDULE_REQUESTED,
+      'New times for this interview are still being arranged, so there is no call to join.',
+    ],
+    [InterviewStatus.COMPLETED, 'This interview has already finished.'],
+    [InterviewStatus.CANCELLED, 'This interview was cancelled.'],
+  ])('an interview that is %s is 409 with a plain sentence', async (status, text) => {
+    const { service } = createService({ status });
 
     const error: unknown = await service
       .callToken(5, candidate)
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ConflictException);
-    expect((error as ConflictException).message).toContain('PROPOSED');
+    expect((error as ConflictException).message).toBe(text);
   });
 
   it('an onsite interview is 409 "This interview is not online."', async () => {

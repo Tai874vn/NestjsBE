@@ -14,6 +14,17 @@ import { Viewer } from './applications-query.service';
 /** How long a call token lives (2 hours): longer than any interview, short enough to stay safe. */
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 
+/** Plain sentences for an interview that is not SCHEDULED (409), so no raw status name reaches the user. */
+const NOT_SCHEDULED_TEXT: Record<InterviewStatus, string> = {
+  PROPOSED:
+    'This interview has no agreed time yet, so there is no call to join.',
+  RESCHEDULE_REQUESTED:
+    'New times for this interview are still being arranged, so there is no call to join.',
+  SCHEDULED: 'This interview is scheduled.',
+  COMPLETED: 'This interview has already finished.',
+  CANCELLED: 'This interview was cancelled.',
+};
+
 export type CallToken = {
   url: string;
   token: string;
@@ -75,9 +86,7 @@ export class VideoCallService {
       throw new ConflictException('This interview is not online.');
     }
     if (interview.status !== InterviewStatus.SCHEDULED) {
-      throw new ConflictException(
-        `This interview is ${interview.status}, so there is no call to join.`,
-      );
+      throw new ConflictException(NOT_SCHEDULED_TEXT[interview.status]);
     }
 
     const url = this.config.get<string>('LIVEKIT_URL');
