@@ -251,6 +251,38 @@ describe('ApplicationsService', () => {
     );
   });
 
+  it('sending an offer locks the post first, then the application, then counts the openings', async () => {
+    const { prisma, service } = createService(
+      lockedApplication({
+        status: S.INTERVIEWING,
+        interviews: [{ id: 5, status: InterviewStatus.COMPLETED }],
+      }),
+    );
+    const order: string[] = [];
+    prisma.$queryRaw.mockImplementation((strings: string[]) => {
+      order.push(strings.join('?').includes('"hiring_posts"') ? 'post' : 'application');
+      return Promise.resolve([]);
+    });
+    prisma.hiringApplication.count.mockImplementation(() => {
+      order.push('count');
+      return Promise.resolve(0);
+    });
+
+    await service.sendOffer(99, recruiter);
+
+    const sql = locks(prisma);
+    expect(sql).toHaveLength(2);
+    expect(sql[0]).toEqual({
+      sql: expect.stringMatching(/"hiring_posts".*FOR UPDATE/),
+      values: [10],
+    });
+    expect(sql[1]).toEqual({
+      sql: expect.stringMatching(/"hiring_applications".*FOR UPDATE/),
+      values: [99],
+    });
+    expect(order).toEqual(['post', 'application', 'count']);
+  });
+
   it('an offer without a note says details follow in chat', async () => {
     const { events, service } = createService(
       lockedApplication({

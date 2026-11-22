@@ -60,7 +60,7 @@ type Swept = { postId: number; postTitle: string; candidateIds: number[] };
 
 type Step = {
   action: PipelineAction;
-  /** Lock the post row too (accept offer only; the post is locked before the application). */
+  /** Lock the post row too (send and accept offer; the post is locked before the application). */
   lockPost?: boolean;
   /** An extra check that runs before the transition rules (inside the transaction). */
   before?: (input: StepInput) => Promise<void>;
@@ -80,7 +80,7 @@ type Step = {
  * Each action runs the same way (see run()):
  *  1. A transaction (a group of database changes saved together or not at all) locks the application
  *     row with SELECT ... FOR UPDATE ("this row is mine until the transaction ends"), so two clicks at
- *     the same time are done one after the other. Accepting an offer locks the post row first.
+ *     the same time are done one after the other. Sending or accepting an offer locks the post row first.
  *  2. It reads the application again (now nobody else can change it) and asks the transition rules
  *     (application-transitions.ts) whether the action is allowed: wrong person 403, wrong status 409.
  *  3. It writes the new status and the history row (HiringApplicationEvent) in the same transaction.
@@ -157,11 +157,14 @@ export class ApplicationsService {
   /**
    * Recruiter: INTERVIEWING → OFFERED. The rules need a finished interview, none in progress, and an
    * opening left: openings − (hired + offers waiting). A post with no limit (openings null) always has one.
+   * The post row is locked first (as in acceptOffer), and the openings are counted after the locks, so two
+   * offers sent at the same moment are done one after the other and never go past the openings.
    */
   sendOffer(id: number, viewer: Viewer, note?: string) {
     return this.run(id, viewer, {
       action: 'sendOffer',
       message: 'Offer sent',
+      lockPost: true,
       write: async ({ tx, application, now }) => {
         await this.setStatus(tx, application.id, {
           status: S.OFFERED,
@@ -370,7 +373,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Lock the row(s), then read the application again. For accept, the post is locked BEFORE the
+   * Lock the row(s), then read the application again. For an offer or accept, the post is locked BEFORE the
    * application: closing a post also takes the post row first, so both always take the locks in the
    * same order and can never wait on each other forever (a "deadlock").
    */
