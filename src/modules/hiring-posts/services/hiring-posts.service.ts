@@ -27,6 +27,8 @@ import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { findOccupation } from '../../occupations/occupation-catalogue';
+import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
+import { PostSweepService } from '../../hiring-pipeline/post-sweep.service';
 
 const hiringPostInclude = {
   recruiter: {
@@ -59,6 +61,17 @@ type OpenFilters = { open: Prisma.HiringPostWhereInput[] } & Partial<
   Record<FacetGroup, Prisma.HiringPostWhereInput>
 >;
 
+/** The application statuses counted on the owner's post card (the "pipeline"). */
+const PIPELINE_STATUSES = [
+  HiringApplicationStatus.APPLIED,
+  HiringApplicationStatus.REVIEWING,
+  HiringApplicationStatus.INTERVIEWING,
+  HiringApplicationStatus.OFFERED,
+  HiringApplicationStatus.HIRED,
+] as const;
+type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
+type PipelineCounts = Record<PipelineStatus, number>;
+
 const MAX_OCCUPATION_FACETS = 10;
 const MAX_LOCATION_OPTIONS = 50;
 
@@ -81,6 +94,8 @@ export class HiringPostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiQueue: HiringPostAiQueueService,
+    private readonly events: HiringEventsService,
+    private readonly sweeper: PostSweepService,
   ) {}
 
   async findOpen(query: HiringPostQueryDto, viewerId?: number) {
@@ -98,16 +113,16 @@ export class HiringPostsService {
       }),
       this.prisma.hiringPost.count({ where }),
     ]);
-    const appliedPostIds =
+    const postIds = posts.map((post) => post.id);
+    const [appliedPostIds, counts] = await Promise.all([
       viewerId && posts.length
-        ? await this.findAppliedPostIds(
-            viewerId,
-            posts.map((post) => post.id),
-          )
-        : new Set<number>();
+        ? this.findAppliedPostIds(viewerId, postIds)
+        : Promise.resolve(new Set<number>()),
+      this.pipelineCounts(postIds),
+    ]);
 
     const content = this.toPaginatedContent(
-      posts.map((post) => this.toHiringPostCard(post, appliedPostIds)),
+      posts.map((post) => this.toHiringPostCard(post, appliedPostIds, counts)),
       total,
       page,
       pageSize,
@@ -151,10 +166,16 @@ export class HiringPostsService {
       this.prisma.hiringPost.count({ where }),
     ]);
 
+    // One groupBy for the whole page, so the owner sees how many people are at each step.
+    const counts = await this.pipelineCounts(posts.map((post) => post.id));
+
     return {
       message: 'Get your hiring posts successfully',
       content: this.toPaginatedContent(
-        posts.map((post) => this.toHiringPostCard(post)),
+        posts.map((post) => ({
+          ...this.toHiringPostCard(post, undefined, counts),
+          pipeline: counts.get(post.id) ?? this.emptyPipeline(),
+        })),
         total,
         page,
         pageSize,
@@ -172,14 +193,16 @@ export class HiringPostsService {
       throw new ForbiddenException('You cannot view this closed hiring post');
     }
 
-    const appliedPostIds =
+    const [appliedPostIds, counts] = await Promise.all([
       userId !== undefined && userRole === Role.USER
-        ? await this.findAppliedPostIds(userId, [id])
-        : new Set<number>();
+        ? this.findAppliedPostIds(userId, [id])
+        : Promise.resolve(new Set<number>()),
+      this.pipelineCounts([id]),
+    ]);
 
     return {
       message: 'Get hiring post successfully',
-      content: this.toHiringPostCard(post, appliedPostIds),
+      content: this.toHiringPostCard(post, appliedPostIds, counts),
     };
   }
 
@@ -215,6 +238,8 @@ export class HiringPostsService {
         specialty: occupation.specialty,
         yearsRequired: dto.yearsRequired,
         skills: dto.skills ?? [],
+        // Not sent: 1 person. null is kept: no limit ("keep hiring until I close the post").
+        openings: dto.openings === undefined ? 1 : dto.openings,
         closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
         // The AI level is worked out by the queue, never while saving.
         ...queuedHiringPostFields(),
@@ -234,6 +259,9 @@ export class HiringPostsService {
    * If something the AI reads changed (occupation, years, skills, title, description, requirements), the post
    * goes back into the AI queue; if the occupation, years or skills changed, the old level is cleared first,
    * because it no longer describes the post.
+   * Closing an OPEN post also "sweeps" it (PostSweepService): every application still in progress is
+   * rejected with reason POST_CLOSED, in the same transaction as the close; the candidates are told after
+   * the transaction is saved. Editing a post that is already closed, or reopening it, sweeps nothing.
    */
   async update(
     id: number,
@@ -283,66 +311,99 @@ export class HiringPostsService {
         (this.optionalTrim(dto.requirements) ?? null) !==
           (post.requirements ?? null));
     const requeue = levelInputsChanged || levelTextChanged;
+    const closing =
+      dto.status === HiringPostStatus.CLOSED &&
+      post.status === HiringPostStatus.OPEN;
 
-    const updated = await this.prisma.hiringPost.update({
-      where: { id },
-      data: {
-        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(dto.description !== undefined
-          ? { description: dto.description.trim() }
-          : {}),
-        ...(dto.requirements !== undefined
-          ? { requirements: this.optionalTrim(dto.requirements) }
-          : {}),
-        ...(dto.location !== undefined
-          ? { location: this.optionalTrim(dto.location) }
-          : {}),
-        ...(dto.employmentType !== undefined
-          ? { employmentType: this.optionalTrim(dto.employmentType) }
-          : {}),
-        ...(dto.salaryMin !== undefined ? { salaryMin: dto.salaryMin } : {}),
-        ...(dto.salaryMax !== undefined ? { salaryMax: dto.salaryMax } : {}),
-        ...(dto.salaryCurrency !== undefined
-          ? { salaryCurrency: dto.salaryCurrency }
-          : {}),
-        ...(dto.salaryPeriod !== undefined
-          ? { salaryPeriod: dto.salaryPeriod }
-          : {}),
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
-        ...(dto.companyName !== undefined
-          ? { companyName: this.optionalTrim(dto.companyName) }
-          : {}),
-        ...(occupation !== null
-          ? {
-              occupationCode: occupation.code,
-              specialty: occupation.specialty,
-            }
-          : {}),
-        ...(dto.yearsRequired !== undefined
-          ? { yearsRequired: dto.yearsRequired }
-          : {}),
-        ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
-        ...(dto.closesAt !== undefined
-          ? { closesAt: new Date(dto.closesAt) }
-          : {}),
-        ...(levelInputsChanged
-          ? {
-              predictedSeniority: null,
-              predictedSeniorityConfidence: null,
-              predictedSeniorityModel: null,
-              predictedSeniorityMetadata: Prisma.DbNull,
-              predictedSeniorityAt: null,
-            }
-          : {}),
-        ...(requeue ? queuedHiringPostFields() : {}),
-      },
-      include: hiringPostInclude,
+    // One transaction (a group of changes saved together or not at all) for the edit and the sweep.
+    const { updated, swept } = await this.prisma.$transaction(async (tx) => {
+      let swept: number[] = [];
+      if (closing) {
+        // Claim the close only while the post is still OPEN; the row lock this takes makes a second
+        // close (or an offer being accepted) wait, so the sweep runs once.
+        const claimed = await tx.hiringPost.updateMany({
+          where: { id, status: HiringPostStatus.OPEN },
+          data: { status: HiringPostStatus.CLOSED },
+        });
+        if (claimed.count === 1) {
+          swept = await this.sweeper.sweep(tx, id, 'POST_CLOSED', userId);
+        }
+      }
+      const updated = await tx.hiringPost.update({
+        where: { id },
+        data: {
+          ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+          ...(dto.description !== undefined
+            ? { description: dto.description.trim() }
+            : {}),
+          ...(dto.requirements !== undefined
+            ? { requirements: this.optionalTrim(dto.requirements) }
+            : {}),
+          ...(dto.location !== undefined
+            ? { location: this.optionalTrim(dto.location) }
+            : {}),
+          ...(dto.employmentType !== undefined
+            ? { employmentType: this.optionalTrim(dto.employmentType) }
+            : {}),
+          ...(dto.salaryMin !== undefined ? { salaryMin: dto.salaryMin } : {}),
+          ...(dto.salaryMax !== undefined ? { salaryMax: dto.salaryMax } : {}),
+          ...(dto.salaryCurrency !== undefined
+            ? { salaryCurrency: dto.salaryCurrency }
+            : {}),
+          ...(dto.salaryPeriod !== undefined
+            ? { salaryPeriod: dto.salaryPeriod }
+            : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.companyName !== undefined
+            ? { companyName: this.optionalTrim(dto.companyName) }
+            : {}),
+          ...(occupation !== null
+            ? {
+                occupationCode: occupation.code,
+                specialty: occupation.specialty,
+              }
+            : {}),
+          ...(dto.yearsRequired !== undefined
+            ? { yearsRequired: dto.yearsRequired }
+            : {}),
+          ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
+          ...(dto.openings !== undefined ? { openings: dto.openings } : {}),
+          ...(dto.closesAt !== undefined
+            ? { closesAt: new Date(dto.closesAt) }
+            : {}),
+          ...(levelInputsChanged
+            ? {
+                predictedSeniority: null,
+                predictedSeniorityConfidence: null,
+                predictedSeniorityModel: null,
+                predictedSeniorityMetadata: Prisma.DbNull,
+                predictedSeniorityAt: null,
+              }
+            : {}),
+          ...(requeue ? queuedHiringPostFields() : {}),
+        },
+        include: hiringPostInclude,
+      });
+      return { updated, swept };
     });
     if (requeue) this.aiQueue.kick();
+    if (swept.length) {
+      await this.sweeper.announceSwept(this.prisma, {
+        postId: id,
+        postTitle: updated.title,
+        reason: 'POST_CLOSED',
+        actorId: userId,
+        candidateIds: swept,
+      });
+    }
 
     return {
       message: 'Update hiring post successfully',
-      content: this.toHiringPostCard(updated),
+      content: this.toHiringPostCard(
+        updated,
+        undefined,
+        await this.pipelineCounts([id]),
+      ),
     };
   }
 
@@ -367,7 +428,11 @@ export class HiringPostsService {
 
     return {
       message: 'Hiring post queued for AI evaluation',
-      content: this.toHiringPostCard(queued),
+      content: this.toHiringPostCard(
+        queued,
+        undefined,
+        await this.pipelineCounts([id]),
+      ),
     };
   }
 
@@ -394,23 +459,38 @@ export class HiringPostsService {
       include: ReturnType<HiringPostsService['applicationInclude']>;
     }>;
     try {
-      application = existing
-        ? await this.prisma.hiringApplication.update({
-            where: { id: existing.id },
-            data: {
-              coverLetter: this.optionalTrim(dto.coverLetter),
-              status: HiringApplicationStatus.APPLIED,
-            },
-            include: this.applicationInclude(),
-          })
-        : await this.prisma.hiringApplication.create({
-            data: {
-              hiringPostId: id,
-              applicantId,
-              coverLetter: this.optionalTrim(dto.coverLetter),
-            },
-            include: this.applicationInclude(),
-          });
+      // The application and its history row are saved together (one transaction).
+      application = await this.prisma.$transaction(async (tx) => {
+        const saved = existing
+          ? await tx.hiringApplication.update({
+              where: { id: existing.id },
+              data: {
+                coverLetter: this.optionalTrim(dto.coverLetter),
+                status: HiringApplicationStatus.APPLIED,
+                // A fresh start: nothing from the earlier round stays.
+                statusReason: null,
+                statusNote: null,
+                offerNote: null,
+                offeredAt: null,
+                decidedAt: null,
+              },
+              include: this.applicationInclude(),
+            })
+          : await tx.hiringApplication.create({
+              data: {
+                hiringPostId: id,
+                applicantId,
+                coverLetter: this.optionalTrim(dto.coverLetter),
+              },
+              include: this.applicationInclude(),
+            });
+        await this.events.record(tx, {
+          applicationId: saved.id,
+          actorId: applicantId,
+          type: existing ? 'reapplied' : 'applied',
+        });
+        return saved;
+      });
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException('You already applied to this hiring post');
@@ -418,9 +498,24 @@ export class HiringPostsService {
       throw error;
     }
 
+    // After commit: tell the recruiter. announce() never throws.
+    await this.events.announce({
+      recipientId: post.recruiterId,
+      actorId: applicantId,
+      kind: 'received',
+      title: 'New applicant',
+      body: `${application.applicant.name} applied for ${post.title}.`,
+      applicationId: application.id,
+      postId: id,
+      forRecruiter: true,
+    });
+
     return {
       message: 'Apply to hiring post successfully',
-      content: this.toApplicationCard(application),
+      content: this.toApplicationCard(
+        application,
+        await this.pipelineCounts([id]),
+      ),
     };
   }
 
@@ -447,11 +542,14 @@ export class HiringPostsService {
       }),
       this.prisma.hiringApplication.count({ where }),
     ]);
+    const counts = await this.pipelineCounts([id]);
 
     return {
       message: 'Get hiring applications successfully',
       content: this.toPaginatedContent(
-        applications.map((application) => this.toApplicationCard(application)),
+        applications.map((application) =>
+          this.toApplicationCard(application, counts),
+        ),
         total,
         page,
         pageSize,
@@ -474,11 +572,16 @@ export class HiringPostsService {
       }),
       this.prisma.hiringApplication.count({ where }),
     ]);
+    const counts = await this.pipelineCounts([
+      ...new Set(applications.map((application) => application.hiringPostId)),
+    ]);
 
     return {
       message: 'Get your hiring applications successfully',
       content: this.toPaginatedContent(
-        applications.map((application) => this.toApplicationCard(application)),
+        applications.map((application) =>
+          this.toApplicationCard(application, counts),
+        ),
         total,
         page,
         pageSize,
@@ -754,6 +857,37 @@ export class HiringPostsService {
     return new Set(applications.map((application) => application.hiringPostId));
   }
 
+  /**
+   * How many applications of each post are at each pipeline step, from ONE groupBy (no query per post).
+   * Every post gets all five keys; a missing one is 0.
+   */
+  private async pipelineCounts(
+    postIds: number[],
+  ): Promise<Map<number, PipelineCounts>> {
+    const counts = new Map<number, PipelineCounts>();
+    if (!postIds.length) return counts;
+    const groups = await this.prisma.hiringApplication.groupBy({
+      by: ['hiringPostId', 'status'],
+      where: {
+        hiringPostId: { in: postIds },
+        status: { in: [...PIPELINE_STATUSES] },
+      },
+      _count: { _all: true },
+    });
+    for (const postId of postIds) counts.set(postId, this.emptyPipeline());
+    for (const group of groups) {
+      const postCounts = counts.get(group.hiringPostId);
+      if (postCounts && group.status in postCounts) {
+        postCounts[group.status as PipelineStatus] = group._count._all;
+      }
+    }
+    return counts;
+  }
+
+  private emptyPipeline(): PipelineCounts {
+    return { APPLIED: 0, REVIEWING: 0, INTERVIEWING: 0, OFFERED: 0, HIRED: 0 };
+  }
+
   private applicationInclude() {
     return {
       hiringPost: {
@@ -776,15 +910,23 @@ export class HiringPostsService {
     } satisfies Prisma.HiringApplicationInclude;
   }
 
+  /**
+   * The post as the app shows it. `counts` (from pipelineCounts) gives hiredCount (people hired) and
+   * offersWaiting (offers not answered yet); a post missing from it shows 0 for both.
+   */
   private toHiringPostCard(
     post: HiringPostWithMeta,
     appliedPostIds = new Set<number>(),
+    counts = new Map<number, PipelineCounts>(),
   ) {
     const { _count, ...rest } = post;
+    const postCounts = counts.get(post.id);
     return {
       ...rest,
       occupationTitle: findOccupation(post.occupationCode)?.title ?? null,
       applicationCount: _count.applications,
+      hiredCount: postCounts?.HIRED ?? 0,
+      offersWaiting: postCounts?.OFFERED ?? 0,
       viewerHasApplied: appliedPostIds.has(post.id),
     };
   }
@@ -793,10 +935,15 @@ export class HiringPostsService {
     application: Prisma.HiringApplicationGetPayload<{
       include: ReturnType<HiringPostsService['applicationInclude']>;
     }>,
+    counts?: Map<number, PipelineCounts>,
   ) {
     return {
       ...application,
-      hiringPost: this.toHiringPostCard(application.hiringPost),
+      hiringPost: this.toHiringPostCard(
+        application.hiringPost,
+        undefined,
+        counts,
+      ),
     };
   }
 

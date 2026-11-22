@@ -129,6 +129,16 @@ export class CreateHiringPostDto {
   @MaxLength(80, { each: true })
   skills?: string[];
 
+  /**
+   * How many people the post hires, 1 to 50. Not sent: 1.
+   * null means "keep hiring until I close the post" (no limit).
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  openings?: number | null;
+
   /** When the post stops being listed. */
   @IsOptional()
   @IsDateString()

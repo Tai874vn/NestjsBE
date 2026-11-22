@@ -49,23 +49,47 @@ describe('HiringPostsService', () => {
         groupBy: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
+      // The transaction mock runs the callback with this same mock as `tx`.
+      $transaction: jest.fn(),
       hiringApplication: {
         findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         update: jest.fn(),
       },
     };
+    prisma.$transaction.mockImplementation(
+      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+    );
     const aiQueue = {
       kick: jest.fn(),
       enqueue: jest.fn().mockResolvedValue(undefined),
+    };
+    const events = {
+      record: jest.fn().mockResolvedValue(undefined),
+      announce: jest.fn().mockResolvedValue(undefined),
+    };
+    const sweeper = {
+      sweep: jest.fn().mockResolvedValue([]),
+      announceSwept: jest.fn().mockResolvedValue(undefined),
     };
 
     return {
       prisma,
       aiQueue,
-      service: new HiringPostsService(prisma as never, aiQueue as never),
+      events,
+      sweeper,
+      service: new HiringPostsService(
+        prisma as never,
+        aiQueue as never,
+        events as never,
+        sweeper as never,
+      ),
     };
   }
 
@@ -533,6 +557,11 @@ describe('HiringPostsService', () => {
         data: {
           coverLetter: 'Available again.',
           status: HiringApplicationStatus.APPLIED,
+          statusReason: null,
+          statusNote: null,
+          offerNote: null,
+          offeredAt: null,
+          decidedAt: null,
         },
       }),
     );
@@ -598,4 +627,199 @@ describe('HiringPostsService', () => {
     expect(aiQueue.kick).not.toHaveBeenCalled();
   });
 
+  describe('openings, sweep on close and the new-applicant notification', () => {
+    const newPost = {
+      title: 'Security Analyst',
+      description: 'Monitor alerts and respond to incidents quickly',
+      occupationCode: '2529.6',
+      yearsRequired: 3,
+    };
+
+    it('stores openings: 1 when not sent, the number sent, and null kept', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.create.mockResolvedValue({ ...openPost, openings: 1 });
+
+      await service.create(newPost, 2);
+      await service.create({ ...newPost, openings: 4 }, 2);
+      await service.create({ ...newPost, openings: null }, 2);
+
+      expect(prisma.hiringPost.create.mock.calls[0][0].data.openings).toBe(1);
+      expect(prisma.hiringPost.create.mock.calls[1][0].data.openings).toBe(4);
+      expect(prisma.hiringPost.create.mock.calls[2][0].data.openings).toBeNull();
+    });
+
+    it('closing an open post sweeps it in the same transaction, then tells the candidates', async () => {
+      const { prisma, service, sweeper } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      prisma.hiringPost.update.mockResolvedValue({
+        ...openPost,
+        status: HiringPostStatus.CLOSED,
+      });
+      sweeper.sweep.mockResolvedValue([7, 8]);
+
+      await service.update(
+        openPost.id,
+        { status: HiringPostStatus.CLOSED },
+        2,
+        Role.EMPLOYER,
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // The close is claimed only while the post is still OPEN.
+      expect(prisma.hiringPost.updateMany).toHaveBeenCalledWith({
+        where: { id: openPost.id, status: HiringPostStatus.OPEN },
+        data: { status: HiringPostStatus.CLOSED },
+      });
+      expect(sweeper.sweep).toHaveBeenCalledWith(
+        prisma,
+        openPost.id,
+        'POST_CLOSED',
+        2,
+      );
+      expect(sweeper.announceSwept).toHaveBeenCalledWith(prisma, {
+        postId: openPost.id,
+        postTitle: openPost.title,
+        reason: 'POST_CLOSED',
+        actorId: 2,
+        candidateIds: [7, 8],
+      });
+    });
+
+    it('does not sweep when another request closed the post first', async () => {
+      const { prisma, service, sweeper } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      prisma.hiringPost.updateMany.mockResolvedValue({ count: 0 });
+      prisma.hiringPost.update.mockResolvedValue({
+        ...openPost,
+        status: HiringPostStatus.CLOSED,
+      });
+
+      await service.update(
+        openPost.id,
+        { status: HiringPostStatus.CLOSED },
+        2,
+        Role.EMPLOYER,
+      );
+
+      expect(sweeper.sweep).not.toHaveBeenCalled();
+      expect(sweeper.announceSwept).not.toHaveBeenCalled();
+    });
+
+    it('editing or reopening a closed post does not sweep or change applications', async () => {
+      const { prisma, service, sweeper } = createService();
+      const closedPost = { ...openPost, status: HiringPostStatus.CLOSED };
+      prisma.hiringPost.findUnique.mockResolvedValue(closedPost);
+      prisma.hiringPost.update.mockResolvedValue(openPost);
+
+      await service.update(
+        openPost.id,
+        { status: HiringPostStatus.CLOSED, location: 'Hanoi' },
+        2,
+        Role.EMPLOYER,
+      );
+      await service.update(
+        openPost.id,
+        { status: HiringPostStatus.OPEN },
+        2,
+        Role.EMPLOYER,
+      );
+
+      expect(prisma.hiringPost.updateMany).not.toHaveBeenCalled();
+      expect(sweeper.sweep).not.toHaveBeenCalled();
+      expect(sweeper.announceSwept).not.toHaveBeenCalled();
+      expect(prisma.hiringApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('apply records an applied event and tells the recruiter', async () => {
+      const { prisma, service, events } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      prisma.hiringApplication.findUnique.mockResolvedValue(null);
+      prisma.hiringApplication.create.mockResolvedValue(applicationCard());
+
+      await service.apply(openPost.id, 7, { coverLetter: 'Hello' });
+
+      expect(events.record).toHaveBeenCalledWith(prisma, {
+        applicationId: 99,
+        actorId: 7,
+        type: 'applied',
+      });
+      expect(events.announce).toHaveBeenCalledWith({
+        recipientId: openPost.recruiterId,
+        actorId: 7,
+        kind: 'received',
+        title: 'New applicant',
+        body: 'Candidate applied for Security Analyst.',
+        applicationId: 99,
+        postId: openPost.id,
+        forRecruiter: true,
+      });
+    });
+
+    it('re-applying after a withdrawal records a reapplied event', async () => {
+      const { prisma, service, events } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      prisma.hiringApplication.findUnique.mockResolvedValue({
+        id: 99,
+        status: HiringApplicationStatus.WITHDRAWN,
+      });
+      prisma.hiringApplication.update.mockResolvedValue(applicationCard());
+
+      await service.apply(openPost.id, 7, {});
+
+      expect(events.record).toHaveBeenCalledWith(prisma, {
+        applicationId: 99,
+        actorId: 7,
+        type: 'reapplied',
+      });
+      expect(events.announce).toHaveBeenCalledTimes(1);
+    });
+
+    it('the owner list has pipeline counts from one groupBy, with every key', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findMany.mockResolvedValue([
+        { ...openPost, openings: 3 },
+        { ...openPost, id: 11 },
+      ]);
+      prisma.hiringPost.count.mockResolvedValue(2);
+      prisma.hiringApplication.groupBy.mockResolvedValue([
+        { hiringPostId: 10, status: 'APPLIED', _count: { _all: 4 } },
+        { hiringPostId: 10, status: 'OFFERED', _count: { _all: 1 } },
+        { hiringPostId: 10, status: 'HIRED', _count: { _all: 2 } },
+      ]);
+
+      const result = await service.findMine(2, Role.EMPLOYER, {});
+
+      expect(prisma.hiringApplication.groupBy).toHaveBeenCalledTimes(1);
+      expect(prisma.hiringApplication.groupBy.mock.calls[0][0]).toMatchObject({
+        by: ['hiringPostId', 'status'],
+        where: { hiringPostId: { in: [10, 11] } },
+      });
+      expect(result.content.data[0]).toMatchObject({
+        openings: 3,
+        hiredCount: 2,
+        offersWaiting: 1,
+        pipeline: { APPLIED: 4, REVIEWING: 0, INTERVIEWING: 0, OFFERED: 1, HIRED: 2 },
+      });
+      expect(result.content.data[1]).toMatchObject({
+        hiredCount: 0,
+        offersWaiting: 0,
+        pipeline: { APPLIED: 0, REVIEWING: 0, INTERVIEWING: 0, OFFERED: 0, HIRED: 0 },
+      });
+    });
+
+    it('public cards show hired and waiting offers but not the pipeline', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findMany.mockResolvedValue([openPost]);
+      prisma.hiringPost.count.mockResolvedValue(1);
+      prisma.hiringApplication.groupBy.mockResolvedValue([
+        { hiringPostId: 10, status: 'HIRED', _count: { _all: 1 } },
+      ]);
+
+      const result = await service.findOpen({});
+
+      expect(prisma.hiringApplication.groupBy).toHaveBeenCalledTimes(1);
+      expect(result.content.data[0]).toMatchObject({ hiredCount: 1, offersWaiting: 0 });
+      expect(result.content.data[0]).not.toHaveProperty('pipeline');
+    });
+  });
 });
