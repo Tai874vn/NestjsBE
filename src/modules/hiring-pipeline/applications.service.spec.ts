@@ -5,6 +5,7 @@ import {
   InterviewStatus,
 } from '@prisma/client';
 import { Role } from '../../common/constants/roles';
+import { ApplicationPipelineService } from './application-pipeline.service';
 import { ApplicationsQueryService } from './applications-query.service';
 import { ApplicationsService } from './applications.service';
 
@@ -59,8 +60,14 @@ describe('ApplicationsService', () => {
       announceSwept: jest.fn().mockResolvedValue(undefined),
     };
     const query = { detail: jest.fn().mockResolvedValue({ id: 99 }) };
-    const service = new ApplicationsService(
+    const pipeline = new ApplicationPipelineService(
       prisma as never,
+      events as never,
+      sweeper as never,
+      query as never,
+    );
+    const service = new ApplicationsService(
+      pipeline,
       events as never,
       sweeper as never,
       query as never,
