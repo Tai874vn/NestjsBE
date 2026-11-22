@@ -15,7 +15,7 @@ export type SweepReason = 'POSITION_FILLED' | 'POST_CLOSED';
 const ACTIVE_STATUSES = Object.values(HiringApplicationStatus).filter(isActive);
 
 /** Interviews that are not finished yet. */
-const ACTIVE_INTERVIEW_STATUSES: InterviewStatus[] = [
+export const ACTIVE_INTERVIEW_STATUSES: InterviewStatus[] = [
   InterviewStatus.PROPOSED,
   InterviewStatus.RESCHEDULE_REQUESTED,
   InterviewStatus.SCHEDULED,

@@ -26,29 +26,18 @@ import {
 import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
+import { PostApplicationsQueryDto } from '../dto/post-applications-query.dto';
 import { findOccupation } from '../../occupations/occupation-catalogue';
+import {
+  emptyPipeline,
+  hiringPostInclude,
+  HiringPostWithMeta,
+  PipelineCounts,
+  pipelineCounts,
+  toHiringPostCard,
+} from './hiring-post-card';
 import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
 import { PostSweepService } from '../../hiring-pipeline/post-sweep.service';
-
-const hiringPostInclude = {
-  recruiter: {
-    select: {
-      id: true,
-      name: true,
-      avatar: true,
-      headline: true,
-    },
-  },
-  _count: {
-    select: {
-      applications: true,
-    },
-  },
-} satisfies Prisma.HiringPostInclude;
-
-type HiringPostWithMeta = Prisma.HiringPostGetPayload<{
-  include: typeof hiringPostInclude;
-}>;
 
 /** The list filters a facet can leave out to count its own choices. */
 type FacetGroup =
@@ -60,17 +49,6 @@ type FacetGroup =
 type OpenFilters = { open: Prisma.HiringPostWhereInput[] } & Partial<
   Record<FacetGroup, Prisma.HiringPostWhereInput>
 >;
-
-/** The application statuses counted on the owner's post card (the "pipeline"). */
-const PIPELINE_STATUSES = [
-  HiringApplicationStatus.APPLIED,
-  HiringApplicationStatus.REVIEWING,
-  HiringApplicationStatus.INTERVIEWING,
-  HiringApplicationStatus.OFFERED,
-  HiringApplicationStatus.HIRED,
-] as const;
-type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
-type PipelineCounts = Record<PipelineStatus, number>;
 
 const MAX_OCCUPATION_FACETS = 10;
 const MAX_LOCATION_OPTIONS = 50;
@@ -175,7 +153,7 @@ export class HiringPostsService {
       content: this.toPaginatedContent(
         posts.map((post) => ({
           ...this.toHiringPostCard(post, undefined, counts),
-          pipeline: counts.get(post.id) ?? this.emptyPipeline(),
+          pipeline: counts.get(post.id) ?? emptyPipeline(),
         })),
         total,
         page,
@@ -521,20 +499,28 @@ export class HiringPostsService {
     };
   }
 
+  /**
+   * The recruiter's applicants page: one page of the post's applications (only `status` ones when given),
+   * plus `counts`, how many applications the post has in each of the 8 statuses (for the tabs).
+   * One groupBy (a single query that counts rows per status) gives `counts` and the post card's numbers.
+   */
   async findApplicationsForPost(
     id: number,
     userId: number,
     userRole: Role,
-    query: PaginationDto,
+    query: PostApplicationsQueryDto,
   ) {
     const post = await this.findPostOrThrow(id);
     this.assertCanManage(post.recruiterId, userId, userRole);
 
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const where: Prisma.HiringApplicationWhereInput = { hiringPostId: id };
+    const where: Prisma.HiringApplicationWhereInput = {
+      hiringPostId: id,
+      ...(query.status ? { status: query.status } : {}),
+    };
 
-    const [applications, total] = await Promise.all([
+    const [applications, total, groups] = await Promise.all([
       this.prisma.hiringApplication.findMany({
         where,
         skip: (page - 1) * pageSize,
@@ -543,19 +529,42 @@ export class HiringPostsService {
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.hiringApplication.count({ where }),
+      this.prisma.hiringApplication.groupBy({
+        by: ['status'],
+        where: { hiringPostId: id },
+        _count: { _all: true },
+      }),
     ]);
-    const counts = await this.pipelineCounts([id]);
+    const counts = Object.fromEntries(
+      Object.values(HiringApplicationStatus).map((status) => [status, 0]),
+    ) as Record<HiringApplicationStatus, number>;
+    for (const group of groups) counts[group.status] = group._count._all;
+    const cardCounts = new Map<number, PipelineCounts>([
+      [
+        id,
+        {
+          APPLIED: counts.APPLIED,
+          REVIEWING: counts.REVIEWING,
+          INTERVIEWING: counts.INTERVIEWING,
+          OFFERED: counts.OFFERED,
+          HIRED: counts.HIRED,
+        },
+      ],
+    ]);
 
     return {
       message: 'Get hiring applications successfully',
-      content: this.toPaginatedContent(
-        applications.map((application) =>
-          this.toApplicationCard(application, counts),
+      content: {
+        ...this.toPaginatedContent(
+          applications.map((application) =>
+            this.toApplicationCard(application, cardCounts),
+          ),
+          total,
+          page,
+          pageSize,
         ),
-        total,
-        page,
-        pageSize,
-      ),
+        counts,
+      },
     };
   }
 
@@ -859,36 +868,8 @@ export class HiringPostsService {
     return new Set(applications.map((application) => application.hiringPostId));
   }
 
-  /**
-   * How many applications of each post are at each pipeline step, from ONE groupBy (a single query that
-   * counts rows per post and status; no query per post).
-   * Every post gets all five keys; a missing one is 0.
-   */
-  private async pipelineCounts(
-    postIds: number[],
-  ): Promise<Map<number, PipelineCounts>> {
-    const counts = new Map<number, PipelineCounts>();
-    if (!postIds.length) return counts;
-    const groups = await this.prisma.hiringApplication.groupBy({
-      by: ['hiringPostId', 'status'],
-      where: {
-        hiringPostId: { in: postIds },
-        status: { in: [...PIPELINE_STATUSES] },
-      },
-      _count: { _all: true },
-    });
-    for (const postId of postIds) counts.set(postId, this.emptyPipeline());
-    for (const group of groups) {
-      const postCounts = counts.get(group.hiringPostId);
-      if (postCounts && group.status in postCounts) {
-        postCounts[group.status as PipelineStatus] = group._count._all;
-      }
-    }
-    return counts;
-  }
-
-  private emptyPipeline(): PipelineCounts {
-    return { APPLIED: 0, REVIEWING: 0, INTERVIEWING: 0, OFFERED: 0, HIRED: 0 };
+  private pipelineCounts(postIds: number[]) {
+    return pipelineCounts(this.prisma, postIds);
   }
 
   private applicationInclude() {
@@ -913,25 +894,12 @@ export class HiringPostsService {
     } satisfies Prisma.HiringApplicationInclude;
   }
 
-  /**
-   * The post as the app shows it. `counts` (from pipelineCounts) gives hiredCount (people hired) and
-   * offersWaiting (offers not answered yet); a post missing from it shows 0 for both.
-   */
   private toHiringPostCard(
     post: HiringPostWithMeta,
-    appliedPostIds = new Set<number>(),
-    counts = new Map<number, PipelineCounts>(),
+    appliedPostIds?: Set<number>,
+    counts?: Map<number, PipelineCounts>,
   ) {
-    const { _count, ...rest } = post;
-    const postCounts = counts.get(post.id);
-    return {
-      ...rest,
-      occupationTitle: findOccupation(post.occupationCode)?.title ?? null,
-      applicationCount: _count.applications,
-      hiredCount: postCounts?.HIRED ?? 0,
-      offersWaiting: postCounts?.OFFERED ?? 0,
-      viewerHasApplied: appliedPostIds.has(post.id),
-    };
+    return toHiringPostCard(post, appliedPostIds, counts);
   }
 
   private toApplicationCard(

@@ -822,4 +822,64 @@ describe('HiringPostsService', () => {
       expect(result.content.data[0]).not.toHaveProperty('pipeline');
     });
   });
+  describe('applications of a post (recruiter pipeline page)', () => {
+    it('filters by status and returns the count of every status from one groupBy', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      prisma.hiringApplication.findMany.mockResolvedValue([
+        applicationCard({ status: HiringApplicationStatus.REVIEWING }),
+      ]);
+      prisma.hiringApplication.count.mockResolvedValue(1);
+      prisma.hiringApplication.groupBy.mockResolvedValue([
+        { status: 'APPLIED', _count: { _all: 3 } },
+        { status: 'REVIEWING', _count: { _all: 1 } },
+        { status: 'HIRED', _count: { _all: 2 } },
+        { status: 'WITHDRAWN', _count: { _all: 1 } },
+      ]);
+
+      const result = await service.findApplicationsForPost(
+        openPost.id,
+        2,
+        Role.EMPLOYER,
+        { page: 1, pageSize: 10, status: HiringApplicationStatus.REVIEWING },
+      );
+
+      expect(prisma.hiringApplication.findMany.mock.calls[0][0].where).toEqual({
+        hiringPostId: openPost.id,
+        status: HiringApplicationStatus.REVIEWING,
+      });
+      expect(prisma.hiringApplication.count).toHaveBeenCalledWith({
+        where: { hiringPostId: openPost.id, status: HiringApplicationStatus.REVIEWING },
+      });
+      expect(prisma.hiringApplication.groupBy).toHaveBeenCalledTimes(1);
+      expect(prisma.hiringApplication.groupBy).toHaveBeenCalledWith({
+        by: ['status'],
+        where: { hiringPostId: openPost.id },
+        _count: { _all: true },
+      });
+      expect(result.content.counts).toEqual({
+        APPLIED: 3,
+        REVIEWING: 1,
+        INTERVIEWING: 0,
+        OFFERED: 0,
+        HIRED: 2,
+        REJECTED: 0,
+        DECLINED: 0,
+        WITHDRAWN: 1,
+      });
+      expect(result.content.data[0].hiringPost).toMatchObject({ hiredCount: 2, offersWaiting: 0 });
+      expect(result.content.total).toBe(1);
+    });
+
+    it('lists every status when no filter is given', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+
+      await service.findApplicationsForPost(openPost.id, 2, Role.EMPLOYER, {});
+
+      expect(prisma.hiringApplication.findMany.mock.calls[0][0].where).toEqual({
+        hiringPostId: openPost.id,
+      });
+    });
+  });
 });

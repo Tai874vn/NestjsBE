@@ -22,6 +22,7 @@ import { ValidatedUser } from '../../../types';
 import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { HiringPostQueryDto } from '../dto/hiring-post-query.dto';
+import { PostApplicationsQueryDto } from '../dto/post-applications-query.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { HiringPostsService } from '../services/hiring-posts.service';
 
@@ -127,7 +128,7 @@ export class HiringPostsController {
   @Roles(Role.EMPLOYER, Role.ADMIN)
   findApplicationsForPost(
     @Param('id', ParseIntPipe) id: number,
-    @Query() query: PaginationDto,
+    @Query() query: PostApplicationsQueryDto,
     @CurrentUser() user: ValidatedUser,
   ) {
     return this.hiringPostsService.findApplicationsForPost(
