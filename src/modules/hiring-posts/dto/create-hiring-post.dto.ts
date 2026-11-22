@@ -2,7 +2,9 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
+  IsIn,
   IsInt,
+  IsISO4217CurrencyCode,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -16,6 +18,9 @@ import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
+
+export const SALARY_PERIODS = ['month', 'year', 'hour'] as const;
+export type SalaryPeriod = (typeof SALARY_PERIODS)[number];
 
 export class CreateHiringPostDto {
   @Transform(trimString)
@@ -59,6 +64,24 @@ export class CreateHiringPostDto {
   @IsInt()
   @Min(0)
   salaryMax?: number;
+
+  /** ISO 4217 code of salaryMin/salaryMax, e.g. USD or VND. Defaults to USD. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() || undefined : value,
+  )
+  @IsOptional()
+  @IsISO4217CurrencyCode({
+    message: 'salaryCurrency must be an ISO 4217 currency code, e.g. USD',
+  })
+  salaryCurrency?: string;
+
+  /** What salaryMin/salaryMax are paid per. Defaults to month. */
+  @Transform(optionalTrimString)
+  @IsOptional()
+  @IsIn(SALARY_PERIODS, {
+    message: `salaryPeriod must be one of ${SALARY_PERIODS.join(', ')}`,
+  })
+  salaryPeriod?: SalaryPeriod;
 
   @Transform(optionalTrimString)
   @IsOptional()

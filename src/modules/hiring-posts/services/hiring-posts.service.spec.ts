@@ -46,9 +46,11 @@ describe('HiringPostsService', () => {
         findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
         update: jest.fn(),
       },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       hiringApplication: {
         findUnique: jest.fn(),
         create: jest.fn(),
@@ -140,8 +142,8 @@ describe('HiringPostsService', () => {
     await service.findOpen({
       page: 1,
       pageSize: 10,
-      occupation: '2512.3',
-      level: 'Mid',
+      occupation: ['2512.3'],
+      level: ['Mid'],
       location: 'Hanoi',
     });
 
@@ -150,8 +152,8 @@ describe('HiringPostsService', () => {
       expect.arrayContaining([
         { status: HiringPostStatus.OPEN },
         { OR: [{ closesAt: null }, { closesAt: { gt: expect.any(Date) } }] },
-        { occupationCode: '2512.3' },
-        { predictedSeniority: 'Mid' },
+        { occupationCode: { in: ['2512.3'] } },
+        { predictedSeniority: { in: ['Mid'] } },
         { location: { contains: 'Hanoi', mode: 'insensitive' } },
       ]),
     );
@@ -256,7 +258,7 @@ describe('HiringPostsService', () => {
 
     it('rejects an unknown occupation filter with 400', async () => {
       const { service } = createService();
-      await expect(service.findOpen({ occupation: '9999.99' })).rejects.toMatchObject({ status: 400 });
+      await expect(service.findOpen({ occupation: ['9999.99'] })).rejects.toMatchObject({ status: 400 });
     });
 
     it('shows the occupation title on the post card', async () => {
@@ -267,6 +269,169 @@ describe('HiringPostsService', () => {
         occupationCode: '2529.6',
         occupationTitle: 'ICT security consultant',
       });
+    });
+  });
+
+  describe('list search, sort, locations and facets', () => {
+    it('counts at most 100 pages but keeps the real total', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.count.mockResolvedValue(5_000);
+
+      const result = await service.findOpen({ page: 1, pageSize: 10 });
+
+      expect(result.content).toMatchObject({ totalRow: 5_000, totalPages: 100 });
+    });
+
+    it('searches the company name and, ignoring case, the skills', async () => {
+      const { prisma, service } = createService();
+      prisma.$queryRaw.mockResolvedValue([{ id: 10 }, { id: 12 }]);
+
+      await service.findOpen({ keyword: 'selenium' });
+
+      const keyword = prisma.hiringPost.findMany.mock.calls[0][0].where.AND[2];
+      expect(keyword.OR).toEqual(
+        expect.arrayContaining([
+          { companyName: { contains: 'selenium', mode: 'insensitive' } },
+          { id: { in: [10, 12] } },
+        ]),
+      );
+      expect(prisma.$queryRaw.mock.calls[0].slice(1)).toEqual(['%selenium%']);
+    });
+
+    it('escapes LIKE wildcards in the skill search', async () => {
+      const { prisma, service } = createService();
+      await service.findOpen({ keyword: '100%_c\\' });
+      expect(prisma.$queryRaw.mock.calls[0].slice(1)).toEqual([
+        '%100\\%\\_c\\\\%',
+      ]);
+    });
+
+    it.each([
+      [undefined, [{ updatedAt: 'desc' }, { id: 'desc' }]],
+      [
+        'closing_soon',
+        [{ closesAt: { sort: 'asc', nulls: 'last' } }, { id: 'desc' }],
+      ],
+      [
+        'salary_high',
+        [
+          { salaryMax: { sort: 'desc', nulls: 'last' } },
+          { salaryMin: { sort: 'desc', nulls: 'last' } },
+          { id: 'desc' },
+        ],
+      ],
+    ] as const)(
+      'orders by sort=%s, always ending with id',
+      async (sort, orderBy) => {
+        const { prisma, service } = createService();
+        await service.findOpen({ sort });
+        expect(prisma.hiringPost.findMany.mock.calls[0][0].orderBy).toEqual(
+          orderBy,
+        );
+      },
+    );
+
+    it('ORs values inside a filter and ANDs the filters', async () => {
+      const { prisma, service } = createService();
+      await service.findOpen({
+        level: ['Junior', 'Mid'],
+        employmentType: ['Full-time', 'Internship'],
+      });
+      expect(prisma.hiringPost.findMany.mock.calls[0][0].where.AND).toEqual(
+        expect.arrayContaining([
+          { predictedSeniority: { in: ['Junior', 'Mid'] } },
+          {
+            OR: [
+              { employmentType: { equals: 'Full-time', mode: 'insensitive' } },
+              { employmentType: { equals: 'Internship', mode: 'insensitive' } },
+            ],
+          },
+        ]),
+      );
+    });
+
+    it('names the unknown occupation codes in the 400', async () => {
+      const { service } = createService();
+      await expect(
+        service.findOpen({ occupation: ['2512.3', '9999.99'] }),
+      ).rejects.toThrow(/Unknown occupation: 9999\.99/);
+    });
+
+    it('merges location spellings and counts what ?location= would find', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.groupBy.mockResolvedValue([
+        { location: 'Da Nang', _count: { _all: 4 } },
+        { location: ' da nang ', _count: { _all: 1 } },
+        { location: 'Da Nang, Vietnam', _count: { _all: 2 } },
+        { location: 'Remote - APAC', _count: { _all: 3 } },
+      ]);
+
+      const result = await service.findLocations();
+
+      expect(result.content).toEqual([
+        { value: 'Da Nang', count: 7 },
+        { value: 'Remote - APAC', count: 3 },
+        { value: 'Da Nang, Vietnam', count: 2 },
+      ]);
+      const where = prisma.hiringPost.groupBy.mock.calls[0][0].where;
+      expect(JSON.stringify(where)).toContain('"status":"OPEN"');
+    });
+
+    it('counts each facet with every filter but its own', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.groupBy.mockImplementation(
+        ({ by }: { by: string[] }) => {
+          if (by[0] === 'occupationCode') {
+            return Promise.resolve([
+              { occupationCode: '2512.3', _count: { _all: 9 } },
+              { occupationCode: 'nope', _count: { _all: 50 } },
+            ]);
+          }
+          if (by[0] === 'predictedSeniority') {
+            return Promise.resolve([
+              { predictedSeniority: 'Senior', _count: { _all: 9 } },
+              { predictedSeniority: 'Mid', _count: { _all: 6 } },
+              { predictedSeniority: null, _count: { _all: 2 } },
+            ]);
+          }
+          if (by[0] === 'employmentType') {
+            return Promise.resolve([
+              { employmentType: 'Full-time', _count: { _all: 10 } },
+              { employmentType: 'full-time', _count: { _all: 4 } },
+              { employmentType: null, _count: { _all: 1 } },
+            ]);
+          }
+          return Promise.resolve([]);
+        },
+      );
+
+      const result = await service.findFacets({
+        level: ['Senior'],
+        employmentType: ['Full-time'],
+      });
+
+      expect(result.content.occupations).toEqual([
+        { code: '2512.3', title: expect.any(String), count: 9 },
+      ]);
+      expect(result.content.levels).toEqual([
+        { value: 'Junior', count: 0 },
+        { value: 'Mid', count: 6 },
+        { value: 'Senior', count: 9 },
+      ]);
+      expect(result.content.employmentTypes).toEqual([
+        { value: 'Full-time', count: 14 },
+      ]);
+
+      const whereFor = (field: string) =>
+        JSON.stringify(
+          prisma.hiringPost.groupBy.mock.calls.find(
+            ([args]: [{ by: string[] }]) => args.by[0] === field,
+          )![0].where,
+        );
+      expect(whereFor('predictedSeniority')).not.toContain('predictedSeniority');
+      expect(whereFor('predictedSeniority')).toContain('Full-time');
+      expect(whereFor('employmentType')).toContain('Senior');
+      expect(whereFor('employmentType')).not.toContain('Full-time');
     });
   });
 

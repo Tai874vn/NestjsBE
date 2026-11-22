@@ -471,6 +471,10 @@ model HiringPost {
   employmentType String?
   salaryMin      Int?
   salaryMax      Int?
+  /// ISO 4217 currency of salaryMin/salaryMax.
+  salaryCurrency String           @default("USD")
+  /// What the salary is paid per: month, year or hour.
+  salaryPeriod   String           @default("month")
   /// Shown on the post instead of the recruiter's display name.
   companyName    String?
   /// ESCO occupation code (src/common/data/occupations.json) the post hires for.
@@ -507,6 +511,10 @@ model HiringPost {
   @@index([recruiterId, status, updatedAt, id])
   @@index([status, updatedAt, id])
   @@index([status, occupationCode])
+  /// sort=closing_soon: closesAt ASC is NULLS LAST in Postgres, as the query asks.
+  @@index([status, closesAt, id(sort: Desc)])
+  /// sort=salary_high. The migration creates it with NULLS LAST, which Prisma cannot express.
+  @@index([status, salaryMax(sort: Desc), salaryMin(sort: Desc), id(sort: Desc)])
   @@index([aiStatus, aiQueuedAt])
   @@map("hiring_posts")
 }

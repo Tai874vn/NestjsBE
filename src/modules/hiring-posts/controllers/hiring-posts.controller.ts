@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -37,6 +38,21 @@ export class HiringPostsController {
     @CurrentUser() user: ValidatedUser | null,
   ) {
     return this.hiringPostsService.findOpen(query, user?.id);
+  }
+
+  // Declared before ':id' so "locations" and "facets" are not read as a post id.
+  // Same for everyone, so browsers and proxies may keep it for 5 minutes.
+  @Get('locations')
+  @OptionalAuth()
+  @Header('Cache-Control', 'public, max-age=300')
+  findLocations() {
+    return this.hiringPostsService.findLocations();
+  }
+
+  @Get('facets')
+  @OptionalAuth()
+  findFacets(@Query() query: HiringPostQueryDto) {
+    return this.hiringPostsService.findFacets(query);
   }
 
   @Get('mine')

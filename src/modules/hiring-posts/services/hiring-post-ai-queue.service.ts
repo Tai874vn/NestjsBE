@@ -64,6 +64,12 @@ interface ClaimedPost {
  * marks the post QUEUED; this worker, when the AI service answers its health check, predicts the level from the
  * occupation, required years, skills and text. Rows are claimed with FOR UPDATE SKIP LOCKED, so several backend
  * instances behind a load balancer never process the same post twice. Mirrors the resume AI queue.
+ *
+ * In simple words: when a recruiter saves a post, we answer at once and put the post in a waiting line
+ * (aiStatus = QUEUED). This background worker, every 10 seconds or right after a save, takes up to 5 posts,
+ * asks the AI service "what level does this post ask for?" and saves the answer (DONE), or a message the
+ * recruiter can act on (AI_UNAVAILABLE / NEEDS_INPUT / FAILED). The full explanation of the queue, the
+ * statuses and SKIP LOCKED is in users/services/resume-ai-queue.service.ts, which works the same way.
  */
 @Injectable()
 export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
