@@ -9,13 +9,15 @@ import { InterviewsController } from './controllers/interviews.controller';
 import { HiringEventsService } from './hiring-events.service';
 import { InterviewsService } from './interviews.service';
 import { PostSweepService } from './post-sweep.service';
+import { VideoCallService } from './video-call.service';
 
 /**
  * Hiring pipeline: applications → interviews → offers → hired.
  * It has the history rows, notifications and chat messages (HiringEventsService), the sweep of a
  * closing post (PostSweepService), the shared lock-check-write-tell steps (ApplicationPipelineService),
  * the application detail and actions (ApplicationsService and ApplicationsQueryService, answered over
- * HTTP by ApplicationsController), and the interviews (InterviewsService, InterviewsController).
+ * HTTP by ApplicationsController), and the interviews (InterviewsService, InterviewsController) with their video call tokens
+ * (VideoCallService).
  */
 @Module({
   imports: [NotificationsModule, ChatModule],
@@ -27,6 +29,7 @@ import { PostSweepService } from './post-sweep.service';
     ApplicationsService,
     ApplicationsQueryService,
     InterviewsService,
+    VideoCallService,
   ],
   exports: [HiringEventsService, PostSweepService],
 })

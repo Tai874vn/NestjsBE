@@ -20,6 +20,7 @@ import {
   RequestInterviewDto,
 } from '../dto/interview.dto';
 import { InterviewsService } from '../interviews.service';
+import { VideoCallService } from '../video-call.service';
 
 /**
  * Interviews: the request (on an application) and the actions on one interview.
@@ -31,7 +32,10 @@ import { InterviewsService } from '../interviews.service';
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InterviewsController {
-  constructor(private readonly interviews: InterviewsService) {}
+  constructor(
+    private readonly interviews: InterviewsService,
+    private readonly videoCalls: VideoCallService,
+  ) {}
 
   @Post('applications/:id/interviews')
   @Roles(Role.EMPLOYER, Role.ADMIN)
@@ -60,7 +64,7 @@ export class InterviewsController {
   }
 
   @Post('interviews/:id/accept')
-  @Roles(Role.USER, Role.ADMIN)
+  @Roles(Role.USER)
   accept(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AcceptInterviewDto,
@@ -70,7 +74,7 @@ export class InterviewsController {
   }
 
   @Post('interviews/:id/reschedule')
-  @Roles(Role.USER, Role.ADMIN)
+  @Roles(Role.USER)
   requestReschedule(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ApplicationActionDto,
@@ -96,5 +100,14 @@ export class InterviewsController {
     @CurrentUser() user: ValidatedUser,
   ) {
     return this.interviews.complete(id, user);
+  }
+
+  // A token to join the video call of a scheduled online interview (only its candidate and recruiter).
+  @Post('interviews/:id/call-token')
+  callToken(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.videoCalls.callToken(id, user);
   }
 }

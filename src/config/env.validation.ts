@@ -70,6 +70,11 @@ export const envValidationSchema = Joi.object({
     .min(300)
     .default(86_400),
 
+  // LiveKit video calls (optional: without them the call-token endpoint answers 503)
+  LIVEKIT_URL: Joi.string().empty('').optional(),
+  LIVEKIT_API_KEY: Joi.string().empty('').optional(),
+  LIVEKIT_API_SECRET: Joi.string().empty('').optional(),
+
   // Cloudinary (if used)
   CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
   CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
