@@ -1,0 +1,68 @@
+# Every push and pull request: lint, unit tests and a production build, on GitHub's machines.
+# A push to main then builds the Docker images on the owner's own machine (a self-hosted runner
+# labelled "jobaura") into its local Docker, under the names compose.yaml uses:
+#   jobaura-backend:local           (Dockerfile target "runner")
+#   jobaura-backend-migrator:local  (Dockerfile target "migrator")
+# Each is also tagged with the commit SHA, for rolling back. No registry; nothing is deployed:
+# the owner restarts with `docker compose up -d`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Unit tests and prisma generate never connect; the URL only has to parse.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Lint
+        run: yarn eslint "{src,apps,libs,test}/**/*.ts"
+
+      - name: Unit tests
+        run: yarn jest --ci
+
+      - name: Build
+        run: yarn build
+
+  image:
+    needs: test
+    # Only trusted code reaches the owner's machine: pushes to main, never pull requests.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, jobaura]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Backend image
+        shell: powershell
+        run: |
+          docker build --target runner -t jobaura-backend:local -t "jobaura-backend:${{ github.sha }}" .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Migrator image
+        shell: powershell
+        run: |
+          docker build --target migrator -t jobaura-backend-migrator:local -t "jobaura-backend-migrator:${{ github.sha }}" .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
