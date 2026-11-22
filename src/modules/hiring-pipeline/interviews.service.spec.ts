@@ -602,6 +602,33 @@ describe('InterviewsService', () => {
     expect(events.record).not.toHaveBeenCalled();
   });
 
+  it('an interview action on a closed post is 409 and nothing is written', async () => {
+    const { prisma, events, service } = createService({
+      status: S.INTERVIEWING,
+      postStatus: HiringPostStatus.CLOSED,
+      interviews: [storedInterview()],
+    });
+
+    await expect(
+      service.accept(5, candidate, '2026-11-25T10:00:00+07:00'),
+    ).rejects.toThrow('This hiring post is closed.');
+    expect(prisma.interview.update).not.toHaveBeenCalled();
+    expect(events.record).not.toHaveBeenCalled();
+  });
+
+  it('the applicant of a different application cannot accept this interview (403, nothing written)', async () => {
+    const { prisma, events, service } = createService({
+      status: S.INTERVIEWING,
+      interviews: [storedInterview()],
+    });
+
+    await expect(
+      service.accept(5, { id: 8, role: Role.USER }, '2026-11-25T10:00:00+07:00'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.interview.update).not.toHaveBeenCalled();
+    expect(events.record).not.toHaveBeenCalled();
+  });
+
   it('an interview that does not exist is 404', async () => {
     const { service } = createService();
 
