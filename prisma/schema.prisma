@@ -57,6 +57,8 @@ model User {
   hiringPosts     HiringPost[]      @relation("HiringPostRecruiter")
   hiringApplications HiringApplication[] @relation("HiringApplicationApplicant")
   authSessions AuthSession[]
+  interviewsCreated Interview[] @relation("InterviewCreator")
+  hiringApplicationEvents HiringApplicationEvent[] @relation("HiringApplicationEventActor")
 
   @@index([role, profileCompleted, updatedAt, id])
   @@index([role, candidateDiscoverable, profileCompleted, updatedAt, id])
@@ -357,6 +359,9 @@ enum NotificationType {
   HIRE_CREATED
   HIRE_COMPLETED
   CHAT_MESSAGE
+  APPLICATION_RECEIVED
+  APPLICATION_UPDATE
+  INTERVIEW_UPDATE
 }
 
 enum RecommendationSnapshotKind {
@@ -372,9 +377,28 @@ enum HiringPostStatus {
 enum HiringApplicationStatus {
   APPLIED
   REVIEWING
-  ACCEPTED
+  INTERVIEWING
+  OFFERED
+  HIRED
   REJECTED
+  DECLINED
   WITHDRAWN
+}
+
+/// How an interview happens.
+enum InterviewMode {
+  ONLINE
+  ONSITE
+  PHONE
+}
+
+/// Where an interview is in its life: proposed times, a reschedule ask, booked, done or cancelled.
+enum InterviewStatus {
+  PROPOSED
+  RESCHEDULE_REQUESTED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
 }
 
 model Connection {
@@ -500,6 +524,8 @@ model HiringPost {
   aiQueuedAt     DateTime?
   aiClaimedAt    DateTime?
   aiAttempts     Int              @default(0)
+  /// How many people the post wants to hire. Null means no limit.
+  openings       Int?             @default(1)
   status         HiringPostStatus @default(OPEN)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -525,16 +551,77 @@ model HiringApplication {
   applicantId  Int
   coverLetter  String?
   status       HiringApplicationStatus @default(APPLIED)
+  /// Short reason code for the latest status change (for example why it was rejected).
+  statusReason String?
+  /// Free text that goes with the latest status change.
+  statusNote   String?
+  /// Message the recruiter sends with an offer.
+  offerNote    String?
+  offeredAt    DateTime?
+  /// When the applicant accepted or declined the offer.
+  decidedAt    DateTime?
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
 
   hiringPost HiringPost @relation(fields: [hiringPostId], references: [id], onDelete: Cascade)
   applicant  User       @relation("HiringApplicationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  interviews Interview[]
+  events     HiringApplicationEvent[]
 
   @@unique([hiringPostId, applicantId])
   @@index([applicantId, status, updatedAt, id])
   @@index([hiringPostId, status, updatedAt, id])
   @@map("hiring_applications")
+}
+
+/// One interview round for an application.
+model Interview {
+  id              Int             @id @default(autoincrement())
+  applicationId   Int
+  /// 1 for the first interview, 2 for the second, and so on.
+  round           Int
+  mode            InterviewMode
+  durationMinutes Int             @default(45)
+  /// Address, meeting link or phone number.
+  location        String?
+  note            String?
+  /// Times the recruiter offers; the applicant picks one.
+  proposedTimes   DateTime[]
+  scheduledAt     DateTime?
+  status          InterviewStatus @default(PROPOSED)
+  /// Why the applicant asked for other times.
+  rescheduleNote  String?
+  createdById     Int
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  application HiringApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("InterviewCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  /// The migration also adds a partial unique index (an index over only some rows):
+  /// at most one PROPOSED, RESCHEDULE_REQUESTED or SCHEDULED interview per application.
+  @@index([applicationId, round])
+  @@index([status, scheduledAt])
+  @@map("interviews")
+}
+
+/// History of one application: each status change, interview change or note, in time order.
+model HiringApplicationEvent {
+  id            Int      @id @default(autoincrement())
+  applicationId Int
+  /// Who did it. Null when the user is gone or the system did it.
+  actorId       Int?
+  type          String
+  data          Json?
+  createdAt     DateTime @default(now())
+
+  application HiringApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actor       User?             @relation("HiringApplicationEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+  @@map("hiring_application_events")
 }
 
 model ChatRoom {

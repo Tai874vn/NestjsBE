@@ -83,8 +83,8 @@ describe('buildActivity', () => {
     }
   });
 
-  it('accepts at most one applicant per post', () => {
-    expect(activity.applications.filter((application) => application.status === 'ACCEPTED').length).toBeLessThanOrEqual(1);
+  it('hires at most one applicant per post', () => {
+    expect(activity.applications.filter((application) => application.status === 'HIRED').length).toBeLessThanOrEqual(1);
   });
 
   it('keeps every date in the past and every connection between two different people', () => {
