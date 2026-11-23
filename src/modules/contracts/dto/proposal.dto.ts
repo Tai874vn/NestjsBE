@@ -26,6 +26,10 @@ import {
 export const MAX_REFERENCES = 10;
 export const PROPOSAL_MAX_PAGE_SIZE = 50;
 
+function emptyListIfNull({ value }: { value: unknown }): unknown {
+  return value ?? [];
+}
+
 /** A link people can open in a browser: only http: or https: (so never `javascript:`). */
 export function isWebLink(value: unknown): boolean {
   if (typeof value !== 'string' || value.length > 2000) return false;
@@ -111,12 +115,16 @@ export class VersionBodyDto {
   @MaxLength(5000)
   brief: string;
 
+  // null (or no value) means an empty list, so Prisma never gets null for a list column.
+  @Transform(emptyListIfNull)
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_REFERENCES)
   @IsWebLink({ each: true, message: 'referenceLinks must be web links.' })
   referenceLinks: string[] = [];
 
+  // null (or no value) means an empty list, so Prisma never gets null for a list column.
+  @Transform(emptyListIfNull)
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_REFERENCES)

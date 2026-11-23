@@ -419,6 +419,25 @@ describe('ProposalsService', () => {
       );
     });
 
+    it('refuses a version whose first due date has passed (409), nothing created', async () => {
+      const stale = storedVersion(1, 3);
+      stale.milestones[0].dueDate = new Date(Date.now() - 1000).toISOString();
+      const { prisma, events, service } = createService(
+        proposalRow({ versions: [stale] }),
+      );
+
+      await expect(service.accept(5, freelancer, 1)).rejects.toThrow(
+        new ConflictException(
+          'The first due date has passed. Send a counter-offer with new dates.',
+        ),
+      );
+      expectProposalLocked(prisma);
+      expect(prisma.contract.create).not.toHaveBeenCalled();
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+      expect(events.record).not.toHaveBeenCalled();
+      expect(events.announce).not.toHaveBeenCalled();
+    });
+
     it('refuses a proposal that was already accepted (409)', async () => {
       const { service } = createService(
         proposalRow({ status: P.ACCEPTED, turnUserId: null }),

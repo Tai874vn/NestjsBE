@@ -303,6 +303,13 @@ export class ProposalsService {
       write: async ({ tx, proposal, now }) => {
         const latest = this.latestOf(proposal);
         const milestones = storedMilestones(latest.milestones);
+        // Spec 4.2: the first due date is in the future. A version can wait up to 7 days, so a
+        // contract must not start already late; the turn holder can counter with new dates.
+        if (new Date(milestones[0].dueDate).getTime() <= now.getTime()) {
+          throw new ConflictException(
+            'The first due date has passed. Send a counter-offer with new dates.',
+          );
+        }
         let contract: { id: number };
         try {
           contract = await tx.contract.create({

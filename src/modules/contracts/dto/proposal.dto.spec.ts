@@ -81,6 +81,16 @@ describe('proposal DTOs', () => {
     expect(dto.referenceImages).toEqual([]);
   });
 
+  it('turns null lists into empty lists', async () => {
+    const { dto, messages } = await parse(
+      VersionBodyDto,
+      body({ referenceLinks: null, referenceImages: null }),
+    );
+    expect(messages).toEqual([]);
+    expect(dto.referenceLinks).toEqual([]);
+    expect(dto.referenceImages).toEqual([]);
+  });
+
   // Review Focus 5: images only from our Cloudinary account.
   it.each([
     'https://res.cloudinary.com/other-cloud/image/upload/a.png',
