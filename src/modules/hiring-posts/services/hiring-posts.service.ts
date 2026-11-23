@@ -35,6 +35,9 @@ import {
   PipelineCounts,
   pipelineCounts,
   toHiringPostCard,
+  toViewerApplications,
+  ViewerApplication,
+  viewerApplicationSelect,
 } from './hiring-post-card';
 import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
 import {
@@ -100,15 +103,17 @@ export class HiringPostsService {
       this.prisma.hiringPost.count({ where }),
     ]);
     const postIds = posts.map((post) => post.id);
-    const [appliedPostIds, counts] = await Promise.all([
+    const [viewerApplications, counts] = await Promise.all([
       viewerId && posts.length
-        ? this.findAppliedPostIds(viewerId, postIds)
-        : Promise.resolve(new Set<number>()),
+        ? this.findViewerApplications(viewerId, postIds)
+        : Promise.resolve(new Map<number, ViewerApplication>()),
       this.pipelineCounts(postIds),
     ]);
 
     const content = this.toPaginatedContent(
-      posts.map((post) => this.toHiringPostCard(post, appliedPostIds, counts)),
+      posts.map((post) =>
+        this.toHiringPostCard(post, viewerApplications, counts),
+      ),
       total,
       page,
       pageSize,
@@ -180,16 +185,16 @@ export class HiringPostsService {
       throw new ForbiddenException('You cannot view this closed hiring post');
     }
 
-    const [appliedPostIds, counts] = await Promise.all([
+    const [viewerApplications, counts] = await Promise.all([
       userId !== undefined && userRole === Role.USER
-        ? this.findAppliedPostIds(userId, [id])
-        : Promise.resolve(new Set<number>()),
+        ? this.findViewerApplications(userId, [id])
+        : Promise.resolve(new Map<number, ViewerApplication>()),
       this.pipelineCounts([id]),
     ]);
 
     return {
       message: 'Get hiring post successfully',
-      content: this.toHiringPostCard(post, appliedPostIds, counts),
+      content: this.toHiringPostCard(post, viewerApplications, counts),
     };
   }
 
@@ -396,6 +401,7 @@ export class HiringPostsService {
         postTitle: updated.title,
         reason: sweepReason,
         actorId: userId,
+        actorName: updated.recruiter.name,
         candidateIds: swept,
       });
     }
@@ -593,11 +599,13 @@ export class HiringPostsService {
     await this.events.announce({
       recipientId: post.recruiterId,
       actorId: applicantId,
+      actorName: application.applicant.name,
       kind: 'received',
       title: 'New applicant',
       body: `${application.applicant.name} applied for ${post.title}.`,
       applicationId: application.id,
       postId: id,
+      postTitle: post.title,
       forRecruiter: true,
     });
 
@@ -606,7 +614,7 @@ export class HiringPostsService {
       content: this.toApplicationCard(
         application,
         await this.pipelineCounts([id]),
-        new Set([id]),
+        toViewerApplications([application]),
       ),
     };
   }
@@ -725,20 +733,13 @@ export class HiringPostsService {
     ]);
     // These are the user's own applications; a withdrawn one can be sent again, so it does not count
     // as "applied" (the same rule as the post list).
-    const appliedPostIds = new Set(
-      applications
-        .filter(
-          (application) =>
-            application.status !== HiringApplicationStatus.WITHDRAWN,
-        )
-        .map((application) => application.hiringPostId),
-    );
+    const viewerApplications = toViewerApplications(applications);
 
     return {
       message: 'Get your hiring applications successfully',
       content: this.toPaginatedContent(
         applications.map((application) =>
-          this.toApplicationCard(application, counts, appliedPostIds),
+          this.toApplicationCard(application, counts, viewerApplications),
         ),
         total,
         page,
@@ -998,21 +999,21 @@ export class HiringPostsService {
     };
   }
 
-  private async findAppliedPostIds(
+  /**
+   * The viewer's own application to each of these posts, from ONE query (no query per card).
+   * A withdrawn application is included (its status says WITHDRAWN); the card works out viewerHasApplied.
+   */
+  private async findViewerApplications(
     userId: number,
     postIds: number[],
-  ): Promise<Set<number>> {
-    if (!postIds.length) return new Set<number>();
+  ): Promise<Map<number, ViewerApplication>> {
+    if (!postIds.length) return new Map<number, ViewerApplication>();
 
     const applications = await this.prisma.hiringApplication.findMany({
-      where: {
-        applicantId: userId,
-        hiringPostId: { in: postIds },
-        status: { not: HiringApplicationStatus.WITHDRAWN },
-      },
-      select: { hiringPostId: true },
+      where: { applicantId: userId, hiringPostId: { in: postIds } },
+      select: viewerApplicationSelect,
     });
-    return new Set(applications.map((application) => application.hiringPostId));
+    return toViewerApplications(applications);
   }
 
   private pipelineCounts(postIds: number[]) {
@@ -1061,10 +1062,10 @@ export class HiringPostsService {
 
   private toHiringPostCard(
     post: HiringPostWithMeta,
-    appliedPostIds?: Set<number>,
+    viewerApplications?: Map<number, ViewerApplication>,
     counts?: Map<number, PipelineCounts>,
   ) {
-    return toHiringPostCard(post, appliedPostIds, counts);
+    return toHiringPostCard(post, viewerApplications, counts);
   }
 
   private toApplicationCard(
@@ -1072,14 +1073,14 @@ export class HiringPostsService {
       include: ReturnType<HiringPostsService['applicationInclude']>;
     }>,
     counts?: Map<number, PipelineCounts>,
-    /** Posts the viewer has applied to (only for the applicant's own cards; recruiters pass none). */
-    appliedPostIds?: Set<number>,
+    /** The viewer's own applications by post (only for the applicant's own cards; recruiters pass none). */
+    viewerApplications?: Map<number, ViewerApplication>,
   ) {
     return {
       ...application,
       hiringPost: this.toHiringPostCard(
         application.hiringPost,
-        appliedPostIds,
+        viewerApplications,
         counts,
       ),
     };

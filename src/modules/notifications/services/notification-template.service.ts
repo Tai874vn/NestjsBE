@@ -14,6 +14,16 @@ export type HiringPipelineTemplateInput = {
   applicationId: number;
   postId: number;
   forRecruiter: boolean;
+  /** Extra facts for the metadata (extra data saved with the notification) so the app can write its own headline. */
+  postTitle: string;
+  /** Display name of the person who acted. */
+  actorName: string;
+  /** Which of the three hiring notifications this is. */
+  kind: 'received' | 'application' | 'interview';
+  /** ISO UTC time of a booked interview, when known. */
+  scheduledAt?: string;
+  /** ISO UTC times offered for an interview, when known. */
+  proposedTimes?: string[];
 };
 
 @Injectable()
@@ -215,7 +225,16 @@ export class NotificationTemplateService {
       actionUrl: input.forRecruiter
         ? `/my-hiring-posts/${input.postId}/applicants?application=${input.applicationId}`
         : `/my-applications?application=${input.applicationId}`,
-      metadata: { applicationId: input.applicationId, postId: input.postId },
+      metadata: {
+        applicationId: input.applicationId,
+        postId: input.postId,
+        postTitle: input.postTitle,
+        actorName: input.actorName,
+        kind: input.kind,
+        // Times are added only when the caller knows them.
+        ...(input.scheduledAt ? { scheduledAt: input.scheduledAt } : {}),
+        ...(input.proposedTimes ? { proposedTimes: input.proposedTimes } : {}),
+      },
     };
   }
 

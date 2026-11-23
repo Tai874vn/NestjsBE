@@ -136,6 +136,7 @@ export class PostSweepService {
       postTitle: string;
       reason: SweepReason;
       actorId: number;
+      actorName: string;
       candidateIds: number[];
     },
   ): Promise<void> {
@@ -161,11 +162,13 @@ export class PostSweepService {
       await this.events.announce({
         recipientId: application.applicantId,
         actorId: input.actorId,
+        actorName: input.actorName,
         kind: 'application',
         title: message.title,
         body: message.body,
         applicationId: application.id,
         postId: input.postId,
+        postTitle: input.postTitle,
         forRecruiter: false,
       });
     }

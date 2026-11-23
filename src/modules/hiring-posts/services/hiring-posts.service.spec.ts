@@ -154,6 +154,86 @@ describe('HiringPostsService', () => {
     expect(result.content).toMatchObject({ id: openPost.id, viewerHasApplied: false });
   });
 
+  it('a visitor who is not signed in gets viewerApplication: null and no application query', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+
+    const result = await service.findOne(openPost.id);
+
+    expect(result.content.viewerApplication).toBeNull();
+    expect(prisma.hiringApplication.findMany).not.toHaveBeenCalled();
+  });
+
+  it('the list gives each card the viewer own application from ONE query, null for posts not applied to', async () => {
+    const { prisma, service } = createService();
+    const posts = [10, 11, 12].map((id) => ({ ...openPost, id }));
+    prisma.hiringPost.findMany.mockResolvedValue(posts);
+    prisma.hiringPost.count.mockResolvedValue(3);
+    prisma.hiringApplication.findMany.mockResolvedValue([
+      {
+        id: 55,
+        hiringPostId: 10,
+        status: HiringApplicationStatus.REJECTED,
+        statusReason: 'POSITION_FILLED',
+      },
+      {
+        id: 56,
+        hiringPostId: 11,
+        status: HiringApplicationStatus.WITHDRAWN,
+        statusReason: null,
+      },
+    ]);
+
+    const result = await service.findOpen({}, 7);
+
+    expect(prisma.hiringApplication.findMany).toHaveBeenCalledTimes(1);
+    const [first, second, third] = result.content.data;
+    expect(first.viewerApplication).toEqual({
+      id: 55,
+      status: HiringApplicationStatus.REJECTED,
+      statusReason: 'POSITION_FILLED',
+    });
+    expect(first.viewerHasApplied).toBe(true);
+    // Withdrawn: the application is shown, but the viewer may apply again.
+    expect(second.viewerApplication).toEqual({
+      id: 56,
+      status: HiringApplicationStatus.WITHDRAWN,
+      statusReason: null,
+    });
+    expect(second.viewerHasApplied).toBe(false);
+    expect(third.viewerApplication).toBeNull();
+    expect(third.viewerHasApplied).toBe(false);
+  });
+
+  it('the detail card and the apply card carry the viewer application; an unknown statusReason becomes null', async () => {
+    const { prisma, service } = createService();
+    prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+    prisma.hiringApplication.findMany.mockResolvedValue([
+      {
+        id: 55,
+        hiringPostId: openPost.id,
+        status: HiringApplicationStatus.REVIEWING,
+        statusReason: 'something else',
+      },
+    ]);
+
+    const detail = await service.findOne(openPost.id, 7, Role.USER);
+    expect(detail.content.viewerApplication).toEqual({
+      id: 55,
+      status: HiringApplicationStatus.REVIEWING,
+      statusReason: null,
+    });
+
+    prisma.hiringApplication.findUnique.mockResolvedValue(null);
+    prisma.hiringApplication.create.mockResolvedValue(applicationCard());
+    const applied = await service.apply(openPost.id, 7, {});
+    expect(applied.content.hiringPost.viewerApplication).toEqual({
+      id: 99,
+      status: HiringApplicationStatus.APPLIED,
+      statusReason: null,
+    });
+  });
+
   it('hides a closed post from a visitor', async () => {
     const { prisma, service } = createService();
     prisma.hiringPost.findUnique.mockResolvedValue({
@@ -741,6 +821,7 @@ describe('HiringPostsService', () => {
         postTitle: openPost.title,
         reason: 'POST_CLOSED',
         actorId: 2,
+        actorName: 'Recruiter',
         candidateIds: [7, 8],
       });
     });
@@ -904,6 +985,7 @@ describe('HiringPostsService', () => {
           postTitle: openPost.title,
           reason: 'POSITION_FILLED',
           actorId: 2,
+          actorName: 'Recruiter',
           candidateIds: [7],
         });
       });
@@ -979,6 +1061,8 @@ describe('HiringPostsService', () => {
         body: 'Candidate applied for Security Analyst.',
         applicationId: 99,
         postId: openPost.id,
+        postTitle: 'Security Analyst',
+        actorName: 'Candidate',
         forRecruiter: true,
       });
     });

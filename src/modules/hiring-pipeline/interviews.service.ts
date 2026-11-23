@@ -129,6 +129,7 @@ export class InterviewsService {
           recipientId: application.applicantId,
           kind: 'interview',
           title: 'Interview request',
+          proposedTimes: proposedTimes.map((time) => time.toISOString()),
           body: `${application.hiringPost.recruiter.name} invited you to an interview for ${application.hiringPost.title}. Pick one of the times.`,
           forRecruiter: false,
           ...this.chatFromRecruiter(
@@ -176,6 +177,7 @@ export class InterviewsService {
         recipientId: application.applicantId,
         kind: 'interview',
         title: 'New interview times',
+        proposedTimes: proposedTimes.map((time) => time.toISOString()),
         body: `${application.hiringPost.recruiter.name} sent new interview times for ${application.hiringPost.title}.`,
         forRecruiter: false,
         ...this.chatFromRecruiter(
@@ -230,6 +232,7 @@ export class InterviewsService {
         recipientId: application.hiringPost.recruiterId,
         kind: 'interview',
         title: 'Interview booked',
+        scheduledAt: picked.toISOString(),
         body: `${application.applicant.name} picked ${formatVietnamTime(picked)} (Vietnam time) for the ${application.hiringPost.title} interview.`,
         forRecruiter: true,
       }),

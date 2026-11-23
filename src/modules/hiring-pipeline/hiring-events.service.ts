@@ -81,6 +81,14 @@ export type AnnounceInput = {
   body: string;
   applicationId: number;
   postId: number;
+  /** Title of the hiring post (goes into the notification metadata, so the app can write its own headline). */
+  postTitle: string;
+  /** Display name of the person who acted. */
+  actorName: string;
+  /** ISO UTC time of the booked interview (only when an interview is booked). */
+  scheduledAt?: string;
+  /** ISO UTC times offered for the interview (only when an interview is requested or new times are sent). */
+  proposedTimes?: string[];
   /** true: the recipient is the recruiter (link to the applicants page). */
   forRecruiter: boolean;
   /** Text of a chat message to post in the direct chat room, if any. */
@@ -187,6 +195,11 @@ export class HiringEventsService {
       applicationId: input.applicationId,
       postId: input.postId,
       forRecruiter: input.forRecruiter,
+      postTitle: input.postTitle,
+      actorName: input.actorName,
+      kind: input.kind,
+      scheduledAt: input.scheduledAt,
+      proposedTimes: input.proposedTimes,
     };
     switch (input.kind) {
       case 'received':

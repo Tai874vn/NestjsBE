@@ -68,7 +68,7 @@ export type Swept = {
 /** The notification of a step, without the parts run() fills in. */
 export type StepNotice = Omit<
   AnnounceInput,
-  'actorId' | 'applicationId' | 'postId'
+  'actorId' | 'actorName' | 'applicationId' | 'postId' | 'postTitle'
 >;
 
 export type Step = {
@@ -132,14 +132,24 @@ export class ApplicationPipelineService {
       await this.events.announce({
         ...notice,
         actorId: viewer.id,
+        // The side that acts: the candidate, or the post owner (an admin acting shows the owner's name).
+        actorName:
+          actor === 'candidate'
+            ? application.applicant.name
+            : application.hiringPost.recruiter.name,
         applicationId: application.id,
         postId: application.hiringPostId,
+        postTitle: application.hiringPost.title,
       });
     }
     if (swept && swept.candidateIds.length) {
       await this.sweeper.announceSwept(this.prisma, {
         ...swept,
         actorId: viewer.id,
+        actorName:
+          actor === 'candidate'
+            ? application.applicant.name
+            : application.hiringPost.recruiter.name,
       });
     }
 

@@ -185,6 +185,7 @@ describe('PostSweepService', () => {
       postTitle: 'Senior Test Engineer',
       reason: 'POSITION_FILLED',
       actorId: 2,
+      actorName: 'Lan',
       candidateIds: [11, 12],
     });
 
@@ -201,6 +202,8 @@ describe('PostSweepService', () => {
       body: 'The Senior Test Engineer role has been filled. Thank you for applying.',
       applicationId: 1,
       postId: 8,
+      postTitle: 'Senior Test Engineer',
+      actorName: 'Lan',
       forRecruiter: false,
     });
   });
@@ -219,6 +222,7 @@ describe('PostSweepService', () => {
       postTitle: 'Senior Test Engineer',
       reason: 'POST_CLOSED',
       actorId: 2,
+      actorName: 'Lan',
       candidateIds: [],
     });
     expect(prisma.hiringApplication.findMany).not.toHaveBeenCalled();
@@ -228,6 +232,7 @@ describe('PostSweepService', () => {
       postTitle: 'Senior Test Engineer',
       reason: 'POST_CLOSED',
       actorId: 2,
+      actorName: 'Lan',
       candidateIds: [11],
     });
     expect(announcer.announce).toHaveBeenCalledWith(

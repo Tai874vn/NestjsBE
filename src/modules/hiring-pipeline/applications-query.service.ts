@@ -3,13 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HiringApplicationStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { Role } from '../../common/constants/roles';
 import { PrismaService } from '../../prisma.service';
 import {
   hiringPostInclude,
   pipelineCounts,
   toHiringPostCard,
+  toViewerApplications,
 } from '../hiring-posts/services/hiring-post-card';
 import { candidateCareer } from '../users/services/candidate-directory.service';
 import { asRecord } from '../users/services/resume-ai-payload';
@@ -121,12 +122,12 @@ export class ApplicationsQueryService {
       application.hiringPostId,
     ]);
     const { resume, ...applicant } = application.applicant;
-    // The applicant sees "you applied" on the post card (unless they withdrew, then they may apply
-    // again); a recruiter never applied to their own post, so for them it stays false.
-    const applied =
-      isApplicant && application.status !== HiringApplicationStatus.WITHDRAWN
-        ? new Set([application.hiringPostId])
-        : undefined;
+    // The applicant sees their own application on the post card (viewerHasApplied is false once they
+    // withdrew, then they may apply again); a recruiter never applied to their own post, so for them
+    // it stays empty.
+    const applied = isApplicant
+      ? toViewerApplications([application])
+      : undefined;
     return {
       ...application,
       hiringPost: toHiringPostCard(application.hiringPost, applied, counts),

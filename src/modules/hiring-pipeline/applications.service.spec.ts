@@ -117,6 +117,7 @@ describe('ApplicationsService', () => {
     expect(sweeper.announceSwept).toHaveBeenCalledWith(prisma, {
       postId: 10,
       postTitle: 'Senior Test Engineer',
+      actorName: 'Lan',
       reason: 'POST_CLOSED',
       actorId: 2,
       candidateIds: [5],
@@ -146,6 +147,8 @@ describe('ApplicationsService', () => {
       body: 'Lan shortlisted you for Senior Test Engineer.',
       applicationId: 99,
       postId: 10,
+      postTitle: 'Senior Test Engineer',
+      actorName: 'Lan',
       forRecruiter: false,
     });
     expect(query.detail).toHaveBeenCalledWith(99, recruiter);
@@ -437,6 +440,8 @@ describe('ApplicationsService', () => {
         body: 'Minh accepted the offer for Senior Test Engineer.',
         applicationId: 99,
         postId: 10,
+        postTitle: 'Senior Test Engineer',
+        actorName: 'Minh',
         forRecruiter: true,
       });
     });
@@ -457,6 +462,7 @@ describe('ApplicationsService', () => {
       expect(sweeper.announceSwept).toHaveBeenCalledWith(prisma, {
         postId: 10,
         postTitle: 'Senior Test Engineer',
+        actorName: 'Minh',
         reason: 'POSITION_FILLED',
         actorId: 7,
         candidateIds: [11, 12],
@@ -727,12 +733,19 @@ describe('ApplicationsQueryService.detail', () => {
     expect(detail.viewerRole).toBe('candidate');
     expect(detail.resume).not.toBeNull();
     expect(detail.hiringPost.viewerHasApplied).toBe(true);
+    // The card also carries the viewer's own application (no extra query: it is this application).
+    expect(detail.hiringPost.viewerApplication).toEqual({
+      id: 99,
+      status: S.INTERVIEWING,
+      statusReason: null,
+    });
   });
 
   it('viewerHasApplied is false for the recruiter and for a withdrawn applicant', async () => {
     const { prisma, query } = createQuery();
 
     expect((await query.detail(99, recruiter)).hiringPost.viewerHasApplied).toBe(false);
+    expect((await query.detail(99, recruiter)).hiringPost.viewerApplication).toBeNull();
     prisma.hiringApplication.findUnique.mockResolvedValue({
       ...storedApplication(),
       status: S.WITHDRAWN,

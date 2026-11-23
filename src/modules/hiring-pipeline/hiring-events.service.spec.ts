@@ -30,6 +30,8 @@ describe('HiringEventsService', () => {
     body: 'You are on the shortlist for Senior Test Engineer.',
     applicationId: 21,
     postId: 8,
+    postTitle: 'Senior Test Engineer',
+    actorName: 'Lan Tran',
   };
 
   afterEach(() => jest.restoreAllMocks());
@@ -96,10 +98,67 @@ describe('HiringEventsService', () => {
         entityType: 'hiring_application',
         entityId: 21,
         actionUrl: '/my-applications?application=21',
-        metadata: { applicationId: 21, postId: 8 },
+        metadata: {
+          applicationId: 21,
+          postId: 8,
+          postTitle: 'Senior Test Engineer',
+          actorName: 'Lan Tran',
+          kind: 'application',
+        },
       }),
     );
     expect(chatService.createRoom).not.toHaveBeenCalled();
+  });
+
+  it('puts the booked time in the metadata of an interview notification', async () => {
+    const { service, notifications } = createService();
+
+    await service.announce({
+      ...base,
+      recipientId: 3,
+      kind: 'interview',
+      forRecruiter: true,
+      scheduledAt: '2026-11-25T03:00:00.000Z',
+    });
+
+    expect(notifications.create.mock.calls[0][0].metadata).toEqual({
+      applicationId: 21,
+      postId: 8,
+      postTitle: 'Senior Test Engineer',
+      actorName: 'Lan Tran',
+      kind: 'interview',
+      scheduledAt: '2026-11-25T03:00:00.000Z',
+    });
+  });
+
+  it('puts the proposed times in the metadata, and leaves out times that are not given', async () => {
+    const { service, notifications } = createService();
+    const proposedTimes = [
+      '2026-11-25T03:00:00.000Z',
+      '2026-11-26T07:30:00.000Z',
+    ];
+
+    await service.announce({
+      ...base,
+      recipientId: 9,
+      kind: 'interview',
+      forRecruiter: false,
+      proposedTimes,
+    });
+    await service.announce({
+      ...base,
+      recipientId: 9,
+      kind: 'received',
+      forRecruiter: false,
+    });
+
+    const [first, second] = notifications.create.mock.calls.map(
+      ([input]: [{ metadata: Record<string, unknown> }]) => input.metadata,
+    );
+    expect(first).toMatchObject({ kind: 'interview', proposedTimes });
+    expect(first).not.toHaveProperty('scheduledAt');
+    expect(second).not.toHaveProperty('proposedTimes');
+    expect(second).not.toHaveProperty('scheduledAt');
   });
 
   it('sends the recruiter the pipeline link and maps each kind to its type', async () => {

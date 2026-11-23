@@ -68,24 +68,77 @@ export async function pipelineCounts(
   return counts;
 }
 
+/** Why an application was ended by the system (a "sweep": the post filled or closed). */
+export type ViewerStatusReason = 'POSITION_FILLED' | 'POST_CLOSED';
+
+/** The viewer's own application to a post, as the post card shows it. */
+export type ViewerApplication = {
+  id: number;
+  status: HiringApplicationStatus;
+  statusReason: ViewerStatusReason | null;
+};
+
+/** Select this from hiringApplication to build a ViewerApplication. */
+export const viewerApplicationSelect = {
+  id: true,
+  hiringPostId: true,
+  status: true,
+  statusReason: true,
+} satisfies Prisma.HiringApplicationSelect;
+
 /**
- * The post as the app shows it. `counts` (from pipelineCounts) gives hiredCount (people hired) and
+ * Turn database rows into the map the card reads (post id -> the viewer's application).
+ * The database keeps statusReason as free text, so any value that is not one of the two sweep
+ * reasons becomes null.
+ */
+export function toViewerApplications(
+  rows: {
+    id: number;
+    hiringPostId: number;
+    status: HiringApplicationStatus;
+    statusReason: string | null;
+  }[],
+): Map<number, ViewerApplication> {
+  return new Map(
+    rows.map((row) => [
+      row.hiringPostId,
+      {
+        id: row.id,
+        status: row.status,
+        statusReason:
+          row.statusReason === 'POSITION_FILLED' ||
+          row.statusReason === 'POST_CLOSED'
+            ? row.statusReason
+            : null,
+      },
+    ]),
+  );
+}
+
+/**
+ * The post as the app shows it. `viewerApplications` is the viewer's own application per post (empty for
+ * guests): it gives viewerApplication, and viewerHasApplied is true unless that application was withdrawn
+ * (a withdrawn one can be sent again). `counts` (from pipelineCounts) gives hiredCount (people hired) and
  * offersWaiting (offers not answered yet); a post missing from it shows 0 for both.
  */
 export function toHiringPostCard(
   post: HiringPostWithMeta,
-  appliedPostIds = new Set<number>(),
+  viewerApplications = new Map<number, ViewerApplication>(),
   counts = new Map<number, PipelineCounts>(),
 ) {
   const { _count, ...rest } = post;
   const postCounts = counts.get(post.id);
+  const viewerApplication = viewerApplications.get(post.id) ?? null;
   return {
     ...rest,
     occupationTitle: findOccupation(post.occupationCode)?.title ?? null,
     applicationCount: _count.applications,
     hiredCount: postCounts?.HIRED ?? 0,
     offersWaiting: postCounts?.OFFERED ?? 0,
-    viewerHasApplied: appliedPostIds.has(post.id),
+    viewerHasApplied:
+      viewerApplication !== null &&
+      viewerApplication.status !== HiringApplicationStatus.WITHDRAWN,
+    viewerApplication,
   };
 }
 
