@@ -38,6 +38,11 @@ import {
 } from './hiring-post-card';
 import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
 import {
+  interviewsInclude,
+  resumeSelect,
+  toResumeSummary,
+} from '../../hiring-pipeline/applications-query.service';
+import {
   PostSweepService,
   SweepReason,
 } from '../../hiring-pipeline/post-sweep.service';
@@ -645,7 +650,7 @@ export class HiringPostsService {
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: this.applicationInclude(),
+        include: this.applicantsListInclude(),
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.hiringApplication.count({ where }),
@@ -676,9 +681,17 @@ export class HiringPostsService {
       message: 'Get hiring applications successfully',
       content: {
         ...this.toPaginatedContent(
-          applications.map((application) =>
-            this.toApplicationCard(application, cardCounts),
-          ),
+          applications.map((application) => {
+            // The raw resume stays out of the row; the row carries the same summary as the detail page.
+            const { resume, ...applicant } = application.applicant;
+            return {
+              ...this.toApplicationCard(
+                { ...application, applicant },
+                cardCounts,
+              ),
+              resume: toResumeSummary(resume, applicant.profileSkills),
+            };
+          }),
           total,
           page,
           pageSize,
@@ -1021,6 +1034,24 @@ export class HiringPostsService {
           },
         },
       },
+    } satisfies Prisma.HiringApplicationInclude;
+  }
+
+  /**
+   * What each row of the recruiter's applicants list loads, in the same findMany (no query per row):
+   * the usual card parts plus the resume columns (for the summary) and the interviews (round 1 first).
+   */
+  private applicantsListInclude() {
+    const base = this.applicationInclude();
+    return {
+      ...base,
+      applicant: {
+        select: {
+          ...base.applicant.select,
+          resume: { select: resumeSelect },
+        },
+      },
+      interviews: interviewsInclude,
     } satisfies Prisma.HiringApplicationInclude;
   }
 

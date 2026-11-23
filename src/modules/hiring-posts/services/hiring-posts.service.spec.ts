@@ -1099,6 +1099,71 @@ describe('HiringPostsService', () => {
       expect(result.content.total).toBe(1);
     });
 
+    it('gives each row the resume summary and the interviews (by round) from the same findMany', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findUnique.mockResolvedValue(openPost);
+      const interview = {
+        id: 5,
+        applicationId: 99,
+        round: 1,
+        scheduledAt: now,
+      };
+      prisma.hiringApplication.findMany.mockResolvedValue([
+        applicationCard({
+          applicant: {
+            ...applicationCard().applicant,
+            profileSkills: [
+              { id: 1, name: 'SIEM', level: null, sortOrder: 0 },
+            ],
+            resume: {
+              data: { Occupation: '2519.1', Jobs: [] },
+              predictedSeniority: 'Mid',
+              predictedSeniorityMetadata: {
+                features: { years_in_occupation: 4, related_years: 0.5 },
+              },
+            },
+          },
+          interviews: [interview],
+        }),
+        applicationCard({
+          id: 100,
+          applicant: { ...applicationCard().applicant, resume: null },
+          interviews: [],
+        }),
+      ]);
+      prisma.hiringApplication.count.mockResolvedValue(2);
+      prisma.hiringApplication.groupBy.mockResolvedValue([]);
+
+      const result = await service.findApplicationsForPost(
+        openPost.id,
+        2,
+        Role.EMPLOYER,
+        {},
+      );
+
+      const include = prisma.hiringApplication.findMany.mock.calls[0][0].include;
+      expect(include.interviews).toEqual({ orderBy: { round: 'asc' } });
+      expect(include.applicant.select.resume.select).toMatchObject({
+        data: true,
+        predictedSeniority: true,
+        predictedSeniorityMetadata: true,
+      });
+      expect(include.events).toBeUndefined();
+      const [first, second] = result.content.data;
+      expect(first.resume).toMatchObject({
+        occupation: '2519.1',
+        years: 4,
+        relatedYears: 0.5,
+        level: 'Mid',
+        skills: ['SIEM'],
+      });
+      expect(first.interviews).toEqual([interview]);
+      expect(first.applicant).not.toHaveProperty('resume');
+      expect(first.applicant.bio).toBe('Incident response and SIEM');
+      expect(second.resume).toBeNull();
+      expect(second.interviews).toEqual([]);
+    });
+
     it('lists every status when no filter is given', async () => {
       const { prisma, service } = createService();
       prisma.hiringPost.findUnique.mockResolvedValue(openPost);
