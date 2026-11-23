@@ -711,7 +711,11 @@ export class HiringPostsService {
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: this.applicationInclude(),
+        // Interviews come in the same query so the list can flag "Action needed" and show the next time.
+        include: {
+          ...this.applicationInclude(),
+          interviews: interviewsInclude,
+        },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.hiringApplication.count({ where }),

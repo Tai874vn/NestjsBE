@@ -1164,6 +1164,23 @@ describe('HiringPostsService', () => {
       expect(second.interviews).toEqual([]);
     });
 
+    it('my applications rows carry interviews (by round) from the same findMany, no resume or events', async () => {
+      const { prisma, service } = createService();
+      const interview = { id: 5, applicationId: 99, round: 1, status: 'PROPOSED' };
+      prisma.hiringApplication.findMany.mockResolvedValue([
+        applicationCard({ interviews: [interview] }),
+      ]);
+      prisma.hiringApplication.count.mockResolvedValue(1);
+
+      const result = await service.findMyApplications(7, {});
+
+      const include = prisma.hiringApplication.findMany.mock.calls[0][0].include;
+      expect(include.interviews).toEqual({ orderBy: { round: 'asc' } });
+      expect(include.events).toBeUndefined();
+      expect(include.applicant.select.resume).toBeUndefined();
+      expect(result.content.data[0].interviews).toEqual([interview]);
+    });
+
     it('lists every status when no filter is given', async () => {
       const { prisma, service } = createService();
       prisma.hiringPost.findUnique.mockResolvedValue(openPost);
