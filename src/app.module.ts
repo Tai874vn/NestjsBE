@@ -28,6 +28,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HiringPipelineModule } from './modules/hiring-pipeline/hiring-pipeline.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
 import { ObservabilityModule } from './common/observability/observability.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -72,6 +73,7 @@ import { DatabaseModule } from './database/database.module';
     NotificationsModule,
     HiringPipelineModule,
     WalletModule,
+    ContractsModule,
     AdminModule,
   ],
   controllers: [AppController],
