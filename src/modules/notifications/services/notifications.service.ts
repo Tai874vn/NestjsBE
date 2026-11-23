@@ -259,26 +259,6 @@ export class NotificationsService {
     return this.create(this.templates.postComment(input));
   }
 
-  notifyHireCreated(input: {
-    hirerId: number;
-    recipientId: number;
-    hireId: number;
-    jobId: number;
-    jobTitle: string;
-  }) {
-    return this.create(this.templates.hireCreated(input));
-  }
-
-  notifyHireCompleted(input: {
-    actorId: number;
-    recipientId: number;
-    hireId: number;
-    jobId: number;
-    jobTitle: string;
-  }) {
-    return this.create(this.templates.hireCompleted(input));
-  }
-
   async notifyChatMessageRecipients(input: {
     senderId: number;
     recipients: Array<{ recipientId: number; unreadCount: number }>;

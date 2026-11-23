@@ -3,7 +3,6 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
@@ -11,15 +10,12 @@ import { CreateHireDto } from '../dto/create-hire.dto';
 import { UpdateHireDto } from '../dto/update-hire.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
-import { NotificationsService } from '../../notifications/services/notifications.service';
 
 @Injectable()
 export class HiresService {
   constructor(
     private prisma: PrismaService,
     private redisService: RedisService,
-    @Optional()
-    private readonly notifications?: NotificationsService,
   ) {}
 
   async create(createDto: CreateHireDto, userId: number) {
@@ -54,13 +50,6 @@ export class HiresService {
     });
 
     await this.redisService.invalidateUserCaches(job.creatorId);
-    await this.notifications?.notifyHireCreated({
-      hirerId: userId,
-      recipientId: job.creatorId,
-      hireId: hire.id,
-      jobId: job.id,
-      jobTitle: job.title,
-    });
 
     return {
       message: 'Job hired successfully',
@@ -207,16 +196,6 @@ export class HiresService {
     });
 
     await this.redisService.invalidateUserCaches(hire.job.creatorId);
-    const becameCompleted = updateDto.completed === true && !hire.completed;
-    if (becameCompleted) {
-      await this.notifications?.notifyHireCompleted({
-        actorId: userId,
-        recipientId: hire.job.creatorId,
-        hireId: updated.id,
-        jobId: updated.job.id,
-        jobTitle: updated.job.title,
-      });
-    }
 
     return {
       message: 'Hire updated successfully',

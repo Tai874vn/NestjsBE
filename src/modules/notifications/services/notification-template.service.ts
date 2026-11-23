@@ -26,6 +26,26 @@ export type HiringPipelineTemplateInput = {
   proposedTimes?: string[];
 };
 
+/**
+ * Input for the proposal and contract notifications. `recipientSide` picks the tab of the
+ * link on the Contracts page (the client tab or the freelancer tab).
+ */
+export type ContractTemplateInput = {
+  recipientId: number;
+  /** Null when the system (sweeper) acted. */
+  actorId: number | null;
+  actorName: string;
+  kind: 'proposal' | 'contract';
+  /** The event name, for example proposal_sent or milestone_funded. */
+  step: string;
+  title: string;
+  body: string;
+  proposalId?: number;
+  contractId?: number;
+  milestoneId?: number;
+  recipientSide: 'client' | 'freelancer';
+};
+
 @Injectable()
 export class NotificationTemplateService {
   connectionRequest(input: {
@@ -123,48 +143,6 @@ export class NotificationTemplateService {
     };
   }
 
-  hireCreated(input: {
-    hirerId: number;
-    recipientId: number;
-    hireId: number;
-    jobId: number;
-    jobTitle: string;
-  }): CreateNotificationInput {
-    return {
-      recipientId: input.recipientId,
-      actorId: input.hirerId,
-      type: NotificationType.HIRE_CREATED,
-      title: 'New hire',
-      body: `hired ${input.jobTitle}.`,
-      entityType: 'hire',
-      entityId: input.hireId,
-      actionUrl: `/jobs/${input.jobId}`,
-      metadata: { hireId: input.hireId, jobId: input.jobId },
-      dedupeKey: `hire_created:${input.hireId}`,
-    };
-  }
-
-  hireCompleted(input: {
-    actorId: number;
-    recipientId: number;
-    hireId: number;
-    jobId: number;
-    jobTitle: string;
-  }): CreateNotificationInput {
-    return {
-      recipientId: input.recipientId,
-      actorId: input.actorId,
-      type: NotificationType.HIRE_COMPLETED,
-      title: 'Work completed',
-      body: `marked ${input.jobTitle} as complete.`,
-      entityType: 'hire',
-      entityId: input.hireId,
-      actionUrl: `/jobs/${input.jobId}`,
-      metadata: { hireId: input.hireId, jobId: input.jobId },
-      dedupeKey: `hire_completed:${input.hireId}`,
-    };
-  }
-
   chatMessage(input: {
     senderId: number;
     recipientId: number;
@@ -234,6 +212,47 @@ export class NotificationTemplateService {
         // Times are added only when the caller knows them.
         ...(input.scheduledAt ? { scheduledAt: input.scheduledAt } : {}),
         ...(input.proposedTimes ? { proposedTimes: input.proposedTimes } : {}),
+      },
+    };
+  }
+
+  /** A proposal changed (sent, countered, accepted, declined, ...). Links to the proposal. */
+  proposalUpdate(input: ContractTemplateInput): CreateNotificationInput {
+    return this.contractShape(NotificationType.PROPOSAL_UPDATE, input);
+  }
+
+  /** A contract changed (funded, submitted, approved, ended, ...). Links to the contract. */
+  contractUpdate(input: ContractTemplateInput): CreateNotificationInput {
+    return this.contractShape(NotificationType.CONTRACT_UPDATE, input);
+  }
+
+  /**
+   * Shared shape of both notifications. No dedupeKey: every step shows as its own row.
+   * Ids that do not apply are saved as null so the metadata always has the same keys.
+   */
+  private contractShape(
+    type: NotificationType,
+    input: ContractTemplateInput,
+  ): CreateNotificationInput {
+    const proposal = input.kind === 'proposal';
+    const id = (proposal ? input.proposalId : input.contractId) as number;
+    return {
+      recipientId: input.recipientId,
+      actorId: input.actorId,
+      type,
+      title: input.title,
+      body: input.body,
+      entityType: proposal ? 'proposal' : 'contract',
+      entityId: id,
+      actionUrl: `/contracts?tab=${input.recipientSide}&${proposal ? 'proposal' : 'contract'}=${id}`,
+      metadata: {
+        kind: input.kind,
+        step: input.step,
+        proposalId: input.proposalId ?? null,
+        contractId: input.contractId ?? null,
+        milestoneId: input.milestoneId ?? null,
+        actorName: input.actorName,
+        title: input.title,
       },
     };
   }
