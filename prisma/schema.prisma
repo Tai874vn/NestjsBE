@@ -61,6 +61,7 @@ model User {
   hiringApplicationEvents HiringApplicationEvent[] @relation("HiringApplicationEventActor")
   proposalsAsClient     Proposal[]        @relation("ProposalClient")
   proposalsAsFreelancer Proposal[]        @relation("ProposalFreelancer")
+  proposalsToAnswer     Proposal[]        @relation("ProposalTurnUser")
   proposalVersions      ProposalVersion[] @relation("ProposalVersionAuthor")
   contractsAsClient     Contract[]        @relation("ContractClient")
   contractsAsFreelancer Contract[]        @relation("ContractFreelancer")
@@ -779,6 +780,7 @@ model Proposal {
   job        Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
   client     User              @relation("ProposalClient", fields: [clientId], references: [id], onDelete: Cascade)
   freelancer User              @relation("ProposalFreelancer", fields: [freelancerId], references: [id], onDelete: Cascade)
+  turnUser   User?             @relation("ProposalTurnUser", fields: [turnUserId], references: [id], onDelete: Cascade)
   versions   ProposalVersion[]
   contract   Contract?
   events     ContractEvent[]

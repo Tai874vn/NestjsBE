@@ -4,5 +4,5 @@
 -- HIRE_CREATED and HIRE_COMPLETED stay for old rows; they are no longer sent.
 
 -- AlterEnum
-ALTER TYPE "NotificationType" ADD VALUE 'PROPOSAL_UPDATE';
-ALTER TYPE "NotificationType" ADD VALUE 'CONTRACT_UPDATE';
+ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'PROPOSAL_UPDATE';
+ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTRACT_UPDATE';
