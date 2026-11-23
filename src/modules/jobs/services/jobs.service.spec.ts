@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { JobsService } from './jobs.service';
 import { JobCacheInvalidationService } from './job-cache-invalidation.service';
 import { JobCatalogService } from './job-catalog.service';
@@ -87,5 +88,71 @@ describe('JobsService bounded queries', () => {
     );
     expect(result.content.data).toEqual(rows.slice(0, 2));
     expect(result.content.nextCursor).toEqual(expect.any(String));
+  });
+});
+
+describe('JobsService service fields', () => {
+  const step = (share: number) => ({ title: 'Step', share });
+  function setup(existing: any = { creatorId: 1, workMode: 'REMOTE', serviceArea: null }) {
+    const prisma = {
+      job: {
+        create: jest.fn().mockResolvedValue({ id: 9 }),
+        update: jest.fn().mockResolvedValue({ id: 9 }),
+        findUnique: jest.fn().mockResolvedValue(existing),
+      },
+    };
+    const mutations = new JobMutationService(prisma as any, {
+      invalidateJobMutation: jest.fn(),
+    } as any);
+    return { prisma, mutations };
+  }
+  const dto = { title: 'Service', subcategoryId: 1 } as any;
+
+  it('saves shares 30/40/30', async () => {
+    const { prisma, mutations } = setup();
+    const template = [step(30), step(40), step(30)];
+    await mutations.create({ ...dto, milestoneTemplate: template }, 1);
+    expect(prisma.job.create.mock.calls[0][0].data.milestoneTemplate).toEqual(template);
+  });
+
+  it('rejects shares 30/40/20 with 400', async () => {
+    const { prisma, mutations } = setup();
+    await expect(
+      mutations.create({ ...dto, milestoneTemplate: [step(30), step(40), step(20)] }, 1),
+    ).rejects.toThrow('Template shares must add up to 100.');
+    expect(prisma.job.create).not.toHaveBeenCalled();
+  });
+
+  it('defaults to REMOTE and stores null area for REMOTE', async () => {
+    const { prisma, mutations } = setup();
+    await mutations.create({ ...dto, serviceArea: 'Hanoi' }, 1);
+    const data = prisma.job.create.mock.calls[0][0].data;
+    expect(data.workMode).toBe('REMOTE');
+    expect(data.serviceArea).toBeNull();
+  });
+
+  it('keeps the area for ONSITE', async () => {
+    const { prisma, mutations } = setup();
+    await mutations.create({ ...dto, workMode: 'ONSITE', serviceArea: 'Hanoi' }, 1);
+    expect(prisma.job.create.mock.calls[0][0].data.serviceArea).toBe('Hanoi');
+  });
+
+  it('update with null template clears it', async () => {
+    const { prisma, mutations } = setup();
+    await mutations.update(9, { milestoneTemplate: null } as any, 1, 'USER' as any);
+    expect(prisma.job.update.mock.calls[0][0].data.milestoneTemplate).toBe(Prisma.JsonNull);
+  });
+
+  it('update to REMOTE clears a stored area', async () => {
+    const { prisma, mutations } = setup({ creatorId: 1, workMode: 'ONSITE', serviceArea: 'Hanoi' });
+    await mutations.update(9, { workMode: 'REMOTE' } as any, 1, 'USER' as any);
+    expect(prisma.job.update.mock.calls[0][0].data.serviceArea).toBeNull();
+  });
+
+  it('update rejects bad shares', async () => {
+    const { mutations } = setup();
+    await expect(
+      mutations.update(9, { milestoneTemplate: [step(50)] } as any, 1, 'USER' as any),
+    ).rejects.toThrow('Template shares must add up to 100.');
   });
 });
