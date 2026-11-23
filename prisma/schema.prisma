@@ -59,6 +59,19 @@ model User {
   authSessions AuthSession[]
   interviewsCreated Interview[] @relation("InterviewCreator")
   hiringApplicationEvents HiringApplicationEvent[] @relation("HiringApplicationEventActor")
+  proposalsAsClient     Proposal[]        @relation("ProposalClient")
+  proposalsAsFreelancer Proposal[]        @relation("ProposalFreelancer")
+  proposalVersions      ProposalVersion[] @relation("ProposalVersionAuthor")
+  contractsAsClient     Contract[]        @relation("ContractClient")
+  contractsAsFreelancer Contract[]        @relation("ContractFreelancer")
+  contractEndRequests   Contract[]        @relation("ContractEndRequester")
+  submissions           Submission[]      @relation("SubmissionAuthor")
+  amendments            Amendment[]       @relation("AmendmentProposer")
+  contractEvents        ContractEvent[]   @relation("ContractEventActor")
+  wallet                Wallet?
+  ledgerEntries         LedgerEntry[]     @relation("LedgerEntryOwner")
+  ledgerCounterparty    LedgerEntry[]     @relation("LedgerEntryCounterparty")
+  topUps                TopUp[]
 
   @@index([role, profileCompleted, updatedAt, id])
   @@index([role, candidateDiscoverable, profileCompleted, updatedAt, id])
@@ -220,6 +233,12 @@ model Job {
   rating           Int      @default(0)
   subcategoryId    Int
   creatorId        Int
+  /// Where the work happens: REMOTE, ONSITE or BOTH.
+  workMode         WorkMode @default(REMOTE)
+  /// The area the seller covers for onsite work (free text).
+  serviceArea      String?
+  /// Optional split the seller suggests: a JSON list of { title, description?, share }, shares add to 100.
+  milestoneTemplate Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -227,6 +246,8 @@ model Job {
   user        User        @relation("JobCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   comments    Comment[]
   hires       Hire[]
+  proposals   Proposal[]
+  contracts   Contract[]
   savedBy     SavedJob[]
   recommendationSnapshots RecommendationSnapshot[]
 
@@ -245,9 +266,12 @@ model Comment {
   commentedAt DateTime @default(now())
   content     String
   rating      Int
+  /// The contract this review is for. Null for old reviews written before contracts.
+  contractId  Int?     @unique
 
   job       Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
   user      User @relation(fields: [commenterId], references: [id], onDelete: Cascade)
+  contract  Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
 
   @@index([jobId, commentedAt])
   @@map("comments")
@@ -362,6 +386,8 @@ enum NotificationType {
   APPLICATION_RECEIVED
   APPLICATION_UPDATE
   INTERVIEW_UPDATE
+  PROPOSAL_UPDATE
+  CONTRACT_UPDATE
 }
 
 enum RecommendationSnapshotKind {
@@ -669,4 +695,328 @@ model ChatMessage {
   @@index([roomId, createdAt])
   @@index([roomId, id])
   @@map("chat_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Service contracts: a client sends a proposal (with versions) on a service,
+// the accepted version becomes a contract with milestones, and milestones are
+// paid from a demo credit wallet. The migration also adds CHECKs (database
+// rules) and partial unique indexes (unique over only some rows) that Prisma
+// cannot express; they are listed in the comments below.
+// ---------------------------------------------------------------------------
+
+/// Where a service's work happens.
+enum WorkMode {
+  REMOTE
+  ONSITE
+  BOTH
+}
+
+enum ProposalStatus {
+  OPEN
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  ENDED
+}
+
+enum MilestoneStatus {
+  PENDING
+  FUNDED
+  SUBMITTED
+  CHANGES_REQUESTED
+  APPROVED
+  CANCELLED
+}
+
+enum AmendmentStatus {
+  OPEN
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  CANCELLED
+}
+
+/// Kind of wallet movement. SEED and TOP_UP bring credits in; the others move them.
+enum LedgerType {
+  SEED
+  TOP_UP
+  FUND_HOLD
+  RELEASE
+  REFUND
+}
+
+enum TopUpStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+/// A client's offer on a service. Each counter adds a version.
+/// The migration adds: CHECK clientId <> freelancerId, and at most one OPEN proposal
+/// per (jobId, clientId) (partial unique index proposals_one_open_per_client_job).
+model Proposal {
+  id            Int            @id @default(autoincrement())
+  jobId         Int
+  clientId      Int
+  freelancerId  Int
+  status        ProposalStatus @default(OPEN)
+  latestVersion Int            @default(1)
+  /// Who must answer next. Null once the proposal is no longer OPEN.
+  turnUserId    Int?
+  expiresAt     DateTime
+  declineNote   String?
+  decidedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  job        Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  client     User              @relation("ProposalClient", fields: [clientId], references: [id], onDelete: Cascade)
+  freelancer User              @relation("ProposalFreelancer", fields: [freelancerId], references: [id], onDelete: Cascade)
+  versions   ProposalVersion[]
+  contract   Contract?
+  events     ContractEvent[]
+
+  @@index([clientId, status, updatedAt])
+  @@index([freelancerId, status, updatedAt])
+  @@index([status, expiresAt])
+  @@map("proposals")
+}
+
+/// One version of a proposal: the brief, references, deadline and milestone list.
+model ProposalVersion {
+  id              Int      @id @default(autoincrement())
+  proposalId      Int
+  number          Int
+  authorId        Int
+  brief           String
+  referenceLinks  String[]
+  referenceImages String[]
+  deadline        DateTime
+  /// JSON list of { title, description?, dueDate (ISO text), amount }.
+  milestones      Json
+  total           Int
+  createdAt       DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  author   User     @relation("ProposalVersionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, number])
+  @@map("proposal_versions")
+}
+
+/// The agreed work. Copies the accepted proposal version.
+/// The migration adds CHECK clientId <> freelancerId.
+model Contract {
+  id               Int            @id @default(autoincrement())
+  /// Null for contracts imported from old hires.
+  proposalId       Int?           @unique
+  jobId            Int
+  clientId         Int
+  freelancerId     Int
+  title            String
+  brief            String
+  referenceLinks   String[]
+  referenceImages  String[]
+  deadline         DateTime
+  total            Int
+  status           ContractStatus @default(ACTIVE)
+  /// Why it ended: FREELANCER_LATE, CLIENT_SILENT, NOT_FUNDED, MUTUAL or CLIENT_ENDED.
+  endReason        String?
+  /// True for contracts made from old hires. They have no ledger rows.
+  imported         Boolean        @default(false)
+  /// An open request to end the contract early (asked by one side, answered by the other).
+  endRequestedById Int?
+  endRequestNote   String?
+  /// What happens to a SUBMITTED milestone's credits: APPROVE or REFUND.
+  endRequestChoice String?
+  endRequestedAt   DateTime?
+  completedAt      DateTime?
+  endedAt          DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  proposal       Proposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  job            Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  client         User            @relation("ContractClient", fields: [clientId], references: [id], onDelete: Cascade)
+  freelancer     User            @relation("ContractFreelancer", fields: [freelancerId], references: [id], onDelete: Cascade)
+  endRequestedBy User?           @relation("ContractEndRequester", fields: [endRequestedById], references: [id], onDelete: Cascade)
+  milestones     Milestone[]
+  amendments     Amendment[]
+  events         ContractEvent[]
+  ledger         LedgerEntry[]
+  review         Comment?
+
+  @@index([clientId, status, updatedAt])
+  @@index([freelancerId, status, updatedAt])
+  @@index([status])
+  @@map("contracts")
+}
+
+/// One paid step of a contract. The migration adds CHECK amount >= 1.
+model Milestone {
+  id                 Int             @id @default(autoincrement())
+  contractId         Int
+  /// 1 for the first milestone, 2 for the next, and so on.
+  position           Int
+  title              String
+  description        String?
+  dueDate            DateTime
+  amount             Int
+  status             MilestoneStatus @default(PENDING)
+  fundedAt           DateTime?
+  submittedAt        DateTime?
+  changesRequestedAt DateTime?
+  approvedAt         DateTime?
+  cancelledAt        DateTime?
+  /// True when the sweeper approved it because the client did not answer in time.
+  autoApproved       Boolean         @default(false)
+  /// When each deadline warning was sent (one per rule), so it is sent only once.
+  lateWarnedAt       DateTime?
+  silentWarnedAt     DateTime?
+  unfundedWarnedAt   DateTime?
+
+  contract    Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+  ledger      LedgerEntry[]
+
+  @@unique([contractId, position])
+  @@index([status])
+  @@map("milestones")
+}
+
+/// Work the freelancer hands in for a milestone, numbered 1, 2, 3 per milestone.
+model Submission {
+  id          Int      @id @default(autoincrement())
+  milestoneId Int
+  number      Int
+  authorId    Int
+  note        String
+  images      String[]
+  links       String[]
+  /// The client's "request changes" note on this submission.
+  feedback    String?
+  createdAt   DateTime @default(now())
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  author    User      @relation("SubmissionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([milestoneId, number])
+  @@map("submissions")
+}
+
+/// A change asked for mid-contract. The migration allows at most one OPEN amendment per
+/// contract (partial unique index amendments_one_open_per_contract).
+model Amendment {
+  id          Int             @id @default(autoincrement())
+  contractId  Int
+  proposerId  Int
+  status      AmendmentStatus @default(OPEN)
+  note        String?
+  /// A new overall contract deadline, if the amendment moves it.
+  deadline    DateTime?
+  /// JSON list of the changes (add a milestone, move a due date, change an amount).
+  changes     Json
+  declineNote String?
+  decidedAt   DateTime?
+  createdAt   DateTime        @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  proposer User     @relation("AmendmentProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, createdAt])
+  @@map("amendments")
+}
+
+/// History of a proposal or contract: one row per step, shown as a timeline.
+model ContractEvent {
+  id         Int       @id @default(autoincrement())
+  proposalId Int?
+  contractId Int?
+  /// Who did it. Null when the user is gone or the system (sweeper, import) did it.
+  actorId    Int?
+  type       String
+  data       Json?
+  createdAt  DateTime  @default(now())
+
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  contract Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    User?     @relation("ContractEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([contractId, createdAt])
+  @@index([proposalId, createdAt])
+  @@map("contract_events")
+}
+
+/// One demo credit wallet per user. The migration adds CHECKs available >= 0 and held >= 0.
+model Wallet {
+  userId    Int      @id
+  available Int      @default(0)
+  /// Credits the client has put on funded milestones and not yet released or refunded.
+  held      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+/// One wallet movement, with the balances after it.
+/// The migration adds CHECK availableDelta <> 0 OR heldDelta <> 0 (a row always moves something).
+model LedgerEntry {
+  id             Int        @id @default(autoincrement())
+  userId         Int
+  type           LedgerType
+  availableDelta Int
+  heldDelta      Int
+  availableAfter Int
+  heldAfter      Int
+  contractId     Int?
+  milestoneId    Int?
+  topUpId        Int?
+  /// The other person in the move (the freelancer on a release, the client on an earning).
+  counterpartyId Int?
+  createdAt      DateTime   @default(now())
+
+  user         User       @relation("LedgerEntryOwner", fields: [userId], references: [id], onDelete: Cascade)
+  // Ledger rows are money history: when a contract, milestone or top-up row goes away the
+  // entry stays (its link becomes null) so the wallet still adds up.
+  contract     Contract?  @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  milestone    Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  topUp        TopUp?     @relation(fields: [topUpId], references: [id], onDelete: SetNull)
+  counterparty User?      @relation("LedgerEntryCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt, id])
+  @@index([contractId])
+  @@map("ledger_entries")
+}
+
+/// A VNPay sandbox top-up. txnRef is unique so each payment adds credits only once.
+/// The migration adds CHECK credits BETWEEN 10 AND 10000.
+model TopUp {
+  id               Int         @id @default(autoincrement())
+  userId           Int
+  credits          Int
+  /// credits x 1,000 VND test money.
+  amountVnd        Int
+  txnRef           String      @unique
+  status           TopUpStatus @default(PENDING)
+  vnpTransactionNo String?
+  bankCode         String?
+  responseCode     String?
+  paidAt           DateTime?
+  createdAt        DateTime    @default(now())
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledger LedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@map("top_ups")
 }
