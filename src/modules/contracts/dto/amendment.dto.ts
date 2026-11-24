@@ -7,6 +7,7 @@ import {
   IsISO8601,
   IsNotEmpty,
   IsOptional,
+  Max,
   IsString,
   MaxLength,
   Min,
@@ -18,6 +19,7 @@ import {
   trimString,
 } from '../../../common/dto/string.transforms';
 import { AmendmentChangeParsed } from '../contract-rules';
+import { MAX_MILESTONE_CREDITS } from './proposal.dto';
 
 export const AMENDMENT_OPS = ['add', 'move', 'amount'] as const;
 
@@ -52,10 +54,11 @@ export class AmendmentChangeDto {
   @IsISO8601({ strict: true })
   dueDate?: string;
 
-  /** Whole credits, at least 1. */
+  /** Whole credits, 1 to 1,000,000. */
   @ValidateIf((o: AmendmentChangeDto) => o.op === 'add' || o.op === 'amount')
   @IsInt()
   @Min(1)
+  @Max(MAX_MILESTONE_CREDITS)
   amount?: number;
 }
 

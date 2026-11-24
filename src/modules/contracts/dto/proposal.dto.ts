@@ -25,6 +25,11 @@ import {
 
 export const MAX_REFERENCES = 10;
 export const PROPOSAL_MAX_PAGE_SIZE = 50;
+/**
+ * The most credits one milestone may carry. A bigger number is a 400 naming the field (and
+ * never overflows the contract total, a 32-bit whole number in the database).
+ */
+export const MAX_MILESTONE_CREDITS = 1_000_000;
 
 function emptyListIfNull({ value }: { value: unknown }): unknown {
   return value ?? [];
@@ -98,9 +103,10 @@ export class MilestoneInputDto {
   @IsISO8601({ strict: true })
   dueDate: string;
 
-  /** Whole credits, at least 1. */
+  /** Whole credits, 1 to 1,000,000. */
   @IsInt()
   @Min(1)
+  @Max(MAX_MILESTONE_CREDITS)
   amount: number;
 }
 

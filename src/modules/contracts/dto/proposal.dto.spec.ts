@@ -8,6 +8,7 @@ import {
   ProposalListQueryDto,
   VersionBodyDto,
 } from './proposal.dto';
+import { CreateAmendmentDto } from './amendment.dto';
 
 /** Every message, also the ones of nested rows (milestones). */
 function messagesOf(errors: ValidationError[]): string[] {
@@ -165,6 +166,27 @@ describe('proposal DTOs', () => {
     expect(
       (await parse(VersionBodyDto, body({ milestones: twenty }))).messages,
     ).toEqual([]);
+  });
+
+  it('caps a milestone amount at 1,000,000 credits (400 naming the field, not a 500)', async () => {
+    const over = await parse(
+      VersionBodyDto,
+      body({ milestones: [milestone({ amount: 2_000_000_000 })] }),
+    );
+    expect(over.messages).toEqual(['amount must not be greater than 1000000']);
+    const max = await parse(
+      VersionBodyDto,
+      body({ milestones: [milestone({ amount: 1_000_000 })] }),
+    );
+    expect(max.messages).toEqual([]);
+  });
+
+  it('caps an amendment amount at 1,000,000 credits', async () => {
+    const dto = plainToInstance(CreateAmendmentDto, {
+      changes: [{ op: 'amount', milestoneId: 31, amount: 1_000_001 }],
+    });
+    const messages = messagesOf(await validate(dto, { whitelist: true }));
+    expect(messages).toContain('amount must not be greater than 1000000');
   });
 
   it.each([0, -5, 1.5, '300'])(
