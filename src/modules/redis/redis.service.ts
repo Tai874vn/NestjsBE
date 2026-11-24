@@ -238,8 +238,17 @@ export class RedisService implements OnModuleDestroy {
 
     // If specific job ID, invalidate that job's detail cache
     if (jobId) {
-      await this.del(`${CACHE_KEYS.JOB_DETAIL}${jobId}`);
+      await this.invalidateJobDetail(jobId);
     }
+  }
+
+  /**
+   * Clear both detail keys of one job: "job:detail:<id>" (findOne) and "job:detail:full:<id>" (the details page).
+   * Missing the second one kept a deleted or edited post on its page until the cache expired.
+   */
+  private async invalidateJobDetail(jobId: number): Promise<void> {
+    await this.del(`${CACHE_KEYS.JOB_DETAIL}${jobId}`);
+    await this.del(`${CACHE_KEYS.JOB_DETAIL}full:${jobId}`);
   }
 
   /**
@@ -274,7 +283,7 @@ export class RedisService implements OnModuleDestroy {
   async invalidateCommentCaches(jobId: number): Promise<void> {
     await this.del(`${CACHE_KEYS.COMMENT_BY_JOB}${jobId}`);
     // Also invalidate the job detail since it includes comments
-    await this.del(`${CACHE_KEYS.JOB_DETAIL}${jobId}`);
+    await this.invalidateJobDetail(jobId);
   }
 
   /**
