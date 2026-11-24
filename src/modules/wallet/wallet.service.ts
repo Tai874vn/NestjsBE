@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { LedgerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { fmtCredits } from '../contracts/contract-rules';
+import { VnpayService } from './vnpay.service';
 
 /** Credits every user gets when their wallet is first made (the SEED row). */
 export const STARTING_GRANT = 5000;
@@ -105,7 +106,10 @@ type LedgerRow = Prisma.LedgerEntryGetPayload<{
  */
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vnpay: VnpayService,
+  ) {}
 
   /**
    * Makes the user's wallet if it does not exist yet, with the 5,000-credit SEED row.
@@ -244,8 +248,8 @@ export class WalletService {
       paidOut: 0 - (sums._sum.heldDelta ?? 0),
       earned: sums._sum.availableDelta ?? 0,
       topUp: {
-        // Turned on by the VNPay top-up task.
-        enabled: false,
+        // Hidden while the VNPay keys are missing.
+        enabled: this.vnpay.isConfigured(),
         minCredits: TOP_UP_MIN_CREDITS,
         maxCredits: TOP_UP_MAX_CREDITS,
         vndPerCredit: VND_PER_CREDIT,

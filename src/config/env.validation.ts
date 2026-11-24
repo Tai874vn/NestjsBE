@@ -80,6 +80,16 @@ export const envValidationSchema = Joi.object({
   LIVEKIT_API_KEY: Joi.string().empty('').optional(),
   LIVEKIT_API_SECRET: Joi.string().empty('').optional(),
 
+  // VNPay sandbox top-up (optional: without TMN code, hash secret and return URL the top-up is
+  // hidden and POST /wallet/top-ups answers 503)
+  VNPAY_TMN_CODE: Joi.string().empty('').optional(),
+  VNPAY_HASH_SECRET: Joi.string().empty('').optional(),
+  VNPAY_PAY_URL: Joi.string()
+    .uri()
+    .empty('')
+    .default('https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
+  VNPAY_RETURN_URL: Joi.string().uri().empty('').optional(),
+
   // Cloudinary (if used)
   CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
   CLOUDINARY_API_KEY: Joi.string().empty('').optional(),

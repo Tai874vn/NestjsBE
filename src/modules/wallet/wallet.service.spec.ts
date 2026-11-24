@@ -13,7 +13,10 @@ type Balance = { available: number; held: number };
  * $queryRaw answers the two raw queries of the service: the INSERT ... ON CONFLICT of ensure()
  * (it returns a row only when the wallet did not exist yet) and the SELECT ... FOR UPDATE of lock().
  */
-function createService(start: Record<number, Balance> = {}) {
+function createService(
+  start: Record<number, Balance> = {},
+  topUpConfigured = false,
+) {
   const wallets = new Map<number, Balance>(
     Object.entries(start).map(([id, b]) => [Number(id), { ...b }]),
   );
@@ -78,7 +81,8 @@ function createService(start: Record<number, Balance> = {}) {
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn(prisma),
   );
-  const service = new WalletService(prisma as never);
+  const vnpay = { isConfigured: () => topUpConfigured };
+  const service = new WalletService(prisma as never, vnpay as never);
   const tx = prisma as unknown as Prisma.TransactionClient;
   const ledgerRows = () =>
     prisma.ledgerEntry.create.mock.calls.map(
@@ -341,6 +345,12 @@ describe('WalletService', () => {
           vndPerCredit: 1000,
         },
       });
+    });
+
+    it('reports topUp.enabled = true when the VNPay keys are set', async () => {
+      const { service, prisma } = createService({}, true);
+      prisma.ledgerEntry.aggregate.mockResolvedValue({ _sum: {} });
+      expect((await service.summary(8)).topUp.enabled).toBe(true);
     });
 
     it('answers 0 paid out and 0 earned when there are no RELEASE rows', async () => {
