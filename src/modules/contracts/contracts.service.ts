@@ -14,7 +14,10 @@ import {
   nextMilestoneStatus,
   Side,
 } from './contract-rules';
-import { ContractEndingService } from './contract-ending.service';
+import {
+  CLEAR_END_CHOICE,
+  ContractEndingService,
+} from './contract-ending.service';
 import { ContractEventsService } from './contract-events.service';
 import {
   ContractStepService,
@@ -135,6 +138,7 @@ export class ContractsService {
           where: { id: m.id },
           data: { status: M.SUBMITTED, submittedAt: now, ...NO_WARNINGS },
         });
+        await this.clearEndChoice(tx, contract);
         await this.events.record(tx, {
           contractId: contract.id,
           actorId: viewer.id,
@@ -198,6 +202,7 @@ export class ContractsService {
             ...NO_WARNINGS,
           },
         });
+        await this.clearEndChoice(tx, contract);
         await this.events.record(tx, {
           contractId: contract.id,
           actorId: viewer.id,
@@ -314,6 +319,21 @@ export class ContractsService {
       }),
     );
     return m;
+  }
+
+  /**
+   * The work changed, so the client's stored end-request choice (made for the old work) is
+   * dropped. Accepting that end request while work is SUBMITTED then needs a new request.
+   */
+  private async clearEndChoice(
+    tx: Prisma.TransactionClient,
+    contract: LockedContract,
+  ) {
+    if (!contract.endRequestChoice) return;
+    await tx.contract.update({
+      where: { id: contract.id },
+      data: CLEAR_END_CHOICE,
+    });
   }
 
   private assertActive(contract: LockedContract) {

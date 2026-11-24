@@ -17,7 +17,10 @@ import {
   checkAmendment,
   fmtCredits,
 } from './contract-rules';
-import { ContractEndingService } from './contract-ending.service';
+import {
+  CLEAR_END_REQUEST,
+  ContractEndingService,
+} from './contract-ending.service';
 import { ContractEventsService } from './contract-events.service';
 import {
   ContractStepService,
@@ -317,12 +320,17 @@ export class AmendmentsService {
           side === 'client'
             ? this.clientChoice(contract, input.submittedChoice)
             : null;
+        // The choice belongs to the work submitted right now: that milestone and its latest
+        // submission. It is used later only while that same work is still the submitted one.
+        const work = choice ? await this.submittedWork(tx, contract) : null;
         await tx.contract.update({
           where: { id: contract.id },
           data: {
             endRequestedById: viewer.id,
             endRequestNote: note,
             endRequestChoice: choice,
+            endRequestMilestoneId: work?.milestoneId ?? null,
+            endRequestSubmissionId: work?.submissionId ?? null,
             endRequestedAt: now,
           },
         });
@@ -376,9 +384,18 @@ export class AmendmentsService {
           // was submitted then). Work submitted after the request needs a new request.
           choice = (contract.endRequestChoice as EndChoice | null) ?? undefined;
           if (!choice && hasSubmitted(contract)) {
-            throw new ConflictException(
-              'Work was submitted after the end request. Ask the client to send a new one.',
-            );
+            throw new ConflictException(WORK_CHANGED);
+          }
+          if (choice && hasSubmitted(contract)) {
+            // The stored choice counts only for the exact work it was made for.
+            const work = await this.submittedWork(tx, contract);
+            if (
+              !work ||
+              work.milestoneId !== contract.endRequestMilestoneId ||
+              work.submissionId !== contract.endRequestSubmissionId
+            ) {
+              throw new ConflictException(WORK_CHANGED);
+            }
           }
         }
         return this.ending.end(tx, contract, 'MUTUAL', {
@@ -519,13 +536,23 @@ export class AmendmentsService {
   private clearEndRequest(tx: Prisma.TransactionClient, contractId: number) {
     return tx.contract.update({
       where: { id: contractId },
-      data: {
-        endRequestedById: null,
-        endRequestNote: null,
-        endRequestChoice: null,
-        endRequestedAt: null,
-      },
+      data: CLEAR_END_REQUEST,
     });
+  }
+
+  /** The SUBMITTED milestone and its latest submission (null when nothing is submitted). */
+  private async submittedWork(
+    tx: Prisma.TransactionClient,
+    contract: LockedContract,
+  ): Promise<{ milestoneId: number; submissionId: number | null } | null> {
+    const m = contract.milestones.find((x) => x.status === M.SUBMITTED);
+    if (!m) return null;
+    const latest = await tx.submission.findFirst({
+      where: { milestoneId: m.id },
+      orderBy: { number: 'desc' },
+      select: { id: true },
+    });
+    return { milestoneId: m.id, submissionId: latest?.id ?? null };
   }
 
   private actorName(contract: LockedContract, userId: number): string {
@@ -540,6 +567,10 @@ export class AmendmentsService {
     return { fromId, toId, text };
   }
 }
+
+/** Said (409) when the work changed after the client's end request. */
+const WORK_CHANGED =
+  'Work was submitted after the end request. Ask the client to send a new one.';
 
 function hasSubmitted(contract: LockedContract): boolean {
   return contract.milestones.some((m) => m.status === M.SUBMITTED);

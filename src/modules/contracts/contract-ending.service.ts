@@ -11,11 +11,33 @@ import { ContractEventsService, EndReason } from './contract-events.service';
 
 const M = MilestoneStatus;
 
+/**
+ * Clears the client's stored end-request choice (APPROVE or REFUND for submitted work) and the
+ * work it was made for. Used when that work changes (new submission, changes requested,
+ * approved), so an old APPROVE can never pay for work the client has not seen. The end request
+ * itself stays open; accepting it while work is SUBMITTED then needs a new request (409).
+ */
+export const CLEAR_END_CHOICE = {
+  endRequestChoice: null,
+  endRequestMilestoneId: null,
+  endRequestSubmissionId: null,
+} satisfies Prisma.ContractUncheckedUpdateInput;
+
+/** Clears the whole open end request. */
+export const CLEAR_END_REQUEST = {
+  ...CLEAR_END_CHOICE,
+  endRequestedById: null,
+  endRequestNote: null,
+  endRequestedAt: null,
+} satisfies Prisma.ContractUncheckedUpdateInput;
+
 /** The parts of a locked contract that ending reads. */
 export type EndingContract = {
   id: number;
   clientId: number;
   freelancerId: number;
+  /** The stored end-request choice, when the caller read it (cleared on approve). */
+  endRequestChoice?: string | null;
   milestones: {
     id: number;
     position: number;
@@ -115,14 +137,30 @@ export class ContractEndingService {
         other.status === M.CANCELLED,
     );
     if (completed) {
+      // A finished contract keeps no open change request or end request (their buttons would
+      // only answer 409).
+      await tx.amendment.updateMany({
+        where: { contractId: contract.id, status: AmendmentStatus.OPEN },
+        data: { status: AmendmentStatus.CANCELLED, decidedAt: now },
+      });
       await tx.contract.update({
         where: { id: contract.id },
-        data: { status: ContractStatus.COMPLETED, completedAt: now },
+        data: {
+          status: ContractStatus.COMPLETED,
+          completedAt: now,
+          ...CLEAR_END_REQUEST,
+        },
       });
       await this.events.record(tx, {
         contractId: contract.id,
         actorId,
         type: 'contract_completed',
+      });
+    } else if (contract.endRequestChoice) {
+      // The approved work is no longer the work the client's end-request choice was made for.
+      await tx.contract.update({
+        where: { id: contract.id },
+        data: CLEAR_END_CHOICE,
       });
     }
     return { completed };
@@ -198,10 +236,7 @@ export class ContractEndingService {
         status: ContractStatus.ENDED,
         endReason: reason,
         endedAt: now,
-        endRequestedById: null,
-        endRequestNote: null,
-        endRequestChoice: null,
-        endRequestedAt: null,
+        ...CLEAR_END_REQUEST,
       },
     });
     await this.events.record(tx, {

@@ -175,6 +175,8 @@ function setup(milestones: FakeMilestone[], status: ContractStatus = C.ACTIVE) {
       ),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    // The latest submission of a milestone (the end-request choice is tied to it).
+    submission: { findFirst: jest.fn().mockResolvedValue({ id: 777 }) },
     contractEvent: { findMany: jest.fn().mockResolvedValue([]) },
   };
   prisma.$transaction.mockImplementation(
@@ -551,6 +553,10 @@ describe('AmendmentsService', () => {
       ]);
       await service.requestEnd(20, client, { submittedChoice: 'REFUND' });
       expect(state.endRequestChoice).toBe('REFUND');
+      expect(state).toMatchObject({
+        endRequestMilestoneId: 31,
+        endRequestSubmissionId: 777,
+      });
 
       await service.acceptEnd(20, freelancer, {});
 

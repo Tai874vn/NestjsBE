@@ -135,6 +135,8 @@ describe('ContractEndingService.end', () => {
         endRequestedById: null,
         endRequestNote: null,
         endRequestChoice: null,
+        endRequestMilestoneId: null,
+        endRequestSubmissionId: null,
         endRequestedAt: null,
       },
     });

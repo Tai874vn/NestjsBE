@@ -6,6 +6,7 @@ import {
 import { ContractStatus, MilestoneStatus } from '@prisma/client';
 import { Role } from '../../common/constants/roles';
 import { InsufficientCreditsError } from '../wallet/wallet.service';
+import { AmendmentsService } from './amendments.service';
 import { ContractEndingService } from './contract-ending.service';
 import { ContractStepService } from './contract-step.service';
 import { ContractsQueryService } from './contracts-query.service';
@@ -80,6 +81,8 @@ function contractRow(milestones: FakeMilestone[], status: ContractStatus) {
     endRequestedById: null as number | null,
     endRequestNote: null as string | null,
     endRequestChoice: null as string | null,
+    endRequestMilestoneId: null as number | null,
+    endRequestSubmissionId: null as number | null,
     endRequestedAt: null as Date | null,
     completedAt: null as Date | null,
     endedAt: null as Date | null,
@@ -185,7 +188,13 @@ function setup(milestones: FakeMilestone[], status: ContractStatus = C.ACTIVE) {
     events as never,
     ending,
   );
-  return { prisma, wallet, events, service, query, ending, state };
+  const amendments = new AmendmentsService(
+    prisma as never,
+    step,
+    events as never,
+    ending,
+  );
+  return { prisma, wallet, events, service, query, ending, amendments, state };
 }
 
 function contractLocked(prisma: { $queryRaw: jest.Mock }) {
@@ -634,6 +643,121 @@ describe('ContractsService', () => {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         }),
       );
+    });
+  });
+
+  describe('the end-request choice follows the work it was made for', () => {
+    const WORK_CHANGED = new ConflictException(
+      'Work was submitted after the end request. Ask the client to send a new one.',
+    );
+    const work = { note: 'Here it is', images: [image], links: [] };
+
+    it('stores the SUBMITTED milestone and its latest submission with the choice', async () => {
+      const { service, amendments, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+      ]);
+      await service.submit(31, freelancer, work);
+
+      await amendments.requestEnd(20, client, { submittedChoice: 'APPROVE' });
+
+      expect(state.endRequestChoice).toBe('APPROVE');
+      expect(state.endRequestMilestoneId).toBe(31);
+      expect(state.endRequestSubmissionId).toBe(600);
+    });
+
+    it('same work still submitted: the freelancer accepts and APPROVE pays it', async () => {
+      const { service, amendments, wallet, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+      ]);
+      await service.submit(31, freelancer, work);
+      await amendments.requestEnd(20, client, { submittedChoice: 'APPROVE' });
+
+      await amendments.acceptEnd(20, freelancer, {});
+
+      expect(wallet.release).toHaveBeenCalledTimes(1);
+      expect(state.status).toBe(C.ENDED);
+    });
+
+    it('case (a): changes requested, version 2 submitted, then accept is 409 and nothing is paid', async () => {
+      const { service, amendments, wallet, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+        milestone(32, 2, M.PENDING, 700),
+      ]);
+      await service.submit(31, freelancer, work);
+      await amendments.requestEnd(20, client, { submittedChoice: 'APPROVE' });
+
+      await service.requestChanges(31, client, 'Bigger letters please');
+      expect(state.endRequestChoice).toBeNull();
+      expect(state.endRequestMilestoneId).toBeNull();
+      expect(state.endRequestSubmissionId).toBeNull();
+      expect(state.endRequestedById).toBe(3);
+      await service.submit(31, freelancer, work);
+
+      await expect(amendments.acceptEnd(20, freelancer, {})).rejects.toThrow(
+        WORK_CHANGED,
+      );
+      expect(wallet.release).not.toHaveBeenCalled();
+      expect(state.status).toBe(C.ACTIVE);
+    });
+
+    it('case (b): milestone 1 approved by hand, milestone 2 funded and submitted, then accept is 409', async () => {
+      const { service, amendments, wallet, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+        milestone(32, 2, M.PENDING, 700),
+      ]);
+      await service.submit(31, freelancer, work);
+      await amendments.requestEnd(20, client, { submittedChoice: 'APPROVE' });
+
+      await service.approve(31, client);
+      expect(state.endRequestChoice).toBeNull();
+      expect(state.endRequestedById).toBe(3);
+      await service.fund(32, client);
+      await service.submit(32, freelancer, work);
+
+      await expect(amendments.acceptEnd(20, freelancer, {})).rejects.toThrow(
+        WORK_CHANGED,
+      );
+      // Only the hand approval of milestone 1 paid anything.
+      expect(wallet.release).toHaveBeenCalledTimes(1);
+      expect(state.milestones[1].status).toBe(M.SUBMITTED);
+      expect(state.status).toBe(C.ACTIVE);
+    });
+
+    it('a stored choice for other work (submission id differs) is 409, never paid', async () => {
+      const { service, amendments, wallet, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+      ]);
+      await service.submit(31, freelancer, work);
+      Object.assign(state, {
+        endRequestedById: 3,
+        endRequestChoice: 'APPROVE',
+        endRequestMilestoneId: 31,
+        endRequestSubmissionId: 1,
+        endRequestedAt: new Date(),
+      });
+
+      await expect(amendments.acceptEnd(20, freelancer, {})).rejects.toThrow(
+        WORK_CHANGED,
+      );
+      expect(wallet.release).not.toHaveBeenCalled();
+    });
+
+    it('approving the last milestone completes the contract and closes the end request and an OPEN amendment', async () => {
+      const { service, amendments, prisma, state } = setup([
+        milestone(31, 1, M.FUNDED, 300),
+      ]);
+      await service.submit(31, freelancer, work);
+      await amendments.requestEnd(20, client, { submittedChoice: 'REFUND' });
+
+      await service.approve(31, client);
+
+      expect(state.status).toBe(C.COMPLETED);
+      expect(state.endRequestedById).toBeNull();
+      expect(state.endRequestChoice).toBeNull();
+      expect(prisma.amendment.updateMany).toHaveBeenCalledWith({
+        where: { contractId: 20, status: 'OPEN' },
+        data: { status: 'CANCELLED', decidedAt: expect.any(Date) as Date },
+      });
     });
   });
 });
