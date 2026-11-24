@@ -128,15 +128,14 @@ export class HiringPostsService {
     };
   }
 
-  async findMine(userId: number, userRole: Role, query: PaginationDto) {
+  async findMine(userId: number, query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
     const keyword = query.keyword?.trim();
     const filters: Prisma.HiringPostWhereInput[] = [];
 
-    if (userRole !== Role.ADMIN) {
-      filters.push({ recruiterId: userId });
-    }
+    // "My hiring posts" is always the caller's own posts. Admins see every post on the admin dashboard.
+    filters.push({ recruiterId: userId });
 
     if (keyword) {
       filters.push(await this.keywordWhere(keyword));

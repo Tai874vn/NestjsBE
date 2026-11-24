@@ -1086,6 +1086,19 @@ describe('HiringPostsService', () => {
       expect(events.announce).toHaveBeenCalledTimes(1);
     });
 
+    it('the owner list shows only the caller own posts, for an admin too (admins use the dashboard)', async () => {
+      const { prisma, service } = createService();
+      prisma.hiringPost.findMany.mockResolvedValue([]);
+      prisma.hiringPost.count.mockResolvedValue(0);
+      prisma.hiringApplication.groupBy.mockResolvedValue([]);
+
+      await service.findMine(5, {});
+
+      expect(prisma.hiringPost.findMany.mock.calls[0][0].where).toEqual({
+        AND: [{ recruiterId: 5 }],
+      });
+    });
+
     it('the owner list has pipeline counts from one groupBy, with every key', async () => {
       const { prisma, service } = createService();
       prisma.hiringPost.findMany.mockResolvedValue([
@@ -1099,7 +1112,7 @@ describe('HiringPostsService', () => {
         { hiringPostId: 10, status: 'HIRED', _count: { _all: 2 } },
       ]);
 
-      const result = await service.findMine(2, Role.EMPLOYER, {});
+      const result = await service.findMine(2, {});
 
       expect(prisma.hiringApplication.groupBy).toHaveBeenCalledTimes(1);
       expect(prisma.hiringApplication.groupBy.mock.calls[0][0]).toMatchObject({

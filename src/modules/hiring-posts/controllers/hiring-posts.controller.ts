@@ -59,7 +59,7 @@ export class HiringPostsController {
   @Get('mine')
   @Roles(Role.EMPLOYER, Role.ADMIN)
   findMine(@Query() query: PaginationDto, @CurrentUser() user: ValidatedUser) {
-    return this.hiringPostsService.findMine(user.id, user.role, query);
+    return this.hiringPostsService.findMine(user.id, query);
   }
 
   @Get('applications/me')
