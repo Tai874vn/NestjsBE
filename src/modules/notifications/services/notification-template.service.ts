@@ -43,6 +43,14 @@ export type ContractTemplateInput = {
   proposalId?: number;
   contractId?: number;
   milestoneId?: number;
+  /** The service (job) title, so the headline can name it. */
+  jobTitle?: string;
+  /** Milestone number when the step is about one milestone. */
+  position?: number;
+  /** Credits that moved (held, released or refunded). */
+  amount?: number;
+  /** Sweeper rule or end reason. */
+  rule?: string;
   recipientSide: 'client' | 'freelancer';
 };
 
@@ -251,6 +259,10 @@ export class NotificationTemplateService {
         proposalId: input.proposalId ?? null,
         contractId: input.contractId ?? null,
         milestoneId: input.milestoneId ?? null,
+        jobTitle: input.jobTitle ?? null,
+        position: input.position ?? null,
+        amount: input.amount ?? null,
+        rule: input.rule ?? null,
         actorName: input.actorName,
         title: input.title,
       },

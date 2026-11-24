@@ -261,6 +261,9 @@ describe('ContractsService', () => {
           step: 'milestone_funded',
           contractId: 20,
           milestoneId: 31,
+          jobTitle: 'Bakery logo',
+          position: 1,
+          amount: 300,
           recipientSide: 'freelancer',
           chat: expect.objectContaining({ fromId: 3, toId: 9 }),
         }),
@@ -471,13 +474,21 @@ describe('ContractsService', () => {
 
   describe('approve', () => {
     it('approving a middle milestone releases once and the contract stays ACTIVE', async () => {
-      const { wallet, service, state } = setup([
+      const { wallet, events, service, state } = setup([
         milestone(31, 1, M.SUBMITTED, 300),
         milestone(32, 2, M.PENDING, 700),
       ]);
 
       const result = await service.approve(31, client);
 
+      expect(events.announce).toHaveBeenCalledWith(
+        expect.objectContaining({
+          step: 'milestone_approved',
+          jobTitle: 'Bakery logo',
+          position: 1,
+          amount: 300,
+        }),
+      );
       expect(wallet.release).toHaveBeenCalledTimes(1);
       expect(state.milestones[0].status).toBe(M.APPROVED);
       expect(state.status).toBe(C.ACTIVE);

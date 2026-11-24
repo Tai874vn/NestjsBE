@@ -492,7 +492,14 @@ describe('ContractSweeperService', () => {
       });
       expect(events.announce).toHaveBeenCalledTimes(1);
       expect(events.announce).toHaveBeenCalledWith(
-        expect.objectContaining({ recipientId: 3, recipientSide: 'client' }),
+        expect.objectContaining({
+          recipientId: 3,
+          recipientSide: 'client',
+          step: 'warning_sent',
+          jobTitle: 'Bakery logo',
+          position: 1,
+          rule: 'client_silent',
+        }),
       );
 
       const second = await sweeper.sweepOnce(NOW);

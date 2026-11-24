@@ -65,6 +65,8 @@ export type ApproveOptions = {
 export type EndResult = {
   released: number[];
   refunded: number[];
+  /** Credits refunded to the client in all. */
+  refundedAmount: number;
   cancelled: number[];
 };
 
@@ -174,7 +176,12 @@ export class ContractEndingService {
   ): Promise<EndResult> {
     const now = opts.now ?? new Date();
     const actorId = opts.actorId ?? null;
-    const result: EndResult = { released: [], refunded: [], cancelled: [] };
+    const result: EndResult = {
+      released: [],
+      refunded: [],
+      refundedAmount: 0,
+      cancelled: [],
+    };
 
     for (const m of contract.milestones) {
       const move = {
@@ -211,6 +218,7 @@ export class ContractEndingService {
           data: { ...ids, amount: m.amount },
         });
         result.refunded.push(m.position);
+        result.refundedAmount += m.amount;
       } else if (m.status === M.PENDING) {
         await tx.milestone.update({
           where: { id: m.id },

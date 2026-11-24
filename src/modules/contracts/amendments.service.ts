@@ -408,6 +408,8 @@ export class AmendmentsService {
         kind: 'contract',
         step: 'contract_ended',
         title: 'Contract ended',
+        rule: 'MUTUAL',
+        ...(result.refundedAmount > 0 ? { amount: result.refundedAmount } : {}),
         body: `${this.actorName(contract, viewer.id)} agreed to end ${contract.title}. ${endSummary(result)}`,
         chat: this.chatFrom(
           contract,

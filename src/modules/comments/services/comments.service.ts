@@ -61,6 +61,7 @@ export class CommentsService {
       actorName: contract.client.name,
       kind: 'contract',
       step: 'review_left',
+      jobTitle: comment.job.title,
       title: 'New review',
       body: `${contract.client.name} reviewed ${contract.title} (${createDto.rating}/5).`,
       contractId: contract.id,

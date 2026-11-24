@@ -297,6 +297,7 @@ describe('ProposalsService', () => {
           recipientId: 3,
           actorName: 'Minh Le',
           step: 'proposal_countered',
+          jobTitle: 'Bakery logo',
           recipientSide: 'client',
           chat: expect.objectContaining({ fromId: 9, toId: 3 }),
         }),

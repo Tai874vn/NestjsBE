@@ -63,7 +63,12 @@ describe('ContractEndingService.end', () => {
     expect(wallet.release).toHaveBeenCalledWith(tx, move(32, 400));
     expect(wallet.refund).not.toHaveBeenCalled();
     expect(statusUpdates(tx)).toEqual({ 32: M.APPROVED, 33: M.CANCELLED });
-    expect(result).toEqual({ released: [2], refunded: [], cancelled: [3] });
+    expect(result).toEqual({
+      released: [2],
+      refunded: [],
+      refundedAmount: 0,
+      cancelled: [3],
+    });
     expect(events.record).toHaveBeenCalledWith(tx, {
       contractId: 20,
       actorId: 9,

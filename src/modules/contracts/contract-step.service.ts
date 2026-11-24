@@ -132,6 +132,7 @@ export class ContractStepService {
     if (notice) {
       const client = side === 'client';
       await this.events.announce({
+        jobTitle: contract.job.title,
         ...notice,
         recipientId: client ? contract.freelancerId : contract.clientId,
         actorId: viewer.id,

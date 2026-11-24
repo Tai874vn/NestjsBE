@@ -93,6 +93,8 @@ export class ContractsService {
         kind: 'contract',
         step: 'milestone_funded',
         title: 'Milestone funded',
+        position: m.position,
+        amount: m.amount,
         body: `${contract.client.name} funded milestone ${m.position} of ${contract.title} (${fmtCredits(m.amount)} credits). You can start the work.`,
         milestoneId: m.id,
         chat: {
@@ -151,6 +153,7 @@ export class ContractsService {
         kind: 'contract',
         step: 'work_submitted',
         title: 'Work submitted',
+        position: m.position,
         body: `${contract.freelancer.name} submitted work for milestone ${m.position} of ${contract.title}. Review it and approve or ask for changes.`,
         milestoneId: m.id,
         chat: {
@@ -215,6 +218,7 @@ export class ContractsService {
         kind: 'contract',
         step: 'changes_requested',
         title: 'Changes requested',
+        position: m.position,
         body: `${contract.client.name} asked for changes on milestone ${m.position} of ${contract.title}: ${feedback}`,
         milestoneId: m.id,
       }),
@@ -249,6 +253,8 @@ export class ContractsService {
             ? `${contract.client.name} approved the last milestone of ${contract.title} (${paid} paid). The contract is completed.`
             : `${contract.client.name} approved milestone ${m.position} of ${contract.title} (${paid} paid).`,
           milestoneId: m.id,
+          position: m.position,
+          amount: m.amount,
           chat: {
             fromId: contract.clientId,
             toId: contract.freelancerId,
@@ -289,6 +295,7 @@ export class ContractsService {
         kind: 'contract',
         step: 'contract_ended',
         title: 'Contract ended',
+        rule: 'CLIENT_ENDED',
         body: `${contract.client.name} ended the contract for ${contract.title}. No credits were held.`,
         chat: {
           fromId: contract.clientId,

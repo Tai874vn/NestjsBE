@@ -94,6 +94,14 @@ export type ContractAnnounceInput = {
   proposalId?: number;
   contractId?: number;
   milestoneId?: number;
+  /** The service (job) title the proposal or contract is about. */
+  jobTitle?: string;
+  /** Milestone number, when the step is about one milestone. */
+  position?: number;
+  /** Credits that moved (held, released or refunded). */
+  amount?: number;
+  /** Sweeper rule ('CLIENT_SILENT'...) or the end reason. */
+  rule?: string;
   /** Which side the recipient is; it picks the tab in the link. */
   recipientSide: Side;
   /**
@@ -172,6 +180,10 @@ export class ContractEventsService {
         proposalId: input.proposalId,
         contractId: input.contractId,
         milestoneId: input.milestoneId,
+        jobTitle: input.jobTitle,
+        position: input.position,
+        amount: input.amount,
+        rule: input.rule,
         recipientSide: input.recipientSide,
       };
       await this.notifications.create(

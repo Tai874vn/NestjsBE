@@ -192,6 +192,7 @@ export class ProposalsService {
       actorName: clientName,
       kind: 'proposal',
       step: 'proposal_sent',
+      jobTitle: job.title,
       title: 'New proposal',
       body: `${clientName} sent a proposal for ${job.title} (${fmtCredits(version.total)} credits).`,
       proposalId,
@@ -490,6 +491,7 @@ export class ProposalsService {
     // After commit: tell the other side; announce() never throws.
     const other = side === 'client' ? 'freelancer' : 'client';
     await this.events.announce({
+      jobTitle: proposal.job.title,
       ...step.notice(proposal, result),
       recipientId: this.otherId(proposal, side),
       actorId: viewer.id,

@@ -230,6 +230,7 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
         actorName: SYSTEM_NAME,
         kind: 'proposal',
         step: 'proposal_expired',
+        jobTitle: proposal.job.title,
         title: 'Proposal expired',
         body,
         proposalId: proposal.id,
@@ -400,6 +401,8 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
       kind: 'contract' as const,
       contractId: contract.id,
       milestoneId: m.id,
+      jobTitle: contract.job.title,
+      position: m.position,
     };
     const toClient = {
       recipientId: contract.clientId,
@@ -418,7 +421,11 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
 
     if (outcome.act === 'warn') {
       const left = fmtDuration(outcome.left);
-      const notice = { ...base, step: 'warning_sent' as const };
+      const notice = {
+        ...base,
+        step: 'warning_sent' as const,
+        rule: outcome.rule.toLowerCase(),
+      };
       if (outcome.rule === 'FREELANCER_LATE') {
         const body = `Milestone ${m.position} is past its due date. ${left} left to submit.`;
         return [toClient, toFreelancer].map((to) => ({
@@ -455,6 +462,7 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
           ...base,
           ...toFreelancer,
           step: 'contract_completed',
+          amount: m.amount,
           title: 'Contract completed',
           body,
           chat: chat(
@@ -465,6 +473,7 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
           ...base,
           ...toClient,
           step: 'contract_completed',
+          amount: m.amount,
           title: 'Contract completed',
           body,
         },
@@ -481,9 +490,16 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
           ? `milestone ${m.position} was not submitted within ${window} after its due date, so the contract ended.${refunded}`
           : `milestone ${m.position} was not funded within ${window}, so the contract ended.`;
     const body = `${contract.title}: ${why} Approved work stays with the client.`;
+    const moved =
+      outcome.rule === 'CLIENT_SILENT' ? m.amount : outcome.end.refundedAmount;
+    const ended = {
+      ...base,
+      rule: outcome.rule,
+      ...(moved > 0 ? { amount: moved } : {}),
+    };
     return [
       {
-        ...base,
+        ...ended,
         ...toFreelancer,
         step: 'contract_ended',
         title: 'Contract ended',
@@ -491,7 +507,7 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
         chat: chat(`the contract for "${contract.title}" ended: ${why}`),
       },
       {
-        ...base,
+        ...ended,
         ...toClient,
         step: 'contract_ended',
         title: 'Contract ended',
