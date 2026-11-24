@@ -6,6 +6,7 @@ import { AmendmentsService } from './amendments.service';
 import { ContractEndingService } from './contract-ending.service';
 import { ContractEventsService } from './contract-events.service';
 import { ContractStepService } from './contract-step.service';
+import { ContractSweeperService } from './contract-sweeper.service';
 import { AmendmentsController } from './controllers/amendments.controller';
 import { ContractFilesController } from './controllers/contract-files.controller';
 import { ContractsController } from './controllers/contracts.controller';
@@ -24,7 +25,8 @@ import { ProposalsService } from './proposals.service';
  * step (ContractStepService), the milestone steps and the client's own end (ContractsService,
  * answered by ContractsController and MilestonesController) and the early end shared with the
  * sweeper and the mutual end (ContractEndingService), and the amendments and end requests
- * (AmendmentsService, answered by AmendmentsController and ContractsController).
+ * (AmendmentsService, answered by AmendmentsController and ContractsController), and the sweeper
+ * (ContractSweeperService), a timer that applies the deadline rules and expires old proposals.
  */
 @Module({
   imports: [NotificationsModule, ChatModule, WalletModule],
@@ -43,6 +45,7 @@ import { ProposalsService } from './proposals.service';
     ContractsService,
     ContractEndingService,
     AmendmentsService,
+    ContractSweeperService,
   ],
   exports: [ContractEventsService, ContractStepService, ContractEndingService],
 })

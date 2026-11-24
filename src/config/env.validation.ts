@@ -64,6 +64,11 @@ export const envValidationSchema = Joi.object({
   // How often the resume AI queue checks for work; 0 turns the background worker off.
   RESUME_AI_QUEUE_INTERVAL_MS: Joi.number().integer().min(0).optional(),
   HIRING_POST_AI_QUEUE_INTERVAL_MS: Joi.number().integer().min(0).optional(),
+
+  // Service contracts: the length in minutes of every 3-day deadline window (4320 = 3 days;
+  // a small number such as 10 makes a demo quick), and how often the sweeper runs (0 = off).
+  CONTRACT_GRACE_MINUTES: Joi.number().integer().min(1).default(4320),
+  CONTRACT_SWEEP_INTERVAL_MS: Joi.number().integer().min(0).default(60000),
   AI_RECOMMENDATION_MODEL_VERSION: Joi.string().max(100).default('current'),
   RECOMMENDATION_SNAPSHOT_MAX_AGE_SECONDS: Joi.number()
     .integer()
