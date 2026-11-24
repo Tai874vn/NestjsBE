@@ -1,3 +1,5 @@
+import { checkAmendment } from '../../modules/contracts/contract-rules';
+import { evaluateDeadlines } from '../../modules/contracts/deadline-rules';
 import {
   applicationFit,
   buildActivity,
@@ -105,8 +107,11 @@ describe('buildActivity', () => {
         if (comment.replyTo !== undefined) expect(comment.authorId).toBe(post.authorId);
       }
     }
-    for (const hire of activity.hires) expect(hire.hirerId).not.toBe(2);
-    for (const hire of activity.hires) if (hire.review) expect(hire.completed).toBe(true);
+    for (const proposal of activity.proposals) {
+      expect(proposal.clientId).not.toBe(proposal.freelancerId);
+      expect(proposal.freelancerId).toBe(2);
+    }
+    for (const contract of activity.contracts) expect(contract.clientId).not.toBe(2);
   });
 
   it('has one chat room per pair, and messages only from its two members', () => {
@@ -143,7 +148,14 @@ function bigInput(): ActivityInput {
       location: 'Hanoi',
       employmentType: 'Full-time',
     })),
-    services: [],
+    // Services from 20 of the candidates, so the recruiters have work to buy.
+    services: Array.from({ length: 20 }, (_, index) => ({
+      id: 200 + index,
+      creatorId: index * 3 + 1,
+      title: `Service ${index}`,
+      summary: `Service ${index}, built with TypeScript.`,
+      description: `Service ${index}. Result: shipped on time.`,
+    })),
   };
 }
 
@@ -260,5 +272,291 @@ describe('buildActivity hiring pipeline', () => {
       expect(times).toEqual([...times].sort((a, b) => a - b));
       expect(chat.createdAt.getTime()).toBeLessThanOrEqual(times[0]);
     }
+  });
+});
+
+describe('buildActivity contracts and wallets', () => {
+  const DAYS = 86_400_000;
+  const HELD = ['FUNDED', 'SUBMITTED', 'CHANGES_REQUESTED'];
+  const WARNING_SCENARIOS = ['active-late-warned', 'active-silent-warned', 'active-unfunded-warned'];
+  // The default 3-day window and a demo setting of 10 minutes, each with a few seeds.
+  const runs = [4320, 10].flatMap((graceMinutes) =>
+    [undefined, 7, 8, 9].map((seed) => ({
+      graceMinutes,
+      big: buildActivity({ ...bigInput(), graceMinutes, seed }),
+    })),
+  );
+  const { big } = runs[0];
+  type ContractFact = (typeof big.contracts)[number];
+  const current = (contract: ContractFact) =>
+    contract.milestones.find((m) => m.status !== 'APPROVED' && m.status !== 'CANCELLED');
+
+  it('shows proposals in every state, with the turn on each side and some with 2-3 versions', () => {
+    const open = big.proposals.filter((p) => p.status === 'OPEN');
+    expect(open.some((p) => p.turnUserId === p.freelancerId)).toBe(true);
+    expect(open.some((p) => p.turnUserId === p.clientId)).toBe(true);
+    expect(open.some((p) => p.versions.length === 2)).toBe(true);
+    expect(open.some((p) => p.versions.length === 3)).toBe(true);
+    for (const status of ['DECLINED', 'WITHDRAWN', 'EXPIRED', 'ACCEPTED']) {
+      expect(big.proposals.some((p) => p.status === status)).toBe(true);
+    }
+    for (const p of big.proposals) {
+      const latest = p.versions.at(-1)!;
+      expect(p.latestVersion).toBe(p.versions.length);
+      expect(p.versions.map((v) => v.number)).toEqual(p.versions.map((_, i) => i + 1));
+      expect(p.expiresAt.getTime()).toBe(latest.createdAt.getTime() + 7 * DAYS);
+      if (p.status === 'OPEN') {
+        // The turn is with the side that did not send the latest version; it has not expired.
+        expect(p.turnUserId).not.toBe(latest.authorId);
+        expect(p.expiresAt.getTime()).toBeGreaterThan(now.getTime());
+        expect(latest.milestones[0].dueDate.getTime()).toBeGreaterThan(now.getTime());
+        expect(p.decidedAt).toBeNull();
+      } else {
+        expect(p.turnUserId).toBeNull();
+        expect(p.decidedAt).not.toBeNull();
+        expect(p.updatedAt.getTime()).toBe(p.decidedAt!.getTime());
+      }
+      if (p.status === 'EXPIRED') expect(p.decidedAt!.getTime()).toBeGreaterThanOrEqual(p.expiresAt.getTime());
+      expect(p.contract !== null).toBe(p.status === 'ACCEPTED');
+    }
+  });
+
+  it('keeps at most one OPEN proposal per client per service', () => {
+    const keys = big.proposals.filter((p) => p.status === 'OPEN').map((p) => `${p.jobId}:${p.clientId}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('gives every version milestones in order, inside the deadline, with the total as their sum', () => {
+    for (const p of big.proposals) {
+      for (const v of p.versions) {
+        expect(v.total).toBe(v.milestones.reduce((sum, m) => sum + m.amount, 0));
+        for (const [i, m] of v.milestones.entries()) {
+          expect(m.amount).toBeGreaterThanOrEqual(1);
+          expect(Number.isInteger(m.amount)).toBe(true);
+          expect(m.dueDate.getTime()).toBeGreaterThan(v.createdAt.getTime());
+          expect(m.dueDate.getTime()).toBeLessThanOrEqual(v.deadline.getTime());
+          if (i > 0) expect(m.dueDate.getTime()).toBeGreaterThanOrEqual(v.milestones[i - 1].dueDate.getTime());
+        }
+      }
+    }
+  });
+
+  it('copies the accepted version into its contract', () => {
+    for (const [index, c] of big.contracts.entries()) {
+      const p = big.proposals[c.proposal];
+      expect(p.contract).toBe(index);
+      const latest = p.versions.at(-1)!;
+      expect([c.jobId, c.clientId, c.freelancerId]).toEqual([p.jobId, p.clientId, p.freelancerId]);
+      expect(c.total).toBe(latest.total);
+      expect(c.deadline.getTime()).toBe(latest.deadline.getTime());
+      expect(c.milestones.map((m) => [m.title, m.amount, m.dueDate.getTime()])).toEqual(
+        latest.milestones.map((m) => [m.title, m.amount, m.dueDate.getTime()]),
+      );
+      expect(c.createdAt.getTime()).toBe(p.decidedAt!.getTime());
+      expect(c.imported).toBe(false);
+    }
+  });
+
+  it('shows contracts in every state: each current milestone status, each warning, each end reason', () => {
+    const active = big.contracts.filter((c) => c.status === 'ACTIVE');
+    for (const status of ['PENDING', 'FUNDED', 'SUBMITTED', 'CHANGES_REQUESTED']) {
+      expect(active.some((c) => current(c)?.status === status)).toBe(true);
+    }
+    expect(active.some((c) => current(c)?.status === 'PENDING' && current(c)!.position > 1)).toBe(true);
+    for (const flag of ['lateWarnedAt', 'silentWarnedAt', 'unfundedWarnedAt'] as const) {
+      expect(active.some((c) => c.milestones.some((m) => m[flag] !== null))).toBe(true);
+    }
+    expect(big.contracts.some((c) => c.status === 'COMPLETED')).toBe(true);
+    for (const reason of ['FREELANCER_LATE', 'CLIENT_SILENT', 'NOT_FUNDED', 'MUTUAL', 'CLIENT_ENDED']) {
+      expect(big.contracts.some((c) => c.status === 'ENDED' && c.endReason === reason)).toBe(true);
+    }
+    expect(big.contracts.filter((c) => c.amendments.some((a) => a.status === 'OPEN'))).toHaveLength(1);
+    expect(big.contracts.filter((c) => c.endRequestedById !== null)).toHaveLength(1);
+  });
+
+  it('makes the OPEN amendment one the other side can accept now (the same check as the app)', () => {
+    // Several seeds, so the amended milestone is sometimes the last one and sometimes not.
+    const seeds = [1, 2, 3, 4, 5, 6].map((seed) => buildActivity({ ...bigInput(), seed }));
+    for (const run of [...runs.map((item) => item.big), ...seeds]) {
+      const c = run.contracts.find((item) => item.amendments.length)!;
+      const [amendment] = c.amendments;
+      expect(amendment.proposerId).toBe(c.freelancerId);
+      expect(() =>
+        checkAmendment(
+          {
+            deadline: amendment.deadline ?? undefined,
+            changes: amendment.changes.map((change) => ({ op: 'move', milestoneId: change.position, dueDate: change.dueDate })),
+          },
+          c.milestones.map((m) => ({ id: m.position, status: m.status, position: m.position, dueDate: m.dueDate })),
+          c.deadline,
+          now,
+        ),
+      ).not.toThrow();
+    }
+  });
+
+  it('keeps every milestone state consistent with its contract', () => {
+    for (const c of big.contracts) {
+      expect(c.milestones.map((m) => m.position)).toEqual(c.milestones.map((_, i) => i + 1));
+      for (const [i, m] of c.milestones.entries()) {
+        if (i > 0) expect(m.dueDate.getTime()).toBeGreaterThanOrEqual(c.milestones[i - 1].dueDate.getTime());
+        expect(m.submissions.map((s) => s.number)).toEqual(m.submissions.map((_, n) => n + 1));
+        if (['SUBMITTED', 'APPROVED'].includes(m.status)) expect(m.submissions.length).toBeGreaterThan(0);
+        if (m.status !== 'PENDING' && !(m.status === 'CANCELLED' && !m.fundedAt)) expect(m.fundedAt).not.toBeNull();
+      }
+      const statuses = c.milestones.map((m) => m.status);
+      if (c.status === 'COMPLETED') {
+        expect(statuses.every((s) => s === 'APPROVED')).toBe(true);
+        expect(c.completedAt).not.toBeNull();
+      }
+      if (c.status === 'ENDED') {
+        expect(statuses.every((s) => s === 'APPROVED' || s === 'CANCELLED')).toBe(true);
+        expect(statuses).toContain('CANCELLED');
+        expect(c.endedAt).not.toBeNull();
+        expect(c.endRequestedById).toBeNull();
+      }
+      if (c.status === 'ACTIVE') {
+        // Only the next milestone in order is funded: everything before the current one is approved.
+        const index = c.milestones.indexOf(current(c)!);
+        expect(statuses.slice(0, index).every((s) => s === 'APPROVED')).toBe(true);
+        expect(statuses.slice(index + 1).every((s) => s === 'PENDING')).toBe(true);
+        // Due dates still to come are in the future, except the one meant to show the late warning.
+        for (const m of c.milestones.slice(index)) {
+          if (m.lateWarnedAt === null) expect(m.dueDate.getTime()).toBeGreaterThan(now.getTime());
+        }
+      }
+      expect(c.amendments.filter((a) => a.status === 'OPEN').length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('leaves every ACTIVE contract alone for the sweeper at the seed time (default and short windows)', () => {
+    for (const { graceMinutes, big: run } of runs) {
+      for (const c of run.contracts.filter((item) => item.status === 'ACTIVE')) {
+        const sweep = {
+          status: c.status,
+          imported: c.imported,
+          createdAt: c.createdAt,
+          milestones: c.milestones.map((m) => ({ ...m, id: m.position })),
+        };
+        expect(evaluateDeadlines(sweep, now, graceMinutes)).toBeNull();
+        // The warning ones were warned already: their flag is set and the window is still open.
+        const warned = c.milestones.some((m) => m.lateWarnedAt || m.silentWarnedAt || m.unfundedWarnedAt);
+        expect(warned).toBe(WARNING_SCENARIOS.includes(c.scenario));
+      }
+    }
+  });
+
+  it('gives every seeded person a wallet that adds up: SEED 5,000 first, then the moves in time order', () => {
+    for (const { big: run } of runs) {
+      expect(run.wallets.map((w) => w.userId).sort((a, b) => a - b)).toEqual(
+        bigInput().people.map((p) => p.id).sort((a, b) => a - b),
+      );
+      for (const wallet of run.wallets) {
+        const rows = run.ledger.filter((row) => row.userId === wallet.userId);
+        expect(rows[0]).toMatchObject({ type: 'SEED', availableDelta: 5000, heldDelta: 0 });
+        expect(rows.filter((row) => row.type === 'SEED')).toHaveLength(1);
+        let available = 0;
+        let held = 0;
+        for (const [i, row] of rows.entries()) {
+          if (i > 0) expect(row.createdAt.getTime()).toBeGreaterThanOrEqual(rows[i - 1].createdAt.getTime());
+          expect(row.availableDelta !== 0 || row.heldDelta !== 0).toBe(true);
+          available += row.availableDelta;
+          held += row.heldDelta;
+          expect(row.availableAfter).toBe(available);
+          expect(row.heldAfter).toBe(held);
+          expect(available).toBeGreaterThanOrEqual(0);
+          expect(held).toBeGreaterThanOrEqual(0);
+        }
+        expect(wallet.available).toBe(available);
+        expect(wallet.held).toBe(held);
+        const heldMilestones = run.contracts
+          .filter((c) => c.clientId === wallet.userId)
+          .flatMap((c) => c.milestones)
+          .filter((m) => HELD.includes(m.status))
+          .reduce((sum, m) => sum + m.amount, 0);
+        expect(wallet.held).toBe(heldMilestones);
+      }
+    }
+  });
+
+  it('writes the money moves of each milestone: one RELEASE pair per APPROVED, none for imported contracts', () => {
+    for (const [index, c] of big.contracts.entries()) {
+      const rows = big.ledger.filter((row) => row.contract === index);
+      if (c.imported) expect(rows).toHaveLength(0);
+      for (const m of c.milestones) {
+        const mine = rows.filter((row) => row.position === m.position);
+        const of = (type: string) => mine.filter((row) => row.type === type);
+        const release = of('RELEASE');
+        if (m.status === 'APPROVED') {
+          expect(release).toHaveLength(2);
+          expect(release.find((row) => row.userId === c.clientId)).toMatchObject({ availableDelta: 0, heldDelta: -m.amount, counterpartyId: c.freelancerId });
+          expect(release.find((row) => row.userId === c.freelancerId)).toMatchObject({ availableDelta: m.amount, heldDelta: 0, counterpartyId: c.clientId });
+        } else {
+          expect(release).toHaveLength(0);
+        }
+        expect(of('FUND_HOLD')).toHaveLength(m.fundedAt ? 1 : 0);
+        expect(of('REFUND')).toHaveLength(m.status === 'CANCELLED' && m.fundedAt ? 1 : 0);
+      }
+    }
+  });
+
+  it('reviews only COMPLETED contracts or ENDED ones with approved work, about 70% of the completed', () => {
+    for (const c of big.contracts) {
+      if (!c.review) continue;
+      const approved = c.milestones.some((m) => m.status === 'APPROVED');
+      expect(c.status === 'COMPLETED' || (c.status === 'ENDED' && approved)).toBe(true);
+      expect(c.review.commentedAt.getTime()).toBeGreaterThanOrEqual((c.completedAt ?? c.endedAt)!.getTime());
+      expect(c.events.filter((e) => e.type === 'review_left')).toHaveLength(1);
+    }
+    const completed = big.contracts.filter((c) => c.status === 'COMPLETED');
+    const reviewed = completed.filter((c) => c.review).length / completed.length;
+    expect(reviewed).toBeGreaterThan(0.4);
+    expect(reviewed).toBeLessThan(1);
+  });
+
+  it('writes history in time order, ending with the step that matches the state, and one notice for it', () => {
+    const lastStep: Record<string, string> = { DECLINED: 'proposal_declined', WITHDRAWN: 'proposal_withdrawn', EXPIRED: 'proposal_expired' };
+    for (const p of big.proposals) {
+      const times = p.events.map((e) => e.createdAt.getTime());
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+      expect(p.events[0]).toMatchObject({ type: 'proposal_sent', actorId: p.clientId });
+      if (lastStep[p.status]) expect(p.events.at(-1)!.type).toBe(lastStep[p.status]);
+      expect(p.notices).toHaveLength(p.status === 'ACCEPTED' ? 0 : 1);
+    }
+    for (const c of big.contracts) {
+      const times = c.events.map((e) => e.createdAt.getTime());
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+      expect(c.events.slice(0, 2).map((e) => e.type)).toEqual(['proposal_accepted', 'contract_started']);
+      if (c.status === 'COMPLETED') expect(c.events.map((e) => e.type)).toContain('contract_completed');
+      if (c.status === 'ENDED') expect(c.events.find((e) => e.type === 'contract_ended')?.data).toEqual({ reason: c.endReason });
+      expect(c.updatedAt.getTime()).toBe(c.events.at(-1)!.createdAt.getTime());
+      expect(c.notices).toHaveLength(1);
+      const last = c.events.at(-1)!.type;
+      expect(c.notices[0].step).toBe(last === 'contract_started' ? 'proposal_accepted' : last);
+      expect(c.notices[0].recipientId).not.toBe(c.notices[0].actorId);
+    }
+  });
+
+  it('keeps every date in the past, apart from due dates, deadlines and proposal expiry', () => {
+    const dates = [
+      ...big.proposals.flatMap((p) => [p.createdAt, p.updatedAt, p.decidedAt, ...p.versions.map((v) => v.createdAt), ...p.events.map((e) => e.createdAt)]),
+      ...big.contracts.flatMap((c) => [
+        c.createdAt, c.updatedAt, c.completedAt, c.endedAt, c.endRequestedAt, c.review?.commentedAt,
+        ...c.events.map((e) => e.createdAt),
+        ...c.amendments.map((a) => a.createdAt),
+        ...c.milestones.flatMap((m) => [m.fundedAt, m.submittedAt, m.changesRequestedAt, m.approvedAt, m.cancelledAt,
+          m.lateWarnedAt, m.silentWarnedAt, m.unfundedWarnedAt, ...m.submissions.map((s) => s.createdAt)]),
+      ]),
+      ...big.ledger.map((row) => row.createdAt),
+      ...big.wallets.flatMap((w) => [w.createdAt, w.updatedAt]),
+    ];
+    for (const date of dates) if (date) expect(date.getTime()).toBeLessThanOrEqual(now.getTime());
+  });
+
+  it('adds the proposal and milestone chat lines in the pair chat', () => {
+    const texts = big.chats.flatMap((chat) => chat.messages.map((message) => message.content));
+    expect(texts.some((text) => /^I sent a proposal for ".+": [\d,]+ credits in \d milestones?\.$/.test(text))).toBe(true);
+    expect(texts.some((text) => /^I accepted the proposal for ".+"\. The contract has started\.$/.test(text))).toBe(true);
+    expect(texts.some((text) => /^I funded milestone \d ".+" \([\d,]+ credits\)\. You can start\.$/.test(text))).toBe(true);
   });
 });
