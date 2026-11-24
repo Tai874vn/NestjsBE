@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   HttpException,
   Injectable,
@@ -23,6 +24,9 @@ type SessionUser = Pick<
 >;
 type SessionWithUser = AuthSession & { user: SessionUser };
 export type SessionMetadata = { userAgent?: string; ip?: string };
+/** Said (409) when an account with contracts is deleted. */
+export const ACCOUNT_HAS_CONTRACTS =
+  'This account has contracts, so it cannot be deleted. Contract history and paid work must stay.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -432,16 +436,36 @@ export class AuthSessionService {
     await this.invalidateMany(sessions);
   }
 
+  /**
+   * Delete an account. An account that is the client or the freelancer of any contract cannot be
+   * deleted (409): the contract history and the paid work must stay for the other person, and
+   * held credits would be lost. The database refuses it too (RESTRICT); that case is also 409.
+   */
   async deleteUser(userId: number): Promise<void> {
     const sessions = await this.database(() =>
       this.prisma.$transaction(async (tx) => {
         await this.lockUser(tx, userId);
         const user = await tx.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException('User not found');
+        const contracts = await tx.contract.count({
+          where: { OR: [{ clientId: userId }, { freelancerId: userId }] },
+        });
+        if (contracts > 0) throw new ConflictException(ACCOUNT_HAS_CONTRACTS);
         const active = await tx.authSession.findMany({
           where: { userId, revokedAt: null },
         });
-        await tx.user.delete({ where: { id: userId } });
+        try {
+          await tx.user.delete({ where: { id: userId } });
+        } catch (error) {
+          // P2003 = a foreign key refused the delete (a contract was made in the meantime).
+          if (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2003'
+          ) {
+            throw new ConflictException(ACCOUNT_HAS_CONTRACTS);
+          }
+          throw error;
+        }
         return active;
       }),
     );

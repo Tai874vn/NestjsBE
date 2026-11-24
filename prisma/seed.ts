@@ -16,6 +16,11 @@ async function main() {
   await prisma.chatRoomMember.deleteMany();
   await prisma.chatRoom.deleteMany();
   await prisma.comment.deleteMany();
+  // Contracts first: a service or an account with contracts cannot be deleted (RESTRICT).
+  await prisma.ledgerEntry.deleteMany();
+  await prisma.wallet.deleteMany();
+  await prisma.contract.deleteMany();
+  await prisma.proposal.deleteMany();
   await prisma.job.deleteMany();
   await prisma.subcategory.deleteMany();
   await prisma.category.deleteMany();

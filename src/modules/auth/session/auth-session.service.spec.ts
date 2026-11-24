@@ -1,5 +1,7 @@
+import { ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthSessionService } from './auth-session.service';
+import { Prisma } from '@prisma/client';
+import { ACCOUNT_HAS_CONTRACTS, AuthSessionService } from './auth-session.service';
 
 describe('AuthSessionService access revocation', () => {
   const redis = {
@@ -34,5 +36,52 @@ describe('AuthSessionService access revocation', () => {
   it('rejects a blacklisted access jti', async () => {
     redis.isAccessRevoked.mockResolvedValue(true);
     await expect(make().assertAccessSession('session', 7, 'jti')).rejects.toMatchObject({response:{code:'SESSION_REVOKED'}});
+  });
+});
+
+describe('AuthSessionService.deleteUser (account delete)', () => {
+  function setup(contracts: number) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 7 }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      contract: { count: jest.fn().mockResolvedValue(contracts) },
+      authSession: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (t: typeof tx) => unknown) => callback(tx)),
+    };
+    const redis = {
+      onRevocation: jest.fn(() => () => {}),
+      revokeSessions: jest.fn(), deleteSessions: jest.fn(), writeSession: jest.fn(),
+    };
+    const service = new AuthSessionService(prisma as never, new JwtService({ secret: 'test' }), redis as never, { get: () => undefined } as never);
+    return { tx, service };
+  }
+
+  it('refuses (409) an account that is a side of any contract, and deletes nothing', async () => {
+    const { tx, service } = setup(2);
+    await expect(service.deleteUser(7)).rejects.toThrow(new ConflictException(ACCOUNT_HAS_CONTRACTS));
+    expect(tx.contract.count).toHaveBeenCalledWith({
+      where: { OR: [{ clientId: 7 }, { freelancerId: 7 }] },
+    });
+    expect(tx.user.delete).not.toHaveBeenCalled();
+  });
+
+  it('a delete the database refuses (P2003, a contract made meanwhile) is also 409', async () => {
+    const { tx, service } = setup(0);
+    tx.user.delete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test' }),
+    );
+    await expect(service.deleteUser(7)).rejects.toThrow(new ConflictException(ACCOUNT_HAS_CONTRACTS));
+  });
+
+  it('an account with no contracts is deleted', async () => {
+    const { tx, service } = setup(0);
+    await service.deleteUser(7);
+    expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: 7 } });
   });
 });

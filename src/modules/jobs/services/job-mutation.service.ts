@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,12 @@ import { Role } from '../../../common/constants/roles';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobCacheInvalidationService } from './job-cache-invalidation.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationTemplateService } from '../../notifications/services/notification-template.service';
+
+/** Said (409) when a service with contracts is deleted. */
+export const SERVICE_HAS_CONTRACTS =
+  'This service has contracts, so it cannot be deleted. Contract history and paid work must stay.';
 
 /** The shares of a payment plan must add up to exactly 100 (percent). */
 function checkTemplateShares(
@@ -35,6 +42,8 @@ export class JobMutationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheInvalidation: JobCacheInvalidationService,
+    private readonly notifications?: NotificationsService,
+    private readonly templates?: NotificationTemplateService,
   ) {}
 
   async create(createDto: CreateJobDto, userId: number) {
@@ -120,18 +129,89 @@ export class JobMutationService {
     };
   }
 
+  /**
+   * Delete a service. A service that has any contract cannot be deleted (409): the contract
+   * history and the paid work must stay, and held credits would be lost. OPEN proposals do not
+   * block: they go away with the service, and the other person of each one is told.
+   * The job row is locked (FOR UPDATE = other writers wait) so a contract cannot be made from a
+   * proposal of this service while it is being deleted; the database also refuses (RESTRICT).
+   */
   async remove(id: number, userId: number, userRole: Role) {
     const job = await this.ensureCanManageJob(id, userId, userRole);
 
-    await this.prisma.job.delete({
-      where: { id },
+    const { title, open } = await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ title: string }>>`
+        SELECT title FROM "jobs" WHERE id = ${id} FOR UPDATE`;
+      if (!rows.length) {
+        throw new NotFoundException(`Job with ID ${id} not found`);
+      }
+      const contracts = await tx.contract.count({ where: { jobId: id } });
+      if (contracts > 0) throw new ConflictException(SERVICE_HAS_CONTRACTS);
+      const open = await tx.proposal.findMany({
+        where: { jobId: id, status: 'OPEN' },
+        select: { id: true, clientId: true, freelancerId: true },
+      });
+      try {
+        await tx.job.delete({ where: { id } });
+      } catch (error) {
+        // P2003 = a foreign key refused the delete (a contract was made in the meantime).
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2003'
+        ) {
+          throw new ConflictException(SERVICE_HAS_CONTRACTS);
+        }
+        throw error;
+      }
+      return { title: rows[0].title, open };
     });
 
     await this.cacheInvalidation.invalidateJobMutation(job.creatorId, id);
+    await this.tellOpenProposals(open, userId, title);
 
     return {
       message: 'Job deleted successfully',
     };
+  }
+
+  /**
+   * After the delete is saved: tell each other person of an OPEN proposal that it was withdrawn
+   * with the service. The link goes to the proposals list (the proposal itself is gone).
+   * A failed notification is only skipped; the delete already happened.
+   */
+  private async tellOpenProposals(
+    open: Array<{ id: number; clientId: number; freelancerId: number }>,
+    actorId: number,
+    title: string,
+  ) {
+    if (!this.notifications || !this.templates) return;
+    for (const p of open) {
+      const sides = [
+        { recipientId: p.clientId, side: 'client' as const },
+        { recipientId: p.freelancerId, side: 'freelancer' as const },
+      ].filter((s) => s.recipientId !== actorId);
+      for (const { recipientId, side } of sides) {
+        try {
+          const input = this.templates.proposalUpdate({
+            recipientId,
+            actorId,
+            actorName: 'JobAura',
+            kind: 'proposal',
+            step: 'proposal_withdrawn',
+            title: 'Proposal withdrawn',
+            body: `The service ${title} was deleted, so the open proposal for it was withdrawn.`,
+            proposalId: p.id,
+            recipientSide: side,
+          });
+          await this.notifications.create({
+            ...input,
+            actionUrl: `/contracts?tab=${side}`,
+          });
+        } catch {
+          // Skipped on purpose: the service is already deleted.
+        }
+      }
+    }
   }
 
   async ensureCanManageJob(id: number, userId: number, userRole: Role) {

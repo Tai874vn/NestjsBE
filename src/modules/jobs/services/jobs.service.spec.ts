@@ -2,7 +2,13 @@ import { Prisma } from '@prisma/client';
 import { JobsService } from './jobs.service';
 import { JobCacheInvalidationService } from './job-cache-invalidation.service';
 import { JobCatalogService } from './job-catalog.service';
-import { JobMutationService } from './job-mutation.service';
+import { ConflictException } from '@nestjs/common';
+import { Role } from '../../../common/constants/roles';
+import { NotificationTemplateService } from '../../notifications/services/notification-template.service';
+import {
+  JobMutationService,
+  SERVICE_HAS_CONTRACTS,
+} from './job-mutation.service';
 import { JobSearchService } from './job-search.service';
 
 describe('JobsService bounded queries', () => {
@@ -154,5 +160,72 @@ describe('JobsService service fields', () => {
     await expect(
       mutations.update(9, { milestoneTemplate: [step(50)] } as any, 1, 'USER' as any),
     ).rejects.toThrow('Template shares must add up to 100.');
+  });
+});
+
+describe('JobMutationService.remove (service delete)', () => {
+  function setup(contracts: number, open: Array<{ id: number; clientId: number; freelancerId: number }> = []) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ title: 'Bakery logo' }]),
+      contract: { count: jest.fn().mockResolvedValue(contracts) },
+      proposal: { findMany: jest.fn().mockResolvedValue(open) },
+      job: { delete: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      job: { findUnique: jest.fn().mockResolvedValue({ creatorId: 9, workMode: 'REMOTE', serviceArea: null }) },
+      $transaction: jest.fn((callback: (t: typeof tx) => unknown) => callback(tx)),
+    };
+    const notifications = { create: jest.fn().mockResolvedValue({}) };
+    const templates = new NotificationTemplateService();
+    const mutations = new JobMutationService(
+      prisma as any,
+      { invalidateJobMutation: jest.fn() } as any,
+      notifications as any,
+      templates,
+    );
+    return { tx, prisma, notifications, mutations };
+  }
+
+  it('refuses (409) a service that has any contract, and deletes nothing', async () => {
+    const { tx, mutations } = setup(1);
+    await expect(mutations.remove(4, 9, Role.USER)).rejects.toThrow(
+      new ConflictException(SERVICE_HAS_CONTRACTS),
+    );
+    expect(tx.contract.count).toHaveBeenCalledWith({ where: { jobId: 4 } });
+    expect(tx.job.delete).not.toHaveBeenCalled();
+  });
+
+  it('a delete the database refuses (P2003, a contract made meanwhile) is also 409', async () => {
+    const { tx, mutations } = setup(0);
+    tx.job.delete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test' }),
+    );
+    await expect(mutations.remove(4, 9, Role.USER)).rejects.toThrow(
+      new ConflictException(SERVICE_HAS_CONTRACTS),
+    );
+  });
+
+  it('OPEN proposals do not block: the service is deleted and the client of each one is told', async () => {
+    const { tx, notifications, mutations } = setup(0, [{ id: 70, clientId: 3, freelancerId: 9 }]);
+
+    const result = await mutations.remove(4, 9, Role.USER);
+
+    expect(result.message).toBe('Job deleted successfully');
+    expect(tx.proposal.findMany).toHaveBeenCalledWith({
+      where: { jobId: 4, status: 'OPEN' },
+      select: { id: true, clientId: true, freelancerId: true },
+    });
+    expect(tx.job.delete).toHaveBeenCalledWith({ where: { id: 4 } });
+    // Only the other person (the client) is told; the owner who deleted is not.
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: 3,
+        type: 'PROPOSAL_UPDATE',
+        title: 'Proposal withdrawn',
+        body: 'The service Bakery logo was deleted, so the open proposal for it was withdrawn.',
+        actionUrl: '/contracts?tab=client',
+      }),
+    );
   });
 });

@@ -821,6 +821,10 @@ model Contract {
   endRequestNote   String?
   /// What happens to a SUBMITTED milestone's credits: APPROVE or REFUND.
   endRequestChoice String?
+  /// The SUBMITTED milestone and its latest submission that the client's choice was made for.
+  /// The choice is used only while that same work is still the submitted one.
+  endRequestMilestoneId  Int?
+  endRequestSubmissionId Int?
   endRequestedAt   DateTime?
   completedAt      DateTime?
   endedAt          DateTime?
@@ -828,10 +832,12 @@ model Contract {
   updatedAt        DateTime       @updatedAt
 
   proposal       Proposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  job            Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  client         User            @relation("ContractClient", fields: [clientId], references: [id], onDelete: Cascade)
-  freelancer     User            @relation("ContractFreelancer", fields: [freelancerId], references: [id], onDelete: Cascade)
-  endRequestedBy User?           @relation("ContractEndRequester", fields: [endRequestedById], references: [id], onDelete: Cascade)
+  /// Restrict (the database refuses the delete): a service or an account with contracts cannot
+  /// be deleted, so the history and the held credits stay. The app answers 409 first.
+  job            Job             @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  client         User            @relation("ContractClient", fields: [clientId], references: [id], onDelete: Restrict)
+  freelancer     User            @relation("ContractFreelancer", fields: [freelancerId], references: [id], onDelete: Restrict)
+  endRequestedBy User?           @relation("ContractEndRequester", fields: [endRequestedById], references: [id], onDelete: SetNull)
   milestones     Milestone[]
   amendments     Amendment[]
   events         ContractEvent[]
@@ -890,7 +896,7 @@ model Submission {
   createdAt   DateTime @default(now())
 
   milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
-  author    User      @relation("SubmissionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  author    User      @relation("SubmissionAuthor", fields: [authorId], references: [id], onDelete: Restrict)
 
   @@unique([milestoneId, number])
   @@map("submissions")
@@ -913,7 +919,7 @@ model Amendment {
   createdAt   DateTime        @default(now())
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  proposer User     @relation("AmendmentProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+  proposer User     @relation("AmendmentProposer", fields: [proposerId], references: [id], onDelete: Restrict)
 
   @@index([contractId, createdAt])
   @@map("amendments")
