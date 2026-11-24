@@ -34,6 +34,7 @@ export type MilestoneDraft = {
 };
 
 const MAX_MILESTONES = 20;
+const MAX_AMENDMENT_CHANGES = 10;
 
 // Checks one version of a proposal (deadline + milestones). Throws 'invalid'.
 export function checkVersion(
@@ -216,4 +217,132 @@ export function nextMilestoneStatus(
 // 1250 -> "1,250" (fixed locale so the text is the same on every server).
 export function fmtCredits(n: number): string {
   return n.toLocaleString('en-US');
+}
+
+// ---------- Amendments ----------
+
+// One change of an amendment, with the dates already turned into Date objects.
+export type AmendmentChangeParsed =
+  | {
+      op: 'add';
+      title: string;
+      description?: string;
+      dueDate: Date;
+      amount: number;
+    }
+  | { op: 'move'; milestoneId: number; dueDate: Date }
+  | { op: 'amount'; milestoneId: number; amount: number };
+
+// Statuses where a due date may move (an amount may change only on PENDING).
+const MOVABLE: MilestoneStatus[] = [M.PENDING, M.FUNDED, M.CHANGES_REQUESTED];
+
+// Checks an amendment against the contract as it is NOW (the same check runs when it is sent and
+// again when it is accepted, because the milestones may have moved on). Throws 'invalid' (400) or
+// 'conflict' (409). "position" counts from 1.
+export function checkAmendment(
+  a: { deadline?: Date; changes: AmendmentChangeParsed[] },
+  milestones: {
+    id: number;
+    status: MilestoneStatus;
+    position: number;
+    dueDate: Date;
+  }[],
+  contractDeadline: Date,
+  now: Date,
+): void {
+  if (a.changes.length === 0 && !a.deadline) {
+    throw new RuleError(
+      'invalid',
+      'changes must have at least one change, or send a new deadline.',
+    );
+  }
+  if (a.changes.length > MAX_AMENDMENT_CHANGES) {
+    throw new RuleError('invalid', 'changes can have up to 10 items.');
+  }
+  if (a.deadline && a.deadline.getTime() <= now.getTime()) {
+    throw new RuleError('invalid', 'The new deadline must be in the future.');
+  }
+
+  // The timeline after the changes, in position order.
+  const timeline = milestones
+    .map((m) => ({
+      position: m.position,
+      dueDate: m.dueDate,
+      status: m.status,
+    }))
+    .sort((x, y) => x.position - y.position);
+  const seen = new Set<string>();
+  let nextPosition = milestones.reduce(
+    (max, m) => Math.max(max, m.position),
+    0,
+  );
+
+  for (const change of a.changes) {
+    if (change.op === 'add') {
+      if (!Number.isInteger(change.amount) || change.amount < 1) {
+        throw new RuleError('invalid', 'Each milestone is at least 1 credit.');
+      }
+      if (change.dueDate.getTime() <= now.getTime()) {
+        throw new RuleError('invalid', 'A new due date must be in the future.');
+      }
+      timeline.push({
+        position: ++nextPosition,
+        dueDate: change.dueDate,
+        status: M.PENDING,
+      });
+      continue;
+    }
+    const key = `${change.op}:${change.milestoneId}`;
+    if (seen.has(key)) {
+      throw new RuleError(
+        'invalid',
+        `changes names milestone ${change.milestoneId} twice for the same change.`,
+      );
+    }
+    seen.add(key);
+    const m = milestones.find((x) => x.id === change.milestoneId);
+    if (!m) {
+      throw new RuleError(
+        'invalid',
+        `changes names milestone ${change.milestoneId}, which is not on this contract.`,
+      );
+    }
+    if (!MOVABLE.includes(m.status)) {
+      throw new RuleError(
+        'conflict',
+        `Milestone ${m.position} cannot be changed now.`,
+      );
+    }
+    if (change.op === 'amount') {
+      if (m.status !== M.PENDING) {
+        throw new RuleError(
+          'conflict',
+          `The amount of milestone ${m.position} cannot change after it is funded.`,
+        );
+      }
+      if (!Number.isInteger(change.amount) || change.amount < 1) {
+        throw new RuleError('invalid', 'Each milestone is at least 1 credit.');
+      }
+    } else {
+      if (change.dueDate.getTime() <= now.getTime()) {
+        throw new RuleError('invalid', 'A new due date must be in the future.');
+      }
+      timeline.find((t) => t.position === m.position)!.dueDate = change.dueDate;
+    }
+  }
+
+  if (timeline.length > MAX_MILESTONES) {
+    throw new RuleError('invalid', 'A contract has up to 20 milestones.');
+  }
+  const live = timeline.filter((t) => t.status !== M.CANCELLED);
+  for (let i = 1; i < live.length; i++) {
+    if (live[i].dueDate.getTime() < live[i - 1].dueDate.getTime()) {
+      throw new RuleError('invalid', 'Milestone due dates must be in order.');
+    }
+  }
+  const deadline = a.deadline ?? contractDeadline;
+  const last = live[live.length - 1];
+  if (last && last.dueDate.getTime() > deadline.getTime()) {
+    throw new RuleError('invalid', 'A due date cannot be after the deadline.');
+  }
 }

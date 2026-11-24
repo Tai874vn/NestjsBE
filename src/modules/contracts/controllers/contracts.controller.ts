@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -10,8 +11,10 @@ import {
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ValidatedUser } from '../../../types';
+import { AmendmentsService } from '../amendments.service';
 import { ContractsQueryService } from '../contracts-query.service';
 import { ContractsService } from '../contracts.service';
+import { AcceptEndRequestDto, CreateEndRequestDto } from '../dto/amendment.dto';
 import { ContractListQueryDto } from '../dto/milestone.dto';
 
 /**
@@ -24,6 +27,7 @@ export class ContractsController {
   constructor(
     private readonly contracts: ContractsService,
     private readonly query: ContractsQueryService,
+    private readonly amendments: AmendmentsService,
   ) {}
 
   // role=client: contracts where I pay; role=freelancer: contracts where I work.
@@ -51,5 +55,43 @@ export class ContractsController {
     @CurrentUser() user: ValidatedUser,
   ) {
     return this.contracts.end(id, user);
+  }
+
+  // Either side: ask to end together. The client must pick approve or refund when work is submitted.
+  @Post(':id/end-requests')
+  requestEnd(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateEndRequestDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.amendments.requestEnd(id, user, dto);
+  }
+
+  // The other side: agree. The contract ends (MUTUAL).
+  @Post(':id/end-requests/accept')
+  acceptEnd(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptEndRequestDto,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.amendments.acceptEnd(id, user, dto);
+  }
+
+  // The other side: say no.
+  @Post(':id/end-requests/decline')
+  declineEnd(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.amendments.declineEnd(id, user);
+  }
+
+  // The person who asked.
+  @Post(':id/end-requests/withdraw')
+  withdrawEnd(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: ValidatedUser,
+  ) {
+    return this.amendments.withdrawEnd(id, user);
   }
 }

@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { AmendmentsService } from './amendments.service';
 import { ContractEndingService } from './contract-ending.service';
 import { ContractEventsService } from './contract-events.service';
 import { ContractStepService } from './contract-step.service';
+import { AmendmentsController } from './controllers/amendments.controller';
 import { ContractFilesController } from './controllers/contract-files.controller';
 import { ContractsController } from './controllers/contracts.controller';
 import { MilestonesController } from './controllers/milestones.controller';
@@ -21,7 +23,8 @@ import { ProposalsService } from './proposals.service';
  * and the contracts: reading (ContractsQueryService), the lock-and-run helper of every contract
  * step (ContractStepService), the milestone steps and the client's own end (ContractsService,
  * answered by ContractsController and MilestonesController) and the early end shared with the
- * later amendment, end-request and sweeper code (ContractEndingService).
+ * sweeper and the mutual end (ContractEndingService), and the amendments and end requests
+ * (AmendmentsService, answered by AmendmentsController and ContractsController).
  */
 @Module({
   imports: [NotificationsModule, ChatModule, WalletModule],
@@ -30,6 +33,7 @@ import { ProposalsService } from './proposals.service';
     ContractFilesController,
     ContractsController,
     MilestonesController,
+    AmendmentsController,
   ],
   providers: [
     ContractEventsService,
@@ -38,6 +42,7 @@ import { ProposalsService } from './proposals.service';
     ContractStepService,
     ContractsService,
     ContractEndingService,
+    AmendmentsService,
   ],
   exports: [ContractEventsService, ContractStepService, ContractEndingService],
 })
