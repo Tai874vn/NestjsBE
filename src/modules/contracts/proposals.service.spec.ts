@@ -264,9 +264,17 @@ describe('ProposalsService', () => {
     it('freelancer counters: version 2, turn passes to the client, chat line', async () => {
       const { prisma, events, service } = createService();
 
+      const before = Date.now();
       await service.counter(5, freelancer, versionBody());
+      const after = Date.now();
 
       expectProposalLocked(prisma);
+      // A new version restarts the 7 days.
+      const expiresAt = (
+        prisma.proposal.update.mock.calls[0][0].data.expiresAt as Date
+      ).getTime();
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 7 * DAY);
+      expect(expiresAt).toBeLessThanOrEqual(after + 7 * DAY);
       expect(prisma.proposalVersion.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           proposalId: 5,

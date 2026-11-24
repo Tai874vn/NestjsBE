@@ -254,7 +254,6 @@ function setup(
   const sweeper = new ContractSweeperService(
     prisma as never,
     step,
-    wallet as never,
     events as never,
     ending,
     config as never,

@@ -11,7 +11,6 @@ import {
   ProposalStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
-import { WalletService } from '../wallet/wallet.service';
 import { fmtCredits } from './contract-rules';
 import { ContractEndingService, EndResult } from './contract-ending.service';
 import {
@@ -106,7 +105,6 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly step: ContractStepService,
-    private readonly wallet: WalletService,
     private readonly events: ContractEventsService,
     private readonly ending: ContractEndingService,
     private readonly config: ConfigService,
@@ -365,46 +363,13 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
     m: LockedMilestone,
     now: Date,
   ): Promise<ContractOutcome> {
-    await this.wallet.release(tx, {
-      clientId: contract.clientId,
-      freelancerId: contract.freelancerId,
-      amount: m.amount,
-      contractId: contract.id,
-      milestoneId: m.id,
-    });
-    await tx.milestone.update({
-      where: { id: m.id },
-      data: { status: M.APPROVED, approvedAt: now, autoApproved: true },
-    });
-    await this.events.record(tx, {
-      contractId: contract.id,
+    // The same approve path as the client's Approve (ContractEndingService.approveMilestone).
+    const { completed } = await this.ending.approveMilestone(tx, contract, m, {
       actorId: null,
-      type: 'milestone_approved',
-      data: {
-        milestoneId: m.id,
-        position: m.position,
-        amount: m.amount,
-        auto: true,
-      },
+      now,
+      auto: true,
     });
-    const last = contract.milestones.every(
-      (other) =>
-        other.id === m.id ||
-        other.status === M.APPROVED ||
-        other.status === M.CANCELLED,
-    );
-    if (last) {
-      await tx.contract.update({
-        where: { id: contract.id },
-        data: { status: C.COMPLETED, completedAt: now },
-      });
-      await this.events.record(tx, {
-        contractId: contract.id,
-        actorId: null,
-        type: 'contract_completed',
-      });
-      return { act: 'completed', m };
-    }
+    if (completed) return { act: 'completed', m };
     // Ending must see this milestone as APPROVED, so it is not refunded.
     const end = await this.ending.end(
       tx,

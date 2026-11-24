@@ -226,39 +226,12 @@ export class ContractsService {
       message: 'Milestone approved',
       write: async ({ tx, contract, side, now }) => {
         const m = this.checkAction('approve', contract, milestoneId, side);
-        await this.wallet.release(tx, this.moveOf(contract, m));
-        await tx.milestone.update({
-          where: { id: m.id },
-          data: { status: M.APPROVED, approvedAt: now },
-        });
-        await this.events.record(tx, {
-          contractId: contract.id,
-          actorId: viewer.id,
-          type: 'milestone_approved',
-          data: {
-            milestoneId: m.id,
-            position: m.position,
-            amount: m.amount,
-            auto: false,
-          },
-        });
-        const completed = contract.milestones.every(
-          (other) =>
-            other.id === m.id ||
-            other.status === M.APPROVED ||
-            other.status === M.CANCELLED,
+        const { completed } = await this.ending.approveMilestone(
+          tx,
+          contract,
+          m,
+          { actorId: viewer.id, now, auto: false },
         );
-        if (completed) {
-          await tx.contract.update({
-            where: { id: contract.id },
-            data: { status: C.COMPLETED, completedAt: now },
-          });
-          await this.events.record(tx, {
-            contractId: contract.id,
-            actorId: viewer.id,
-            type: 'contract_completed',
-          });
-        }
         return { m, completed };
       },
       notice: (contract, { m, completed }) => {

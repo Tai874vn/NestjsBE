@@ -32,6 +32,13 @@ export type EndOptions = {
   now?: Date;
 };
 
+/** Who approves a milestone and when; auto = true when the sweeper does it (client silent). */
+export type ApproveOptions = {
+  actorId: number | null;
+  now: Date;
+  auto: boolean;
+};
+
 /** What ending did to each milestone (for the notice texts). */
 export type EndResult = {
   released: number[];
@@ -40,7 +47,12 @@ export type EndResult = {
 };
 
 /**
- * Stops a contract early (ENDED). Used by the client's own end (Task 8), the mutual end
+ * The two money endings of a contract that several steps share.
+ *
+ * approveMilestone(): the one approve path (RELEASE, APPROVED, history, COMPLETED when last). Used
+ * by the client's Approve (ContractsService) and the sweeper's auto-approve (ContractSweeperService).
+ *
+ * end(): stops a contract early (ENDED). Used by the client's own end (Task 8), the mutual end
  * (Task 9) and the sweeper (Task 10).
  *
  * The caller must already hold the contract row lock (see ContractStepService) and pass the
@@ -60,6 +72,61 @@ export class ContractEndingService {
     private readonly wallet: WalletService,
     private readonly events: ContractEventsService,
   ) {}
+
+  /**
+   * Approve one SUBMITTED milestone: the held credits go to the freelancer (RELEASE), the milestone
+   * becomes APPROVED (autoApproved when the sweeper did it) and a milestone_approved row is
+   * written. When every other milestone is APPROVED or CANCELLED, the contract is COMPLETED and a
+   * contract_completed row is written. The caller holds the contract row lock and has already
+   * checked that the milestone may be approved (it read it after the lock).
+   */
+  async approveMilestone(
+    tx: Prisma.TransactionClient,
+    contract: EndingContract,
+    m: EndingContract['milestones'][number],
+    opts: ApproveOptions,
+  ): Promise<{ completed: boolean }> {
+    const { actorId, now, auto } = opts;
+    await this.wallet.release(tx, {
+      clientId: contract.clientId,
+      freelancerId: contract.freelancerId,
+      amount: m.amount,
+      contractId: contract.id,
+      milestoneId: m.id,
+    });
+    await tx.milestone.update({
+      where: { id: m.id },
+      data: {
+        status: M.APPROVED,
+        approvedAt: now,
+        ...(auto ? { autoApproved: true } : {}),
+      },
+    });
+    await this.events.record(tx, {
+      contractId: contract.id,
+      actorId,
+      type: 'milestone_approved',
+      data: { milestoneId: m.id, position: m.position, amount: m.amount, auto },
+    });
+    const completed = contract.milestones.every(
+      (other) =>
+        other.id === m.id ||
+        other.status === M.APPROVED ||
+        other.status === M.CANCELLED,
+    );
+    if (completed) {
+      await tx.contract.update({
+        where: { id: contract.id },
+        data: { status: ContractStatus.COMPLETED, completedAt: now },
+      });
+      await this.events.record(tx, {
+        contractId: contract.id,
+        actorId,
+        type: 'contract_completed',
+      });
+    }
+    return { completed };
+  }
 
   async end(
     tx: Prisma.TransactionClient,
