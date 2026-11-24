@@ -299,8 +299,22 @@ export type ContractPair = {
   earliest: Date;
 };
 
+/**
+ * What a priced service offers: its price in credits, the split the seller suggests
+ * (milestoneTemplate, shares add to 100) and where the work happens.
+ */
+export type ServiceTerms = {
+  price: number;
+  milestoneTemplate: Array<{ title: string; share: number }>;
+  workMode: 'REMOTE' | 'ONSITE' | 'BOTH';
+  /** The area the seller covers for onsite work; null when REMOTE. */
+  serviceArea: string | null;
+};
+
 export type ContractsInput = {
   pairs: ContractPair[];
+  /** The terms of every priced service; each pair's service is in it. */
+  terms: Map<number, ServiceTerms>;
   people: Person[];
   joinedAt: Map<number, Date>;
   now: Date;
@@ -324,7 +338,6 @@ export type ContractsOutput = {
 };
 
 const firstName = (person: Person) => person.name.split(' ')[0];
-const round10 = (value: number) => Math.max(1, Math.round(value / 10) * 10);
 const at = (ms: number) => new Date(ms);
 
 const AMOUNTS: Record<string, [number, number]> = {
@@ -332,11 +345,89 @@ const AMOUNTS: Record<string, [number, number]> = {
   Mid: [300, 900],
   Senior: [500, 1500],
 };
-const TITLES: Record<number, string[]> = {
-  1: ['Full delivery'],
-  2: ['First version', 'Final version'],
-  3: ['Plan and first draft', 'Main work', 'Final delivery'],
+/** Template titles by kind of work and number of rows (2 to 4). */
+const TEMPLATE_TITLES: Record<WorkField, Record<number, string[]>> = {
+  art: {
+    2: ['Sketch', 'Final artwork'],
+    3: ['Sketch', 'Color', 'Final'],
+    4: ['Sketch', 'Line art', 'Color', 'Final'],
+  },
+  web: {
+    2: ['Design', 'Build and launch'],
+    3: ['Design', 'Build', 'Launch'],
+    4: ['Design', 'Build', 'Test', 'Launch'],
+  },
+  generic: {
+    2: ['Draft', 'Final'],
+    3: ['Plan', 'Draft', 'Final'],
+    4: ['Plan', 'Draft', 'Review', 'Final'],
+  },
 };
+/** Share splits (percent, each adds to 100) by number of rows. */
+const SHARES: Record<number, number[][]> = {
+  2: [
+    [40, 60],
+    [50, 50],
+  ],
+  3: [
+    [30, 40, 30],
+    [20, 50, 30],
+  ],
+  4: [
+    [20, 30, 30, 20],
+    [25, 25, 25, 25],
+  ],
+};
+type WorkField = 'art' | 'web' | 'generic';
+/** ISCO unit groups (the first 4 digits of the ESCO code) for design and art work. */
+const ART_UNITS = ['2163', '2166', '2651', '3432'];
+
+/** The kind of work from the freelancer's occupation: design/art, software/web, or anything else. */
+function fieldOf(occupation: string | null): WorkField {
+  const unit = occupation?.slice(0, 4) ?? '';
+  if (ART_UNITS.includes(unit)) return 'art';
+  if (unit.startsWith('25') || unit.startsWith('351')) return 'web';
+  return 'generic';
+}
+
+/**
+ * Terms for one priced service: 2 to 4 template rows that fit the freelancer's field, a price from
+ * the freelancer's level (the per-milestone scale times the rows, rounded to 50), and mostly REMOTE
+ * work (a few BOTH or ONSITE, with the freelancer's location as the area).
+ */
+export function serviceTermsFor(
+  random: Random,
+  freelancer: Person,
+): ServiceTerms {
+  const rows = random.int(2, 4);
+  const titles = TEMPLATE_TITLES[fieldOf(freelancer.occupation)][rows];
+  const shares = random.pick(SHARES[rows]);
+  const [low, high] = AMOUNTS[freelancer.level ?? 'Mid'];
+  const price = Math.max(
+    50,
+    Math.round(((low + random.next() * (high - low)) * rows) / 50) * 50,
+  );
+  const roll = random.next();
+  const workMode = roll < 0.8 ? 'REMOTE' : roll < 0.92 ? 'BOTH' : 'ONSITE';
+  return {
+    price,
+    milestoneTemplate: titles.map((title, i) => ({ title, share: shares[i] })),
+    workMode,
+    serviceArea: workMode === 'REMOTE' ? null : freelancer.location,
+  };
+}
+
+/**
+ * The price split by the shares, in whole credits (each at least 1); what is left from rounding
+ * down goes to the last milestone, so the amounts add up to the price.
+ */
+export function priceSplit(price: number, shares: number[]): number[] {
+  const amounts = shares.map((share) =>
+    Math.max(1, Math.floor((price * share) / 100)),
+  );
+  amounts[amounts.length - 1] += price - amounts.reduce((a, b) => a + b, 0);
+  return amounts;
+}
 const SUBMIT_NOTES = [
   (title: string) =>
     `${title} is ready. The main points are in the notes; tell me if anything is unclear.`,
@@ -396,15 +487,12 @@ export function buildContracts(input: ContractsInput): ContractsOutput {
   for (const [index, pair] of input.pairs.entries()) {
     let scenario = index < REQUIRED.length ? REQUIRED[index] : extra();
     const { client, freelancer, service } = pair;
-    const n =
-      scenario === 'completed'
-        ? random.int(1, 3)
-        : NEEDS_TWO.includes(scenario)
-          ? random.int(2, 3)
-          : random.int(1, 3);
-    const [low, high] = AMOUNTS[freelancer.level ?? 'Mid'];
-    let amounts = Array.from({ length: n }, () =>
-      round10(low + random.next() * (high - low)),
+    // The milestones follow the service's template: its titles, and its price split by the shares.
+    const template = input.terms.get(service.id)!.milestoneTemplate;
+    const n = template.length;
+    let amounts = priceSplit(
+      input.terms.get(service.id)!.price,
+      template.map((row) => row.share),
     );
     const k = currentPosition(scenario, n, random);
     // Scale the amounts down when the client cannot pay for every milestone this story funds.
@@ -426,7 +514,7 @@ export function buildContracts(input: ContractsInput): ContractsOutput {
       n,
       k,
       amounts,
-      titles: TITLES[n],
+      titles: template.map((row) => row.title),
       brief: briefOf(random, client, freelancer, service, n),
       versions: random.pick([1, 1, 1, 2, 2, 3]),
     };
@@ -576,14 +664,6 @@ type Story = {
   brief: string;
   versions: number;
 };
-
-/** Stories that need at least 2 milestones (a later one is the current one, or one must be left over). */
-const NEEDS_TWO: Scenario[] = [
-  'active-pending-next',
-  'active-unfunded-warned',
-  'ended-not-funded',
-  'ended-client-silent',
-];
 
 function isProposalOnly(
   scenario: Scenario,

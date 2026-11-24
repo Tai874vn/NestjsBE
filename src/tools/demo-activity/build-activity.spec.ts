@@ -1,5 +1,6 @@
 import { checkAmendment } from '../../modules/contracts/contract-rules';
 import { evaluateDeadlines } from '../../modules/contracts/deadline-rules';
+import { priceSplit } from './build-contracts';
 import {
   applicationFit,
   buildActivity,
@@ -372,6 +373,49 @@ describe('buildActivity contracts and wallets', () => {
     }
     expect(big.contracts.filter((c) => c.amendments.some((a) => a.status === 'OPEN'))).toHaveLength(1);
     expect(big.contracts.filter((c) => c.endRequestedById !== null)).toHaveLength(1);
+  });
+
+  it('prices every service with a proposal or contract (template shares add to 100), and about half of the rest', () => {
+    const services = bigInput().services;
+    const used = new Set(big.proposals.map((p) => p.jobId));
+    for (const id of used) expect(big.serviceTerms.has(id)).toBe(true);
+    for (const [, terms] of big.serviceTerms) {
+      const rows = terms.milestoneTemplate;
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      expect(rows.length).toBeLessThanOrEqual(4);
+      expect(rows.reduce((sum, row) => sum + row.share, 0)).toBe(100);
+      for (const row of rows) {
+        expect(row.title.length).toBeGreaterThan(0);
+        expect(Number.isInteger(row.share) && row.share > 0).toBe(true);
+      }
+      expect(Number.isInteger(terms.price)).toBe(true);
+      expect(terms.price).toBeGreaterThanOrEqual(rows.length);
+      expect(['REMOTE', 'ONSITE', 'BOTH']).toContain(terms.workMode);
+      expect(terms.serviceArea === null).toBe(terms.workMode === 'REMOTE');
+    }
+    const unused = services.filter((s) => !used.has(s.id));
+    const pricedUnused = unused.filter((s) => big.serviceTerms.has(s.id)).length;
+    expect(pricedUnused).toBeGreaterThan(0);
+    expect(pricedUnused).toBeLessThan(unused.length);
+  });
+
+  it('takes proposal and contract amounts from the service price split by its template', () => {
+    expect(priceSplit(1000, [30, 40, 30])).toEqual([300, 400, 300]);
+    expect(priceSplit(1001, [30, 40, 30])).toEqual([300, 400, 301]);
+    for (const p of big.proposals) {
+      const terms = big.serviceTerms.get(p.jobId)!;
+      const latest = p.versions.at(-1)!;
+      expect(latest.milestones.map((m) => m.title)).toEqual(terms.milestoneTemplate.map((row) => row.title));
+      // The agreed total is the price, or lower when the client's credits did not reach it.
+      expect(latest.total).toBeLessThanOrEqual(terms.price);
+      if (latest.total === terms.price) {
+        expect(latest.milestones.map((m) => m.amount)).toEqual(
+          priceSplit(terms.price, terms.milestoneTemplate.map((row) => row.share)),
+        );
+      }
+    }
+    const atPrice = big.contracts.filter((c) => c.total === big.serviceTerms.get(c.jobId)!.price);
+    expect(atPrice.length).toBeGreaterThan(big.contracts.length / 2);
   });
 
   it('makes the OPEN amendment one the other side can accept now (the same check as the app)', () => {

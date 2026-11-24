@@ -26,10 +26,12 @@ import {
 import type { HiringEventType } from '../../modules/hiring-pipeline/hiring-events.service';
 import {
   buildContracts,
+  serviceTermsFor,
   type ContractFact,
   type ContractPair,
   type LedgerFact,
   type ProposalFact,
+  type ServiceTerms,
   type WalletFact,
 } from './build-contracts';
 
@@ -170,6 +172,11 @@ export type Activity = {
     }>;
     savedBy: Array<{ userId: number; createdAt: Date }>;
   }>;
+  /**
+   * Price, milestone template and work mode of the priced services: every service with a proposal
+   * or contract, and about half of the others. The rest stay at price 0 (portfolio posts).
+   */
+  serviceTerms: Map<number, ServiceTerms>;
   /** Proposals in every state; an ACCEPTED one points at its contract. */
   proposals: ProposalFact[];
   contracts: ContractFact[];
@@ -987,8 +994,17 @@ export function buildActivity(input: ActivityInput): Activity {
       });
     }
   }
+  // Every service someone buys gets a price and a template; about half of the others too.
+  const serviceTerms = new Map<number, ServiceTerms>();
+  const bought = new Set(pairs.map((pair) => pair.service.id));
+  for (const service of input.services) {
+    const freelancer = people.get(service.creatorId);
+    if (freelancer && (bought.has(service.id) || random.chance(0.5)))
+      serviceTerms.set(service.id, serviceTermsFor(random, freelancer));
+  }
   const work = buildContracts({
     pairs: random.shuffle(pairs),
+    terms: serviceTerms,
     people: input.people,
     joinedAt,
     now,
@@ -1153,6 +1169,7 @@ export function buildActivity(input: ActivityInput): Activity {
     connections: [...connections.values()],
     applications,
     feedPosts,
+    serviceTerms,
     proposals: work.proposals,
     contracts: work.contracts,
     wallets: work.wallets,
