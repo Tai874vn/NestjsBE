@@ -28,7 +28,7 @@ describe('UserProfileService', () => {
       comment: {
         aggregate: jest.fn(),
       },
-      hire: {
+      contract: {
         count: jest.fn(),
       },
       $transaction: jest.fn(),
@@ -123,10 +123,14 @@ describe('UserProfileService', () => {
       _avg: { rating: 4.5 },
       _count: { rating: 6 },
     });
-    prisma.hire.count.mockResolvedValue(1);
+    prisma.contract.count.mockResolvedValue(1);
 
     const result = await service.getPublicProfile(1);
 
+    // completedHires counts COMPLETED contracts where the user is the freelancer.
+    expect(prisma.contract.count).toHaveBeenCalledWith({
+      where: { status: 'COMPLETED', freelancerId: 1 },
+    });
     expect(result.content).toMatchObject({
       id: 1,
       profileSkills: [expect.objectContaining({ name: 'NestJS' })],
@@ -155,7 +159,7 @@ describe('UserProfileService', () => {
     await expect(service.getPublicProfile(1)).resolves.toBe(cachedProfile);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(prisma.comment.aggregate).not.toHaveBeenCalled();
-    expect(prisma.hire.count).not.toHaveBeenCalled();
+    expect(prisma.contract.count).not.toHaveBeenCalled();
   });
 
   it('keeps profile completion false until the current required profile fields exist', async () => {

@@ -219,6 +219,36 @@ export function fmtCredits(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+// ---------- Reviews ----------
+
+// Only the client reviews (403). It opens when the contract is COMPLETED, or ENDED with at least
+// one APPROVED milestone (409 before that).
+export function checkReview(
+  contract: {
+    clientId: number;
+    status: ContractStatus;
+    milestones: { status: MilestoneStatus }[];
+  },
+  userId: number,
+): void {
+  if (contract.clientId !== userId) {
+    throw new RuleError(
+      'forbidden',
+      'Only the client can review this contract.',
+    );
+  }
+  const approvedWork = contract.milestones.some((m) => m.status === M.APPROVED);
+  const open =
+    contract.status === C.COMPLETED ||
+    (contract.status === C.ENDED && approvedWork);
+  if (!open) {
+    throw new RuleError(
+      'conflict',
+      'Reviews open when the contract is completed, or ended with approved work.',
+    );
+  }
+}
+
 // ---------- Amendments ----------
 
 // One change of an amendment, with the dates already turned into Date objects.

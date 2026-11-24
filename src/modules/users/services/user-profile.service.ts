@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ContractStatus } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import {
@@ -107,13 +108,9 @@ export class UserProfileService {
           rating: true,
         },
       }),
-      this.prisma.hire.count({
-        where: {
-          completed: true,
-          job: {
-            creatorId: id,
-          },
-        },
+      // Finished work: COMPLETED contracts where this user is the freelancer.
+      this.prisma.contract.count({
+        where: { status: ContractStatus.COMPLETED, freelancerId: id },
       }),
     ]);
 

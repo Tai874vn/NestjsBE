@@ -10,9 +10,11 @@ import { Transform } from 'class-transformer';
 import { trimString } from '../../../common/dto/string.transforms';
 
 export class CreateCommentDto {
+  /** The contract being reviewed; the service (job) is taken from it. */
   @IsNotEmpty()
   @IsInt()
-  jobId: number;
+  @Min(1)
+  contractId: number;
 
   @Transform(trimString)
   @IsNotEmpty()

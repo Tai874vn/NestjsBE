@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
@@ -11,48 +10,63 @@ import { CreateCommentDto } from '../dto/create-comment.dto';
 import { UpdateCommentDto } from '../dto/update-comment.dto';
 import { Role } from '../../../common/constants/roles';
 import { Prisma } from '@prisma/client';
+import { checkReview } from '../../contracts/contract-rules';
+import { ContractEventsService } from '../../contracts/contract-events.service';
+import {
+  ContractStepService,
+  ruleToHttp,
+} from '../../contracts/contract-step.service';
+
+const ALREADY_REVIEWED = 'You already reviewed this contract.';
 
 @Injectable()
 export class CommentsService {
   constructor(
     private prisma: PrismaService,
     private redisService: RedisService,
+    private steps: ContractStepService,
+    private events: ContractEventsService,
   ) {}
 
+  /**
+   * The client reviews a finished contract (COMPLETED, or ENDED with approved work), once.
+   * The contract row is locked first so its state cannot change while we check it.
+   * The service (job) comes from the contract. After the save, the freelancer is told.
+   */
   async create(createDto: CreateCommentDto, userId: number) {
-    const job = await this.prisma.job.findUnique({
-      where: { id: createDto.jobId },
-      select: { id: true, creatorId: true },
+    const { comment, contract } = await this.prisma.$transaction(async (tx) => {
+      const contract = await this.steps.lockContract(tx, createDto.contractId);
+      ruleToHttp(() => checkReview(contract, userId));
+
+      const existing = await tx.comment.findUnique({
+        where: { contractId: contract.id },
+        select: { id: true },
+      });
+      if (existing) throw new ConflictException(ALREADY_REVIEWED);
+
+      const comment = await this.createReview(tx, createDto, contract, userId);
+      await this.events.record(tx, {
+        contractId: contract.id,
+        actorId: userId,
+        type: 'review_left',
+        data: { rating: createDto.rating },
+      });
+      return { comment, contract };
     });
-    if (!job) {
-      throw new NotFoundException(`Job with ID ${createDto.jobId} not found`);
-    }
-    if (job.creatorId === userId) {
-      throw new BadRequestException('You cannot review your own service');
-    }
 
-    const completedHire = await this.prisma.hire.findFirst({
-      where: { jobId: createDto.jobId, hirerId: userId, completed: true },
-      select: { id: true },
+    // After the save: tell the freelancer and refresh the caches (never inside the transaction).
+    await this.events.announce({
+      recipientId: contract.freelancerId,
+      actorId: userId,
+      actorName: contract.client.name,
+      kind: 'contract',
+      step: 'review_left',
+      title: 'New review',
+      body: `${contract.client.name} reviewed ${contract.title} (${createDto.rating}/5).`,
+      contractId: contract.id,
+      recipientSide: 'freelancer',
     });
-    if (!completedHire) {
-      throw new ForbiddenException(
-        'Complete a hire before reviewing this service',
-      );
-    }
-
-    const existingReview = await this.prisma.comment.findFirst({
-      where: { jobId: createDto.jobId, commenterId: userId },
-      select: { id: true },
-    });
-    if (existingReview) {
-      throw new ConflictException('You have already reviewed this service');
-    }
-
-    const comment = await this.createReview(createDto, userId);
-
-    // Invalidate comment caches for the job
-    await this.redisService.invalidateCommentCaches(createDto.jobId);
+    await this.redisService.invalidateCommentCaches(contract.jobId);
     await this.redisService.invalidateUserCaches(comment.job.creatorId);
 
     return {
@@ -85,12 +99,20 @@ export class CommentsService {
     };
   }
 
-  private async createReview(createDto: CreateCommentDto, userId: number) {
+  private async createReview(
+    tx: Prisma.TransactionClient,
+    createDto: CreateCommentDto,
+    contract: { id: number; jobId: number },
+    userId: number,
+  ) {
     try {
-      return await this.prisma.comment.create({
+      return await tx.comment.create({
         data: {
-          ...createDto,
+          contractId: contract.id,
+          jobId: contract.jobId,
           commenterId: userId,
+          content: createDto.content,
+          rating: createDto.rating,
         },
         include: {
           job: true,
@@ -104,11 +126,12 @@ export class CommentsService {
         },
       });
     } catch (error) {
+      // Two reviews at the same moment: the unique contractId lets only one in.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('You have already reviewed this service');
+        throw new ConflictException(ALREADY_REVIEWED);
       }
       throw error;
     }
