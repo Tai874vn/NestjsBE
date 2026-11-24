@@ -8,6 +8,7 @@ import {
   NotificationTemplateService,
 } from '../notifications/services/notification-template.service';
 import { NotificationsService } from '../notifications/services/notifications.service';
+import { RedisService } from '../redis/redis.service';
 import { Side } from './contract-rules';
 import { DeadlineRule } from './deadline-rules';
 
@@ -112,6 +113,7 @@ export class ContractEventsService {
     private readonly chatService: ChatService,
     private readonly messageFanout: ChatMessageFanoutService,
     private readonly chatGateway: ChatGateway,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -147,6 +149,17 @@ export class ContractEventsService {
    */
   async announce(input: ContractAnnounceInput): Promise<void> {
     const where = `${input.kind} ${input.proposalId ?? input.contractId} (${input.step})`;
+    // A finished contract changes the freelancer's profile (completed jobs count), so the saved
+    // (cached) profile is dropped. This was done by the old hires service. It never blocks the rest.
+    if (input.step === 'contract_completed') {
+      try {
+        await this.redisService.invalidateUserCaches(input.recipientId);
+      } catch (error) {
+        this.logger.error(
+          `Profile cache clear failed for ${where}: ${this.errorText(error)}`,
+        );
+      }
+    }
     try {
       const templateInput: ContractTemplateInput = {
         recipientId: input.recipientId,

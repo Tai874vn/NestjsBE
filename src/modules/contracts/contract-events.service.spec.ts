@@ -14,14 +14,24 @@ describe('ContractEventsService', () => {
         .mockResolvedValue({ message, recipientCount: 1 }),
     };
     const gateway = { broadcastNewMessage: jest.fn() };
+    const redis = { invalidateUserCaches: jest.fn().mockResolvedValue(undefined) };
     const service = new ContractEventsService(
       notifications as never,
       new NotificationTemplateService(),
       chatService as never,
       fanout as never,
       gateway as never,
+      redis as never,
     );
-    return { service, notifications, chatService, fanout, gateway, message };
+    return {
+      service,
+      notifications,
+      chatService,
+      fanout,
+      gateway,
+      message,
+      redis,
+    };
   }
 
   const base = {
@@ -61,6 +71,37 @@ describe('ContractEventsService', () => {
     expect(tx.contractEvent.create).toHaveBeenNthCalledWith(2, {
       data: { proposalId: 5, actorId: null, type: 'proposal_expired' },
     });
+  });
+
+  it('clears the saved profile of each person when a contract is completed', async () => {
+    const { service, redis, notifications } = createService();
+    redis.invalidateUserCaches.mockRejectedValueOnce(new Error('redis down'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+
+    for (const recipientId of [2, 9]) {
+      await service.announce({
+        ...base,
+        recipientId,
+        kind: 'contract',
+        step: 'contract_completed',
+        recipientSide: recipientId === 9 ? 'freelancer' : 'client',
+        contractId: 12,
+      });
+    }
+    await service.announce({
+      ...base,
+      recipientId: 2,
+      kind: 'contract',
+      step: 'work_submitted',
+      recipientSide: 'client',
+      contractId: 12,
+    });
+
+    // A cache failure never blocks the notification.
+    expect(notifications.create).toHaveBeenCalledTimes(3);
+    expect(redis.invalidateUserCaches).toHaveBeenCalledTimes(2);
+    expect(redis.invalidateUserCaches).toHaveBeenNthCalledWith(1, 2);
+    expect(redis.invalidateUserCaches).toHaveBeenNthCalledWith(2, 9);
   });
 
   it('sends a proposal notification linking to the recipient tab and proposal', async () => {

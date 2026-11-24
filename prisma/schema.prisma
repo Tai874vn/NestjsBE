@@ -34,7 +34,6 @@ model User {
   updatedAt     DateTime @updatedAt
 
   comments         Comment[]
-  hires            Hire[]
   jobs             Job[]            @relation("JobCreator")
   profileSkills    UserSkill[]
   profileCertifications UserCertification[]
@@ -246,7 +245,6 @@ model Job {
   subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
   user        User        @relation("JobCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   comments    Comment[]
-  hires       Hire[]
   proposals   Proposal[]
   contracts   Contract[]
   savedBy     SavedJob[]
@@ -276,21 +274,6 @@ model Comment {
 
   @@index([jobId, commentedAt])
   @@map("comments")
-}
-
-model Hire {
-  id        Int      @id @default(autoincrement())
-  jobId     Int
-  hirerId   Int
-  hiredAt   DateTime @default(now())
-  completed Boolean  @default(false)
-
-  job   Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  user  User @relation(fields: [hirerId], references: [id], onDelete: Cascade)
-
-  @@index([hirerId, completed, hiredAt])
-  @@index([jobId, completed])
-  @@map("hires")
 }
 
 model Post {

@@ -14,7 +14,6 @@ import { SubcategoriesModule } from './modules/subcategories/subcategories.modul
 import { JobsModule } from './modules/jobs/jobs.module';
 import { HiringPostsModule } from './modules/hiring-posts/hiring-posts.module';
 import { CommentsModule } from './modules/comments/comments.module';
-import { HiresModule } from './modules/hires/hires.module';
 import { SkillModule } from './modules/skill/skill.module';
 import { OccupationsModule } from './modules/occupations/occupations.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
@@ -62,7 +61,6 @@ import { DatabaseModule } from './database/database.module';
     JobsModule,
     HiringPostsModule,
     CommentsModule,
-    HiresModule,
     SkillModule,
     OccupationsModule,
     ChatModule,

@@ -15,7 +15,6 @@ async function main() {
   await prisma.chatMessage.deleteMany();
   await prisma.chatRoomMember.deleteMany();
   await prisma.chatRoom.deleteMany();
-  await prisma.hire.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.job.deleteMany();
   await prisma.subcategory.deleteMany();
@@ -246,14 +245,6 @@ async function main() {
     ],
   });
 
-  await prisma.hire.createMany({
-    data: [
-      { jobId: jobs[0].id, hirerId: maya.id, completed: true },
-      { jobId: jobs[2].id, hirerId: alex.id, completed: false },
-      { jobId: jobs[4].id, hirerId: admin.id, completed: false },
-    ],
-  });
-
   const room = await prisma.chatRoom.create({
     data: {
       name: 'Project kickoff',
@@ -289,7 +280,7 @@ async function main() {
   });
 
   console.log(
-    `Seeded ${4} users, ${taxonomy.categories.length} categories, ${subcategories.length} subcategories, ${jobs.length} jobs, ${4} comments, ${3} hires, and ${1} chat room.`,
+    `Seeded ${4} users, ${taxonomy.categories.length} categories, ${subcategories.length} subcategories, ${jobs.length} jobs, ${4} comments, and ${1} chat room.`,
   );
   console.log('Demo login: admin@example.com / password123');
 }
