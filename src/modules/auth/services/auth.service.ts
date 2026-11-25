@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -14,6 +15,7 @@ import {
   AuthSessionService,
   SessionMetadata,
 } from '../session/auth-session.service';
+import { EmailVerificationService } from './email-verification.service';
 
 type UserType = User;
 
@@ -31,18 +33,18 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private readonly sessions: AuthSessionService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
-  async signUp(
-    signUpDto: SignUpDto,
-    metadata: SessionMetadata = {},
-  ): Promise<
+  /**
+   * Create a password account. No session yet: the user must first open the link mailed to the
+   * address (EmailVerificationService). The answer says whether that mail went out.
+   */
+  async signUp(signUpDto: SignUpDto): Promise<
     ApiResponse<{
       user: Omit<UserType, 'password' | 'refreshToken'>;
-      token: string;
-      refreshToken: string;
-      logoutToken: string;
-      refreshExpiresAt: Date;
+      verificationRequired: true;
+      mailSent: boolean;
     }>
   > {
     // 1. One account per email ("A@x.com" and "a@x.com" count as the same).
@@ -79,23 +81,16 @@ export class AuthService {
       },
     });
 
-    // 4. Log the new user in: create a session and its tokens.
-    const { token, refreshToken, logoutToken, refreshExpiresAt } =
-      await this.sessions.create(user.id, metadata);
+    // 4. Mail the confirm link. A failed mail does not undo the sign-up: the user can ask again.
+    const mailSent = await this.emailVerification.sendFirst(user);
 
     // 5. Remove the password hash before sending the user back to the browser.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken: _, ...result } = user;
 
     return {
-      message: 'User created successfully',
-      content: {
-        user: result,
-        token,
-        refreshToken,
-        logoutToken,
-        refreshExpiresAt,
-      },
+      message: 'Account created. Check your email to confirm it.',
+      content: { user: result, verificationRequired: true, mailSent },
     };
   }
 
@@ -129,6 +124,14 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Checked only after the password, so this answer never tells a stranger the address exists.
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please confirm your email first. We can send the link again.',
+      });
     }
 
     // Passing the password hash lets the session service refuse the login if
@@ -201,6 +204,8 @@ export class AuthService {
         location: true,
         website: true,
         googleId: true,
+        emailVerifiedAt: true,
+        pendingEmail: true,
         avatar: true,
         coverImage: true,
         profileCompleted: true,

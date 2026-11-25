@@ -13,6 +13,7 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 import { AuthSessionService } from '../../auth/session/auth-session.service';
 import { StorageService } from '../../storage/storage.service';
+import { EmailVerificationService } from '../../auth/services/email-verification.service';
 
 @Injectable()
 export class UsersService {
@@ -20,6 +21,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly sessions: AuthSessionService,
+    private readonly emailVerification: EmailVerificationService,
     @Optional() private readonly storage?: StorageService,
   ) {}
 
@@ -40,6 +42,8 @@ export class UsersService {
         password: hashedPassword,
         role: createUserDto.role || Role.USER,
         candidateDiscoverable: true,
+        // Only an admin can create users here, so the address counts as checked.
+        emailVerifiedAt: new Date(),
       },
       select: {
         id: true,
@@ -283,6 +287,21 @@ export class UsersService {
       message: 'User updated successfully',
       content: updatedUser,
     };
+  }
+
+  /**
+   * The user's own new address: nothing changes until the link mailed to it is opened
+   * (EmailVerificationService.verify). The same address again does nothing.
+   */
+  async requestOwnEmailChange(id: number, newEmail: string) {
+    const email = this.normalizeEmail(newEmail);
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { email: true },
+    });
+    if (!user) throw new NotFoundException(`User with ID ${id} not found`);
+    if (user.email.toLowerCase() === email) return { pendingEmail: null };
+    return this.emailVerification.requestEmailChange(id, email);
   }
 
   async remove(id: number) {

@@ -52,6 +52,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     if (!email) {
       throw new UnauthorizedException('Google account email is required');
     }
+    // Google marks addresses it has not checked; those must not open an account by email.
+    if (
+      (profile as { _json?: { email_verified?: boolean } })._json
+        ?.email_verified === false
+    ) {
+      throw new UnauthorizedException('Google has not verified this email');
+    }
 
     const signupRole = req.googleSignupRole;
 
@@ -63,9 +70,18 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       const existingUser: UserType | null = await this.findUserByEmail(email);
 
       if (existingUser) {
+        // An address nobody has proved yet may have been signed up by someone else, waiting
+        // for the real owner to log in with Google (account pre-hijacking). Google proves the
+        // owner, so that unknown password is dropped; the owner can add one with "forgot password".
+        const unproved = existingUser.emailVerifiedAt === null;
         user = await this.prisma.user.update({
           where: { id: existingUser.id },
-          data: { googleId: id },
+          data: {
+            googleId: id,
+            ...(unproved
+              ? { password: null, emailVerifiedAt: new Date() }
+              : {}),
+          },
         });
       } else {
         if (!signupRole) {
@@ -82,6 +98,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             avatar: photos?.[0]?.value,
             role: signupRole,
             candidateDiscoverable: true,
+            // Google has checked the address.
+            emailVerifiedAt: new Date(),
           },
         });
       }

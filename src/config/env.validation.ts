@@ -93,7 +93,9 @@ export const envValidationSchema = Joi.object({
   // Local file storage root (defaults to /app/uploads in production, ./uploads locally)
   UPLOADS_DIR: Joi.string().empty('').optional(),
 
-
+  // Resend (account mails). Without the key, mails are skipped and logged.
+  RESEND_API_KEY: Joi.string().empty('').optional(),
+  MAIL_FROM: Joi.string().empty('').optional(),
   // Sentry error tracking and performance tracing (optional; empty DSN turns Sentry off)
   SENTRY_DSN: Joi.string().uri().empty('').optional(),
   SENTRY_ENVIRONMENT: Joi.string().max(64).empty('').optional(),

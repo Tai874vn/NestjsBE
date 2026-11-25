@@ -7,71 +7,76 @@ datasource db {
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
-  name          String
-  email         String   @unique
-  password      String?
-  phone         String?
-  birthDay      String?
-  gender        String?
-  role          String   @default("user")
-  skill         String?
-  certification String?
-  headline      String?
-  bio           String?
-  location      String?
-  website       String?
-  googleId      String?  @unique
-  avatar        String?
-  coverImage    String?
-  profileCompleted Boolean @default(false)
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  email                 String    @unique
+  password              String?
+  phone                 String?
+  birthDay              String?
+  gender                String?
+  role                  String    @default("user")
+  skill                 String?
+  certification         String?
+  headline              String?
+  bio                   String?
+  location              String?
+  website               String?
+  googleId              String?   @unique
+  avatar                String?
+  coverImage            String?
+  profileCompleted      Boolean   @default(false)
   /// Candidates opt in to candidate search and AI matching ("Visible to recruiters").
-  candidateDiscoverable Boolean @default(false)
-  refreshToken  String?
-  tokenVersion  Int      @default(0)
-  bannedAt      DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  candidateDiscoverable Boolean   @default(false)
+  refreshToken          String?
+  tokenVersion          Int       @default(0)
+  bannedAt              DateTime?
+  /// When the user proved they own `email` (link in a mail, or Google). Null = not proved yet: no password sign-in.
+  emailVerifiedAt       DateTime?
+  /// A new address the user asked for; it replaces `email` only after the link sent to it is opened.
+  pendingEmail          String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  comments         Comment[]
-  jobs             Job[]            @relation("JobCreator")
-  profileSkills    UserSkill[]
-  profileCertifications UserCertification[]
-  portfolioItems   UserPortfolioItem[]
-  resume           UserResume?
-  chatRoomsCreated ChatRoom[]       @relation("ChatRoomCreator")
-  chatRoomMembers  ChatRoomMember[]
-  chatMessages     ChatMessage[]
-  posts            Post[]
-  postComments     PostComment[]
-  postLikes        PostLike[]
-  savedPosts       SavedPost[]
-  savedJobs        SavedJob[]
-  sentConnections     Connection[] @relation("ConnectionRequester")
-  receivedConnections Connection[] @relation("ConnectionRecipient")
-  notificationsReceived Notification[] @relation("NotificationRecipient")
-  notificationsActed    Notification[] @relation("NotificationActor")
-  recommendationSnapshots RecommendationSnapshot[]
+  emailTokens               EmailToken[]
+  comments                  Comment[]
+  jobs                      Job[]                      @relation("JobCreator")
+  profileSkills             UserSkill[]
+  profileCertifications     UserCertification[]
+  portfolioItems            UserPortfolioItem[]
+  resume                    UserResume?
+  chatRoomsCreated          ChatRoom[]                 @relation("ChatRoomCreator")
+  chatRoomMembers           ChatRoomMember[]
+  chatMessages              ChatMessage[]
+  posts                     Post[]
+  postComments              PostComment[]
+  postLikes                 PostLike[]
+  savedPosts                SavedPost[]
+  savedJobs                 SavedJob[]
+  sentConnections           Connection[]               @relation("ConnectionRequester")
+  receivedConnections       Connection[]               @relation("ConnectionRecipient")
+  notificationsReceived     Notification[]             @relation("NotificationRecipient")
+  notificationsActed        Notification[]             @relation("NotificationActor")
+  recommendationSnapshots   RecommendationSnapshot[]
   recommendationQuotaUsages RecommendationQuotaUsage[]
-  hiringPosts     HiringPost[]      @relation("HiringPostRecruiter")
-  hiringApplications HiringApplication[] @relation("HiringApplicationApplicant")
-  authSessions AuthSession[]
-  interviewsCreated Interview[] @relation("InterviewCreator")
-  hiringApplicationEvents HiringApplicationEvent[] @relation("HiringApplicationEventActor")
-  proposalsAsClient     Proposal[]        @relation("ProposalClient")
-  proposalsAsFreelancer Proposal[]        @relation("ProposalFreelancer")
-  proposalsToAnswer     Proposal[]        @relation("ProposalTurnUser")
-  proposalVersions      ProposalVersion[] @relation("ProposalVersionAuthor")
-  contractsAsClient     Contract[]        @relation("ContractClient")
-  contractsAsFreelancer Contract[]        @relation("ContractFreelancer")
-  contractEndRequests   Contract[]        @relation("ContractEndRequester")
-  submissions           Submission[]      @relation("SubmissionAuthor")
-  amendments            Amendment[]       @relation("AmendmentProposer")
-  contractEvents        ContractEvent[]   @relation("ContractEventActor")
-  wallet                Wallet?
-  ledgerEntries         LedgerEntry[]     @relation("LedgerEntryOwner")
-  ledgerCounterparty    LedgerEntry[]     @relation("LedgerEntryCounterparty")
-  topUps                TopUp[]
+  hiringPosts               HiringPost[]               @relation("HiringPostRecruiter")
+  hiringApplications        HiringApplication[]        @relation("HiringApplicationApplicant")
+  authSessions              AuthSession[]
+  interviewsCreated         Interview[]                @relation("InterviewCreator")
+  hiringApplicationEvents   HiringApplicationEvent[]   @relation("HiringApplicationEventActor")
+  proposalsAsClient         Proposal[]                 @relation("ProposalClient")
+  proposalsAsFreelancer     Proposal[]                 @relation("ProposalFreelancer")
+  proposalsToAnswer         Proposal[]                 @relation("ProposalTurnUser")
+  proposalVersions          ProposalVersion[]          @relation("ProposalVersionAuthor")
+  contractsAsClient         Contract[]                 @relation("ContractClient")
+  contractsAsFreelancer     Contract[]                 @relation("ContractFreelancer")
+  contractEndRequests       Contract[]                 @relation("ContractEndRequester")
+  submissions               Submission[]               @relation("SubmissionAuthor")
+  amendments                Amendment[]                @relation("AmendmentProposer")
+  contractEvents            ContractEvent[]            @relation("ContractEventActor")
+  wallet                    Wallet?
+  ledgerEntries             LedgerEntry[]              @relation("LedgerEntryOwner")
+  ledgerCounterparty        LedgerEntry[]              @relation("LedgerEntryCounterparty")
+  topUps                    TopUp[]
 
   @@index([role, profileCompleted, updatedAt, id])
   @@index([role, candidateDiscoverable, profileCompleted, updatedAt, id])
@@ -79,16 +84,16 @@ model User {
 }
 
 model AuthSession {
-  id           String   @id @db.Uuid
-  familyId     String   @unique @db.Uuid
-  userId       Int
-  tokenVersion Int
-  userAgent    String?
-  ip           String?
-  createdAt    DateTime @default(now())
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String             @id @db.Uuid
+  familyId      String             @unique @db.Uuid
+  userId        Int
+  tokenVersion  Int
+  userAgent     String?
+  ip            String?
+  createdAt     DateTime           @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshTokens AuthRefreshToken[]
 
   @@index([userId, revokedAt, expiresAt])
@@ -96,20 +101,42 @@ model AuthSession {
 }
 
 model AuthRefreshToken {
-  id           String   @id @db.Uuid
-  sessionId    String   @db.Uuid
-  tokenHash    String   @unique @db.Char(64)
-  createdAt    DateTime @default(now())
+  id           String             @id @db.Uuid
+  sessionId    String             @db.Uuid
+  tokenHash    String             @unique @db.Char(64)
+  createdAt    DateTime           @default(now())
   expiresAt    DateTime
   usedAt       DateTime?
   revokedAt    DateTime?
-  replacedById String?  @db.Uuid
-  session      AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  replacedBy   AuthRefreshToken? @relation("RefreshReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replacedById String?            @db.Uuid
+  session      AuthSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replacedBy   AuthRefreshToken?  @relation("RefreshReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
   replaces     AuthRefreshToken[] @relation("RefreshReplacement")
 
   @@index([sessionId, expiresAt])
   @@map("auth_refresh_tokens")
+}
+
+enum EmailTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+/// One-time links sent by mail. Only the SHA-256 of the token is saved, so a database leak gives no working link.
+model EmailToken {
+  id        Int               @id @default(autoincrement())
+  userId    Int
+  purpose   EmailTokenPurpose
+  tokenHash String            @unique @db.Char(64)
+  /// The address the link was sent to (for VERIFY_EMAIL, the address it proves).
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime          @default(now())
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, createdAt])
+  @@map("email_tokens")
 }
 
 model UserSkill {
@@ -170,30 +197,30 @@ model UserPortfolioItem {
 }
 
 model UserResume {
-  id             Int      @id @default(autoincrement())
-  userId         Int      @unique
-  data           Json
-  sourceFileName String?
-  sourceFileUrl  String?
-  sourceFileMimeType String?
-  sourceFileSize Int?
-  sourceFilePublicId String?
-  predictedSeniority String?
+  id                           Int       @id @default(autoincrement())
+  userId                       Int       @unique
+  data                         Json
+  sourceFileName               String?
+  sourceFileUrl                String?
+  sourceFileMimeType           String?
+  sourceFileSize               Int?
+  sourceFilePublicId           String?
+  predictedSeniority           String?
   predictedSeniorityConfidence Float?
-  predictedSeniorityModel String?
-  predictedSeniorityMetadata Json?
-  predictedSeniorityAt DateTime?
+  predictedSeniorityModel      String?
+  predictedSeniorityMetadata   Json?
+  predictedSeniorityAt         DateTime?
   /// AI work queue: QUEUED, PROCESSING, DONE, AI_UNAVAILABLE, NEEDS_INPUT, or FAILED. Null = never queued.
-  aiStatus       String?
-  aiStatusMessage String?
-  aiQueuedAt     DateTime?
-  aiClaimedAt    DateTime?
-  aiAttempts     Int      @default(0)
+  aiStatus                     String?
+  aiStatusMessage              String?
+  aiQueuedAt                   DateTime?
+  aiClaimedAt                  DateTime?
+  aiAttempts                   Int       @default(0)
   /// Skills suggested from the CV text and skills the dictionary didn't recognise.
-  aiInsights     Json?
-  schemaVersion  String   @default("v1")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  aiInsights                   Json?
+  schemaVersion                String    @default("v1")
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -223,31 +250,31 @@ model Subcategory {
 }
 
 model Job {
-  id               Int      @id @default(autoincrement())
-  title            String
-  reviews          Int      @default(0)
-  price            Int
-  image            String?
-  description      String?
-  shortDescription String?
-  rating           Int      @default(0)
-  subcategoryId    Int
-  creatorId        Int
+  id                Int      @id @default(autoincrement())
+  title             String
+  reviews           Int      @default(0)
+  price             Int
+  image             String?
+  description       String?
+  shortDescription  String?
+  rating            Int      @default(0)
+  subcategoryId     Int
+  creatorId         Int
   /// Where the work happens: REMOTE, ONSITE or BOTH.
-  workMode         WorkMode @default(REMOTE)
+  workMode          WorkMode @default(REMOTE)
   /// The area the seller covers for onsite work (free text).
-  serviceArea      String?
+  serviceArea       String?
   /// Optional split the seller suggests: a JSON list of { title, description?, share }, shares add to 100.
   milestoneTemplate Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
-  user        User        @relation("JobCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  comments    Comment[]
-  proposals   Proposal[]
-  contracts   Contract[]
-  savedBy     SavedJob[]
+  subcategory             Subcategory              @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  user                    User                     @relation("JobCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  comments                Comment[]
+  proposals               Proposal[]
+  contracts               Contract[]
+  savedBy                 SavedJob[]
   recommendationSnapshots RecommendationSnapshot[]
 
   @@index([creatorId, id])
@@ -268,9 +295,9 @@ model Comment {
   /// The contract this review is for. Null for old reviews written before contracts.
   contractId  Int?     @unique
 
-  job       Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  user      User @relation(fields: [commenterId], references: [id], onDelete: Cascade)
-  contract  Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  job      Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [commenterId], references: [id], onDelete: Cascade)
+  contract Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
 
   @@index([jobId, commentedAt])
   @@map("comments")
@@ -304,9 +331,9 @@ model PostComment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  parent PostComment? @relation("PostCommentReplies", fields: [parentId, postId], references: [id, postId], onDelete: Cascade)
+  post    Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  PostComment?  @relation("PostCommentReplies", fields: [parentId, postId], references: [id, postId], onDelete: Cascade)
   replies PostComment[] @relation("PostCommentReplies")
 
   @@unique([id, postId])
@@ -455,23 +482,23 @@ model Notification {
 }
 
 model RecommendationSnapshot {
-  id          Int                        @id @default(autoincrement())
-  scopeKey    String                     @unique
-  userId      Int
-  kind        RecommendationSnapshotKind
-  jobId       Int?
+  id           Int                        @id @default(autoincrement())
+  scopeKey     String                     @unique
+  userId       Int
+  kind         RecommendationSnapshotKind
+  jobId        Int?
   hiringPostId Int?
-  topK        Int
-  poolSize    Int
-  data        Json
-  modelName   String?
-  elapsedMs   Float?
-  generatedAt DateTime
-  createdAt   DateTime                   @default(now())
-  updatedAt   DateTime                   @updatedAt
+  topK         Int
+  poolSize     Int
+  data         Json
+  modelName    String?
+  elapsedMs    Float?
+  generatedAt  DateTime
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job  Job? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job        Job?        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   hiringPost HiringPost? @relation(fields: [hiringPostId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind, jobId])
@@ -496,53 +523,53 @@ model RecommendationQuotaUsage {
 }
 
 model HiringPost {
-  id             Int              @id @default(autoincrement())
-  recruiterId    Int
-  title          String
-  description    String
-  requirements   String?
-  location       String?
-  employmentType String?
-  salaryMin      Int?
-  salaryMax      Int?
+  id                           Int              @id @default(autoincrement())
+  recruiterId                  Int
+  title                        String
+  description                  String
+  requirements                 String?
+  location                     String?
+  employmentType               String?
+  salaryMin                    Int?
+  salaryMax                    Int?
   /// ISO 4217 currency of salaryMin/salaryMax.
-  salaryCurrency String           @default("USD")
+  salaryCurrency               String           @default("USD")
   /// What the salary is paid per: month, year or hour.
-  salaryPeriod   String           @default("month")
+  salaryPeriod                 String           @default("month")
   /// Shown on the post instead of the recruiter's display name.
-  companyName    String?
+  companyName                  String?
   /// ESCO occupation code (src/common/data/occupations.json) the post hires for.
-  occupationCode String?
+  occupationCode               String?
   /// One of the occupation's specialties (O*NET titles listed under it), optional.
-  specialty      String?
+  specialty                    String?
   /// The post's old career field (one of the 37), kept read-only from before occupations.
-  legacyField    String?
+  legacyField                  String?
   /// Minimum years of experience in the occupation.
-  yearsRequired  Int?
+  yearsRequired                Int?
   /// Skill names picked from the dictionary.
-  skills         String[]         @default([])
+  skills                       String[]         @default([])
   /// After this time the post is no longer listed as open.
-  closesAt       DateTime?
-  predictedSeniority String?
+  closesAt                     DateTime?
+  predictedSeniority           String?
   predictedSeniorityConfidence Float?
-  predictedSeniorityModel String?
-  predictedSeniorityMetadata Json?
-  predictedSeniorityAt DateTime?
+  predictedSeniorityModel      String?
+  predictedSeniorityMetadata   Json?
+  predictedSeniorityAt         DateTime?
   /// AI level queue: QUEUED, PROCESSING, DONE, AI_UNAVAILABLE, NEEDS_INPUT, or FAILED. Null = never queued.
-  aiStatus       String?
-  aiStatusMessage String?
-  aiQueuedAt     DateTime?
-  aiClaimedAt    DateTime?
-  aiAttempts     Int              @default(0)
+  aiStatus                     String?
+  aiStatusMessage              String?
+  aiQueuedAt                   DateTime?
+  aiClaimedAt                  DateTime?
+  aiAttempts                   Int              @default(0)
   /// How many people the post wants to hire. Null means no limit.
-  openings       Int?             @default(1)
-  status         HiringPostStatus @default(OPEN)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  openings                     Int?             @default(1)
+  status                       HiringPostStatus @default(OPEN)
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
 
-  recruiter User @relation("HiringPostRecruiter", fields: [recruiterId], references: [id], onDelete: Cascade)
+  recruiter               User                     @relation("HiringPostRecruiter", fields: [recruiterId], references: [id], onDelete: Cascade)
   recommendationSnapshots RecommendationSnapshot[]
-  applications HiringApplication[]
+  applications            HiringApplication[]
 
   @@index([recruiterId, status, updatedAt, id])
   @@index([status, updatedAt, id])
@@ -573,8 +600,8 @@ model HiringApplication {
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
 
-  hiringPost HiringPost @relation(fields: [hiringPostId], references: [id], onDelete: Cascade)
-  applicant  User       @relation("HiringApplicationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  hiringPost HiringPost               @relation(fields: [hiringPostId], references: [id], onDelete: Cascade)
+  applicant  User                     @relation("HiringApplicationApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
   interviews Interview[]
   events     HiringApplicationEvent[]
 
@@ -799,37 +826,37 @@ model ProposalVersion {
 /// The agreed work. Copies the accepted proposal version.
 /// The migration adds CHECK clientId <> freelancerId.
 model Contract {
-  id               Int            @id @default(autoincrement())
+  id                     Int            @id @default(autoincrement())
   /// Null for contracts imported from old hires.
-  proposalId       Int?           @unique
-  jobId            Int
-  clientId         Int
-  freelancerId     Int
-  title            String
-  brief            String
-  referenceLinks   String[]
-  referenceImages  String[]
-  deadline         DateTime
-  total            Int
-  status           ContractStatus @default(ACTIVE)
+  proposalId             Int?           @unique
+  jobId                  Int
+  clientId               Int
+  freelancerId           Int
+  title                  String
+  brief                  String
+  referenceLinks         String[]
+  referenceImages        String[]
+  deadline               DateTime
+  total                  Int
+  status                 ContractStatus @default(ACTIVE)
   /// Why it ended: FREELANCER_LATE, CLIENT_SILENT, NOT_FUNDED, MUTUAL or CLIENT_ENDED.
-  endReason        String?
+  endReason              String?
   /// True for contracts made from old hires. They have no ledger rows.
-  imported         Boolean        @default(false)
+  imported               Boolean        @default(false)
   /// An open request to end the contract early (asked by one side, answered by the other).
-  endRequestedById Int?
-  endRequestNote   String?
+  endRequestedById       Int?
+  endRequestNote         String?
   /// What happens to a SUBMITTED milestone's credits: APPROVE or REFUND.
-  endRequestChoice String?
+  endRequestChoice       String?
   /// The SUBMITTED milestone and its latest submission that the client's choice was made for.
   /// The choice is used only while that same work is still the submitted one.
   endRequestMilestoneId  Int?
   endRequestSubmissionId Int?
-  endRequestedAt   DateTime?
-  completedAt      DateTime?
-  endedAt          DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  endRequestedAt         DateTime?
+  completedAt            DateTime?
+  endedAt                DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
   proposal       Proposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
   /// Restrict (the database refuses the delete): a service or an account with contracts cannot
@@ -927,14 +954,14 @@ model Amendment {
 
 /// History of a proposal or contract: one row per step, shown as a timeline.
 model ContractEvent {
-  id         Int       @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   proposalId Int?
   contractId Int?
   /// Who did it. Null when the user is gone or the system (sweeper, import) did it.
   actorId    Int?
   type       String
   data       Json?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime @default(now())
 
   proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   contract Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)

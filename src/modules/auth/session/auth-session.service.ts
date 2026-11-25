@@ -502,6 +502,39 @@ export class AuthSessionService {
     await this.invalidateMany(sessions);
   }
 
+  /**
+   * "Forgot password": the mailed link already proved who the user is, so no current password.
+   * Like changePassword, it signs out every device (new tokenVersion + every session revoked).
+   * Opening the link also proves the inbox, so an unverified address becomes verified.
+   */
+  async resetPassword(
+    userId: number,
+    newPassword: string,
+    verifiedEmail: string,
+  ): Promise<void> {
+    const password = await bcrypt.hash(newPassword, 12);
+    const sessions = await this.database(() =>
+      this.prisma.$transaction(async (tx) => {
+        await this.lockUser(tx, userId);
+        const user = await tx.user.findUnique({ where: { id: userId } });
+        if (!user) throw new NotFoundException('User not found');
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            password,
+            tokenVersion: { increment: 1 },
+            ...(user.emailVerifiedAt === null &&
+            user.email.toLowerCase() === verifiedEmail.toLowerCase()
+              ? { emailVerifiedAt: new Date() }
+              : {}),
+          },
+        });
+        return this.revokeUser(tx, userId);
+      }),
+    );
+    await this.invalidateMany(sessions);
+  }
+
   async setBanned(
     userId: number,
     banned: boolean,

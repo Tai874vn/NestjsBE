@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   InternalServerErrorException,
   Post,
@@ -15,6 +16,13 @@ import * as express from 'express';
 import { AuthService } from '../services/auth.service';
 import { SignUpDto } from '../dto/signup.dto';
 import { SignInDto } from '../dto/signin.dto';
+import {
+  EmailOnlyDto,
+  EmailTokenDto,
+  ResetPasswordDto,
+} from '../dto/email-flows.dto';
+import { EmailVerificationService } from '../services/email-verification.service';
+import { PasswordResetService } from '../services/password-reset.service';
 import { GoogleCallbackGuard } from '../guards/google-callback.guard';
 import { GoogleAuthGuard } from '../guards/google-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -28,7 +36,7 @@ import { clearAuthCookies, setAuthCookies } from '../session/auth-cookies';
  * reads the request and writes cookies. The real work is in AuthService.
  *
  * How a user stays logged in:
- *  1. Sign up / sign in / Google login → the server creates a "session"
+ *  1. Sign in / Google login (sign-up first needs the mailed link) → the server creates a "session"
  *     (one row per logged-in browser) and returns three cookies
  *     (small values the browser stores and sends back automatically):
  *       - access_token  : a JWT (JSON Web Token, a signed ticket that says
@@ -46,11 +54,19 @@ import { clearAuthCookies, setAuthCookies } from '../session/auth-cookies';
  *     never be used again; see AuthSessionService.refresh).
  *  4. Logout → the session is marked revoked (cancelled) and cookies are cleared.
  */
+/** The answer to "send me a link": the same whether or not the address has an account. */
+const SENT_IF_EXISTS =
+  'If an account uses this email, we have sent it a link. Check your inbox and spam folder.';
+
 @Controller('auth')
 export class AuthController {
   // Constructor (the function that runs once when the class is created).
   // NestJS "injects" (passes in automatically) the AuthService for us.
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly emailVerification: EmailVerificationService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
 
   /** Browser name and IP address, saved with the session so a user can see "where am I logged in". */
   private metadata(req?: express.Request) {
@@ -62,27 +78,60 @@ export class AuthController {
   //  @Post(...)    → answers HTTP POST /api/auth/signup.
   //  @UseGuards / @Throttle → rate limit (at most 5 tries per minute), to slow
   //                  down password guessing.
-  /** Create an account, then log the new user in straight away (sets the cookies). */
+  /** Create an account and mail the confirm link. No cookies: sign-in works after the link is opened. */
   @Public()
   @Post('signup')
   @UseGuards(AuthRateLimitGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  async signUp(
-    @Body() dto: SignUpDto,
-    @Res({ passthrough: true }) res: express.Response,
-    @Req() req?: express.Request,
-  ) {
-    const result = await this.authService.signUp(dto, this.metadata(req));
-    if (!result.content)
-      throw new InternalServerErrorException('Signup failed');
-    setAuthCookies(
-      res,
-      result.content.token,
-      result.content.refreshToken,
-      result.content.logoutToken,
-      result.content.refreshExpiresAt,
-    );
-    return { message: result.message, content: { user: result.content.user } };
+  signUp(@Body() dto: SignUpDto) {
+    return this.authService.signUp(dto);
+  }
+
+  /** Open the confirm link (the page posts the token from `#token=`). */
+  @Public()
+  @Post('verify-email')
+  @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async verifyEmail(@Body() dto: EmailTokenDto) {
+    const { email } = await this.emailVerification.verify(dto.token);
+    return {
+      message: 'Email confirmed. You can sign in now.',
+      content: { email },
+    };
+  }
+
+  /** Mail the confirm link again. Same answer for every address (see EmailVerificationService). */
+  @Public()
+  @Post('verify-email/resend')
+  @HttpCode(202)
+  @UseGuards(AuthRateLimitGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  resendVerification(@Body() dto: EmailOnlyDto) {
+    this.emailVerification.resendForEmail(dto.email);
+    return { message: SENT_IF_EXISTS };
+  }
+
+  /** Mail a reset link. Same answer for every address (see PasswordResetService). */
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(202)
+  @UseGuards(AuthRateLimitGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  forgotPassword(@Body() dto: EmailOnlyDto) {
+    this.passwordReset.request(dto.email);
+    return { message: SENT_IF_EXISTS };
+  }
+
+  /** Set a new password with the mailed token. Signs out every device; the user signs in again. */
+  @Public()
+  @Post('reset-password')
+  @HttpCode(200)
+  @UseGuards(AuthRateLimitGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.passwordReset.reset(dto.token, dto.password);
+    return { message: 'Password changed. Sign in with your new password.' };
   }
 
   /** Email + password login. On success the browser receives the login cookies. */

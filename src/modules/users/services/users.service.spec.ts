@@ -105,6 +105,7 @@ describe('UsersService account behavior', () => {
       prisma as any,
       redisService as any,
       sessions as any,
+      {} as any,
       storage as any,
     );
     prisma.user.findUnique.mockResolvedValue({

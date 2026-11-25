@@ -219,13 +219,21 @@ export class UsersController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update user (own profile or admin)' })
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
     @CurrentUser() user: ValidatedUser,
   ) {
     if (id !== user.id && user.role !== Role.ADMIN) {
       throw new ForbiddenException('You can only update your own profile');
+    }
+    // A user's own new address must be proved first: it waits as `pendingEmail` and the link
+    // goes to it. An admin's change is saved as it is.
+    const { email, ...rest } = updateUserDto;
+    if (email && user.role !== Role.ADMIN) {
+      const result = await this.usersService.update(id, rest);
+      const change = await this.usersService.requestOwnEmailChange(id, email);
+      return { ...result, content: { ...result.content, ...change } };
     }
     return this.usersService.update(id, updateUserDto);
   }

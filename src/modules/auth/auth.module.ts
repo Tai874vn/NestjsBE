@@ -17,11 +17,15 @@ import { AuthSessionRedisModule } from './session/auth-session-redis.module';
 import { AuthRateLimitGuard } from './session/auth-rate-limit.guard';
 import { AuthSessionsController } from './controllers/auth-sessions.controller';
 import { jwtVerifyOptions } from './session/auth-jwt.config';
+import { MailModule } from '../mail/mail.module';
+import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordResetService } from './services/password-reset.service';
 
 @Module({
   imports: [
     ConfigModule,
     AuthSessionRedisModule,
+    MailModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -52,7 +56,14 @@ import { jwtVerifyOptions } from './session/auth-jwt.config';
     GoogleCallbackGuard,
     GoogleOAuthStateService,
     RealtimeTicketService,
+    EmailVerificationService,
+    PasswordResetService,
   ],
-  exports: [AuthService, AuthSessionService, JwtModule],
+  exports: [
+    AuthService,
+    AuthSessionService,
+    EmailVerificationService,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

@@ -1,3 +1,4 @@
+import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { Role } from '../../../common/constants/roles';
 
@@ -12,9 +13,14 @@ describe('AuthService current user profile', () => {
       },
     };
     const sessions = { create: jest.fn().mockResolvedValue({ token: 'jwt-token', refreshToken: 'opaque-refresh', logoutToken: 'logout-credential' }) };
-    const service = new AuthService(prisma as any, sessions as any);
+    const emailVerification = { sendFirst: jest.fn().mockResolvedValue(true) };
+    const service = new AuthService(
+      prisma as any,
+      sessions as any,
+      emailVerification as any,
+    );
 
-    return { service, prisma };
+    return { service, prisma, sessions, emailVerification };
   };
 
   it('enables candidate discoverability for new accounts by default', async () => {
@@ -132,5 +138,72 @@ describe('AuthService current user profile', () => {
       profileCertifications: [expect.objectContaining({ name: 'AWS' })],
       portfolioItems: [],
     });
+  });
+
+  it('sign-up mails the confirm link and does not create a session', async () => {
+    const { service, prisma, sessions, emailVerification } = createService();
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 20,
+      name: 'New',
+      email: 'new@example.com',
+      password: 'hashed',
+      refreshToken: null,
+      role: Role.USER,
+    });
+
+    const result = await service.signUp({
+      name: 'New',
+      email: 'New@Example.com',
+      password: 'password123',
+    });
+
+    expect(emailVerification.sendFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 20, email: 'new@example.com' }),
+    );
+    expect(sessions.create).not.toHaveBeenCalled();
+    expect(result.content).toMatchObject({
+      verificationRequired: true,
+      mailSent: true,
+    });
+    expect(result.content?.user).not.toHaveProperty('password');
+  });
+
+  it('sign-in refuses an unconfirmed address only after the password is right', async () => {
+    const hash = await bcrypt.hash('password123', 4);
+    const { service, prisma, sessions } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 21,
+      email: 'u@example.com',
+      password: hash,
+      bannedAt: null,
+      emailVerifiedAt: null,
+    });
+
+    await expect(
+      service.signIn({ email: 'u@example.com', password: 'wrong-password' }),
+    ).rejects.toMatchObject({ status: 401 });
+    await expect(
+      service.signIn({ email: 'u@example.com', password: 'password123' }),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: expect.objectContaining({ code: 'EMAIL_NOT_VERIFIED' }),
+    });
+    expect(sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('sign-in works for a confirmed address', async () => {
+    const hash = await bcrypt.hash('password123', 4);
+    const { service, prisma, sessions } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 22,
+      email: 'ok@example.com',
+      password: hash,
+      bannedAt: null,
+      emailVerifiedAt: new Date('2026-01-01'),
+    });
+
+    await service.signIn({ email: 'ok@example.com', password: 'password123' });
+    expect(sessions.create).toHaveBeenCalledWith(22, {}, hash);
   });
 });

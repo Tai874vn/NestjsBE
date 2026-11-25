@@ -178,4 +178,69 @@ describe('GoogleStrategy', () => {
       orderBy: { id: 'asc' },
     });
   });
+
+  it('linking Google to an address nobody proved drops the unknown password (pre-hijack)', async () => {
+    const { prisma, strategy } = createStrategy();
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce({
+      id: 30,
+      email: 'hiring@example.com',
+      password: 'attacker-hash',
+      emailVerifiedAt: null,
+    });
+    prisma.user.update.mockResolvedValue({ id: 30 });
+
+    await strategy.validate({ query: {} } as any, 'a', 'r', profile as any);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 30 },
+      data: {
+        googleId: 'google-user-id',
+        password: null,
+        emailVerifiedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('linking Google to a verified account keeps its password', async () => {
+    const { prisma, strategy } = createStrategy();
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce({
+      id: 31,
+      email: 'hiring@example.com',
+      password: 'owner-hash',
+      emailVerifiedAt: new Date('2026-01-01'),
+    });
+    prisma.user.update.mockResolvedValue({ id: 31 });
+
+    await strategy.validate({ query: {} } as any, 'a', 'r', profile as any);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 31 },
+      data: { googleId: 'google-user-id' },
+    });
+  });
+
+  it('new Google accounts start verified; an address Google has not verified is refused', async () => {
+    const { prisma, strategy } = createStrategy();
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    prisma.user.findFirst.mockResolvedValueOnce(null);
+    prisma.user.create.mockResolvedValue({ id: 32 });
+    await strategy.validate(
+      { query: {}, googleSignupRole: Role.USER } as any,
+      'a',
+      'r',
+      profile as any,
+    );
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ emailVerifiedAt: expect.any(Date) }),
+    });
+
+    await expect(
+      strategy.validate({ query: {} } as any, 'a', 'r', {
+        ...profile,
+        _json: { email_verified: false },
+      } as any),
+    ).rejects.toMatchObject({ status: 401 });
+  });
 });

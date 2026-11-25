@@ -85,3 +85,51 @@ describe('AuthSessionService.deleteUser (account delete)', () => {
     expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: 7 } });
   });
 });
+
+describe('AuthSessionService.resetPassword (forgot password)', () => {
+  function setup(user: { id: number; email: string; emailVerifiedAt: Date | null }) {
+    const session = { id: 's1', userId: user.id, expiresAt: new Date() };
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      user: {
+        findUnique: jest.fn().mockResolvedValue(user),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      authSession: {
+        findMany: jest.fn().mockResolvedValue([session]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      authRefreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (t: typeof tx) => unknown) => callback(tx)),
+    };
+    const redis = {
+      onRevocation: jest.fn(() => () => {}),
+      revokeSession: jest.fn(),
+      publishRevocation: jest.fn(),
+    };
+    const service = new AuthSessionService(prisma as never, new JwtService({ secret: 'test' }), redis as never, { get: () => undefined } as never);
+    return { tx, redis, service };
+  }
+
+  it('saves a new hash, bumps tokenVersion and revokes every session', async () => {
+    const { tx, redis, service } = setup({ id: 7, email: 'a@b.c', emailVerifiedAt: new Date() });
+    await service.resetPassword(7, 'new-password-123', 'a@b.c');
+    const data = tx.user.update.mock.calls[0][0].data;
+    expect(data.password).toMatch(/^\$2[aby]\$12\$/);
+    expect(data.tokenVersion).toEqual({ increment: 1 });
+    expect(data).not.toHaveProperty('emailVerifiedAt');
+    expect(tx.authSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: 7, revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(redis.revokeSession).toHaveBeenCalledWith('s1', 7, expect.any(Date));
+  });
+
+  it('also verifies an unverified address, because the link reached that inbox', async () => {
+    const { tx, service } = setup({ id: 8, email: 'A@b.c', emailVerifiedAt: null });
+    await service.resetPassword(8, 'new-password-123', 'a@b.c');
+    expect(tx.user.update.mock.calls[0][0].data.emailVerifiedAt).toEqual(expect.any(Date));
+  });
+});
