@@ -1,3 +1,5 @@
+import { ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AiRecommendationClient } from './ai-recommendation.client';
 
 describe('AiRecommendationClient', () => {
@@ -128,5 +130,40 @@ describe('AiRecommendationClient', () => {
         body: JSON.stringify(payload),
       }),
     );
+  });
+
+  it('hides upstream status in ServiceUnavailableException message and attaches a bounded cause', async () => {
+    const longUpstreamBody = `Traceback: ${'x'.repeat(500)}`;
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: () => Promise.resolve(longUpstreamBody),
+    } as Response);
+    const client = new AiRecommendationClient(
+      configService as unknown as ConfigService,
+    );
+
+    let caught: unknown;
+    try {
+      await client.matchJobs({
+        resume: { role: 'Backend Engineer' },
+        jobs: [],
+        top_k: 5,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ServiceUnavailableException);
+    const exception = caught as ServiceUnavailableException;
+    expect(exception.message).toBe('AI recommendation service is unavailable');
+    expect(exception.message).not.toContain('502');
+    expect(exception.cause).toBeInstanceOf(Error);
+    const causeMessage = (exception.cause as Error).message;
+    expect(causeMessage).toContain('/api/v1/match/jobs');
+    expect(causeMessage).toContain('502');
+    expect(causeMessage).toContain('Traceback:');
+    expect(causeMessage.endsWith('...')).toBe(true);
+    expect(causeMessage.length).toBeLessThan(380);
   });
 });

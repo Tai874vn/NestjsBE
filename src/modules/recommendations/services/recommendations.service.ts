@@ -1,7 +1,9 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
@@ -31,6 +33,8 @@ import {
 
 @Injectable()
 export class RecommendationsService {
+  private readonly logger = new Logger(RecommendationsService.name);
+
   constructor(
     private readonly aiClient: AiRecommendationClient,
     private readonly scoringService: RecommendationScoringService,
@@ -596,11 +600,13 @@ export class RecommendationsService {
     try {
       return await callback();
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
+      // Never turn a 4xx (client error) or an existing HttpException into a different status.
+      if (error instanceof HttpException) {
         throw error;
       }
       throw new ServiceUnavailableException(
         'AI recommendation service is unavailable',
+        { cause: error },
       );
     }
   }
@@ -611,8 +617,11 @@ export class RecommendationsService {
   ): Promise<void> {
     try {
       await this.quotaService.refund(userId, userRole);
-    } catch {
-      // The original request failure is more useful to callers; quota repair can be retried operationally.
+    } catch (error) {
+      // The original request failure is more useful to callers; log once so quota repair is visible.
+      this.logger.warn(
+        `Failed to refund recommendation quota for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -622,8 +631,11 @@ export class RecommendationsService {
   }): Promise<void> {
     try {
       await this.cacheService.releaseRunLock(lock.scope, lock.token);
-    } catch {
-      // Lock TTL is the final safeguard if Redis becomes unavailable during cleanup.
+    } catch (error) {
+      // Lock TTL (automatic expiry time) is the final safeguard if Redis is down; log once.
+      this.logger.warn(
+        `Failed to release recommendation lock "${lock.scope}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 }

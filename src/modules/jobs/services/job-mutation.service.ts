@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -39,6 +40,8 @@ function resolveArea(
 
 @Injectable()
 export class JobMutationService {
+  private readonly logger = new Logger(JobMutationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheInvalidation: JobCacheInvalidationService,
@@ -207,8 +210,11 @@ export class JobMutationService {
             ...input,
             actionUrl: `/contracts?tab=${side}`,
           });
-        } catch {
-          // Skipped on purpose: the service is already deleted.
+        } catch (error) {
+          // Non-fatal side effect (the service is already deleted), but log once with context.
+          this.logger.error(
+            `Withdrawal notification failed for proposal ${p.id} (recipient ${recipientId}): ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     }

@@ -413,9 +413,18 @@ export class AuthRedisService implements OnModuleInit, OnModuleDestroy {
     for (const listener of this.listeners) {
       try {
         const result: unknown = listener(sid);
-        if (result instanceof Promise) void result.catch(() => undefined);
-      } catch {
-        /* A failed socket disconnect must not prevent other listeners. */
+        if (result instanceof Promise) {
+          void result.catch((error: unknown) => {
+            this.logger.warn(
+              `Session revocation listener failed for session ${sid}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+        }
+      } catch (error) {
+        // A failed socket disconnect must not stop other listeners, but still log it once.
+        this.logger.warn(
+          `Session revocation listener failed for session ${sid}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }

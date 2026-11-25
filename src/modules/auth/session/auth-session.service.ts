@@ -640,12 +640,24 @@ export class AuthSessionService {
     try {
       return await operation();
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new ServiceUnavailableException({
-        statusCode: 503,
-        code: 'AUTH_UNAVAILABLE',
-        message: 'Authentication storage is unavailable',
-      });
+      // Never turn a 4xx (client error or known Prisma conflict/not-found) into a 503.
+      if (
+        error instanceof HttpException ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === 'P2002' ||
+            error.code === 'P2025' ||
+            error.code === 'P2003'))
+      ) {
+        throw error;
+      }
+      throw new ServiceUnavailableException(
+        {
+          statusCode: 503,
+          code: 'AUTH_UNAVAILABLE',
+          message: 'Authentication storage is unavailable',
+        },
+        { cause: error },
+      );
     }
   }
 }

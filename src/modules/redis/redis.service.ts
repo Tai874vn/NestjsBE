@@ -1,4 +1,4 @@
-import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleDestroy } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { randomUUID } from 'crypto';
 
@@ -61,6 +61,7 @@ export const CACHE_TTL = {
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private readonly namespace = 'jobaura:cache:';
   private readonly localLocks = new Map<
     string,
@@ -83,7 +84,10 @@ export class RedisService implements OnModuleDestroy {
     // The cache is an optimisation: while Redis is down, read from the source instead of failing.
     try {
       return await this.cacheManager.get<T>(this.key(key));
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `Cache get failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
+      );
       return undefined;
     }
   }
@@ -94,8 +98,11 @@ export class RedisService implements OnModuleDestroy {
   async set(key: string, value: unknown, ttl?: number): Promise<void> {
     try {
       await this.cacheManager.set(this.key(key), value, ttl);
-    } catch {
+    } catch (error) {
       // Not cached this time; the next read goes to the source.
+      this.logger.warn(
+        `Cache set failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -105,8 +112,11 @@ export class RedisService implements OnModuleDestroy {
   async del(key: string): Promise<void> {
     try {
       await this.cacheManager.del(this.key(key));
-    } catch {
+    } catch (error) {
       // Redis is down. If it comes back with this key, the entry still expires with its TTL.
+      this.logger.warn(
+        `Cache del failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

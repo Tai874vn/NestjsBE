@@ -198,6 +198,35 @@ export class AiRecommendationClient {
     });
   }
 
+  private async upstreamFailureCause(
+    path: string,
+    response: Response,
+  ): Promise<Error> {
+    const maxBodyLength = 300;
+    let snippet = '';
+    try {
+      let rawText = '';
+      if (typeof response.text === 'function') {
+        rawText = await response.text();
+      } else if (typeof response.json === 'function') {
+        rawText = JSON.stringify(await response.json());
+      }
+      const trimmed = rawText.replace(/\s+/g, ' ').trim();
+      if (trimmed) {
+        snippet =
+          trimmed.length > maxBodyLength
+            ? `${trimmed.slice(0, maxBodyLength)}...`
+            : trimmed;
+      }
+    } catch {
+      // Ignore body read failures; the upstream status code is still kept for logs.
+    }
+    const suffix = snippet ? `: ${snippet}` : '';
+    return new Error(
+      `AI service ${path} returned HTTP ${response.status}${suffix}`,
+    );
+  }
+
   private async request<T>(
     path: string,
     init: { method: 'GET' | 'POST'; body?: string },
@@ -220,8 +249,10 @@ export class AiRecommendationClient {
         throw new BadRequestException(await this.errorDetail(response));
       }
       if (!response.ok) {
+        const cause = await this.upstreamFailureCause(path, response);
         throw new ServiceUnavailableException(
-          `AI service returned ${response.status}`,
+          'AI recommendation service is unavailable',
+          { cause },
         );
       }
 
@@ -235,6 +266,7 @@ export class AiRecommendationClient {
       }
       throw new ServiceUnavailableException(
         'AI recommendation service is unavailable',
+        { cause: error },
       );
     } finally {
       clearTimeout(timeout);

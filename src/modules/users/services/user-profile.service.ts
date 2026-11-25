@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -21,6 +22,8 @@ import { resumeEducation } from './resume-career';
 
 @Injectable()
 export class UserProfileService {
+  private readonly logger = new Logger(UserProfileService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
@@ -281,6 +284,9 @@ export class UserProfileService {
       }));
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
+      this.logger.warn(
+        `Skill dictionary unavailable; saving skills without dictionary ids: ${error.message}`,
+      );
       return skills.map((skill) => ({ ...skill, skillId: null }));
     }
   }

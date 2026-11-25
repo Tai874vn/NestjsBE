@@ -73,7 +73,9 @@ export class OperationTimer {
     const line = JSON.stringify(payload);
 
     if (status === 'error') {
-      this.logger.error(line);
+      // Keep failed operation timing at warn level so HTTP 5xx errors are logged at ERROR
+      // level only once (with requestId and stack) in AllExceptionsFilter.
+      this.logger.warn(line);
       return;
     }
 
@@ -105,8 +107,11 @@ export class ObservabilityService {
     const slow = durationMs >= DEFAULT_OPERATION_WARN_MS;
     const line = JSON.stringify({ event: 'http_request', ...fields });
 
+    // AllExceptionsFilter is the single logger.error caller for HTTP 5xx failures.
+    // Log the structured HTTP telemetry line at log level so 5xx metrics stay visible
+    // without emitting a second ERROR log for the same requestId.
     if (statusCode >= 500) {
-      this.logger.error(line);
+      this.logger.log(line);
       return;
     }
 

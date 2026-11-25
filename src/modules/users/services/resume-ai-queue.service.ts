@@ -240,6 +240,10 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         profileSkills: user.profileSkills,
       });
     } catch (error) {
+      // Background queue failure is recorded on the row so the user can retry; log once with context.
+      this.logger.warn(
+        `Resume AI evaluation failed for resume ${claimed.id} (user ${claimed.userId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
       update =
         error instanceof BadRequestException
           ? {

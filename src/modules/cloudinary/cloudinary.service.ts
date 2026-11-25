@@ -1,7 +1,15 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
+
+/** Cloudinary status codes that mean the uploaded file itself is bad, not our account or server. */
+const USER_FILE_UPLOAD_ERROR_CODES = new Set([400, 413, 415, 422]);
 
 @Injectable()
 export class CloudinaryService {
@@ -37,13 +45,11 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error) {
-            reject(new BadRequestException(`Upload failed: ${error.message}`));
+            reject(this.mapUploadError(error));
           } else if (result) {
             resolve(result);
           } else {
-            reject(
-              new BadRequestException('Upload failed: No result returned'),
-            );
+            reject(this.mapUploadError(undefined));
           }
         },
       );
@@ -86,13 +92,11 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error) {
-            reject(new BadRequestException(`Upload failed: ${error.message}`));
+            reject(this.mapUploadError(error));
           } else if (result) {
             resolve(result);
           } else {
-            reject(
-              new BadRequestException('Upload failed: No result returned'),
-            );
+            reject(this.mapUploadError(undefined));
           }
         },
       );
@@ -118,6 +122,24 @@ export class CloudinaryService {
     }
     const matches = url.match(/\/v\d+\/(.+)\.\w+$/);
     return matches ? matches[1] : null;
+  }
+
+  private mapUploadError(error?: { message?: string; http_code?: number }) {
+    // Only user-file rejection codes from Cloudinary stay a 400.
+    // Auth, config, rate-limit (401, 403, 404, 420, 429), 5xx, and network errors
+    // are upstream/server failures and become 503 with the original cause attached.
+    if (
+      typeof error?.http_code === 'number' &&
+      USER_FILE_UPLOAD_ERROR_CODES.has(error.http_code)
+    ) {
+      return new BadRequestException(
+        'Upload failed. Please check the file and try again.',
+      );
+    }
+    return new ServiceUnavailableException(
+      'File upload service is unavailable. Please try again.',
+      { cause: error },
+    );
   }
 
   private async deleteResource(

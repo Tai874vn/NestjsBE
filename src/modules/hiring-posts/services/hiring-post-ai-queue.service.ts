@@ -199,6 +199,9 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
       update = await this.evaluate(post);
     } catch (error) {
       if (!(error instanceof BadRequestException)) {
+        this.logger.warn(
+          `Hiring post AI evaluation unavailable for post ${claimed.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
         update = {
           aiStatus: HIRING_POST_AI_STATUS.AI_UNAVAILABLE,
           aiStatusMessage: HIRING_POST_AI_UNAVAILABLE_MESSAGE,
@@ -211,6 +214,9 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
           ...CLEARED_SENIORITY,
         };
       } else {
+        this.logger.warn(
+          `Hiring post AI evaluation rejected for post ${claimed.id}: ${error.message}`,
+        );
         update = {
           aiStatus: HIRING_POST_AI_STATUS.FAILED,
           aiStatusMessage: error.message,

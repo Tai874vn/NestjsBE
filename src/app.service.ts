@@ -13,8 +13,10 @@ export class AppService {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       return { status: 'ready' };
-    } catch {
-      throw new ServiceUnavailableException('Database is not ready');
+    } catch (error) {
+      throw new ServiceUnavailableException('Database is not ready', {
+        cause: error,
+      });
     }
   }
 }

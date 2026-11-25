@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -34,6 +34,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 import { RequestObservabilityInterceptor } from './common/observability/request-observability.interceptor';
+import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { DatabaseModule } from './database/database.module';
 
 @Module({
@@ -49,7 +50,10 @@ import { DatabaseModule } from './database/database.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    ThrottlerModule.forRoot({
+      errorMessage: 'Too many requests. Please try again shortly.',
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
+    }),
     ObservabilityModule,
     DatabaseModule,
     RedisModule,
@@ -77,6 +81,7 @@ import { DatabaseModule } from './database/database.module';
   controllers: [AppController],
   providers: [
     AppService,
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: RequestObservabilityInterceptor },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

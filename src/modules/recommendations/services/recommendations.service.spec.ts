@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
 import { ObservabilityService } from '../../../common/observability/observability.service';
 import { PrismaService } from '../../../prisma.service';
@@ -407,6 +412,21 @@ describe('RecommendationsService', () => {
 
     await expect(createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 })).rejects.toBeInstanceOf(
       ServiceUnavailableException,
+    );
+    expect(quota.refund).toHaveBeenCalledWith(1, undefined);
+  });
+
+  it('does not turn a 400 BadRequestException from the AI client into a 503', async () => {
+    redisFreePrisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      profileSkills: [],
+      resume: { data: { Summary: 'Backend developer' } },
+    });
+    redisFreePrisma.hiringPost.findMany.mockResolvedValue([{ id: 10, title: 'API Developer', description: '', skills: [], _count: { applications: 0 } }]);
+    aiClient.matchJobs.mockRejectedValue(new BadRequestException('Invalid payload'));
+
+    await expect(createService().recommendJobsForUser(1, { topK: 5, poolSize: 25 })).rejects.toBeInstanceOf(
+      BadRequestException,
     );
     expect(quota.refund).toHaveBeenCalledWith(1, undefined);
   });

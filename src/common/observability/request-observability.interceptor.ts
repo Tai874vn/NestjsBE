@@ -5,9 +5,12 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Observable, catchError, tap, throwError } from 'rxjs';
+import {
+  resolveHttpError,
+  resolveRequestId,
+} from '../errors/all-exceptions.filter';
 import { ObservabilityService } from './observability.service';
 
 type RequestUser = {
@@ -121,9 +124,8 @@ export class RequestObservabilityInterceptor implements NestInterceptor {
     }
   }
 
-  private requestId(request: Request): string {
-    const existing = request.header('x-request-id');
-    return existing?.trim() || randomUUID();
+  private requestId(request: ObservableRequest): string {
+    return resolveRequestId(request);
   }
 
   private setRequestIdHeader(response: Response, requestId: string): void {
@@ -132,14 +134,12 @@ export class RequestObservabilityInterceptor implements NestInterceptor {
   }
 
   private statusCode(response: Response, error?: unknown): number {
-    const errorWithStatus = error as
-      | { status?: number; getStatus?: () => number }
-      | undefined;
-    return (
-      errorWithStatus?.status ??
-      errorWithStatus?.getStatus?.() ??
-      response.statusCode
-    );
+    if (error !== undefined) {
+      // Use the same error resolver as AllExceptionsFilter so unhandled errors and
+      // Prisma errors record their true HTTP status (500/409/404) instead of 200.
+      return resolveHttpError(error).statusCode;
+    }
+    return response.statusCode;
   }
 
   private path(request: Request): string {

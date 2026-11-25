@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
-import { trustedOrigins } from './common/config/trusted-origins';
+import { buildCorsOptions } from './common/config/cors-options';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -16,12 +16,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.setGlobalPrefix(process.env.GLOBAL_PREFIX!);
-  app.enableCors({
-    origin: trustedOrigins(),
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  });
+  app.enableCors(buildCorsOptions());
 
   app.useGlobalPipes(
     new ValidationPipe({
