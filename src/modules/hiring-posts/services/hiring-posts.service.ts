@@ -260,150 +260,47 @@ export class HiringPostsService {
     userId: number,
     userRole: Role,
   ) {
-    const post = await this.findPostOrThrow(id);
-    this.assertCanManage(post.recruiterId, userId, userRole);
-    this.assertSalaryRange(
-      dto.salaryMin ?? post.salaryMin ?? undefined,
-      dto.salaryMax ?? post.salaryMax ?? undefined,
-    );
-    this.assertClosesInFuture(dto.closesAt);
-    // A changed occupation drops the stored specialty unless a new one is sent; a sent specialty is checked
-    // against the occupation the post will have.
-    // An empty specialty on a post that has no occupation yet (an old post) changes nothing.
-    const occupationSent =
-      dto.occupationCode !== undefined ||
-      (dto.specialty !== undefined &&
-        (post.occupationCode !== null ||
-          this.optionalTrim(dto.specialty) !== null));
-    const occupation = occupationSent
-      ? this.occupationChoice(
-          dto.occupationCode ?? post.occupationCode,
-          dto.specialty !== undefined
-            ? dto.specialty
-            : (dto.occupationCode ?? post.occupationCode) ===
-                post.occupationCode
-              ? post.specialty
-              : null,
-        )
-      : null;
-    // A new occupation, required years or skill list means the saved AI level no longer describes the post.
-    const levelInputsChanged =
-      (occupation !== null && occupation.code !== post.occupationCode) ||
-      (dto.yearsRequired !== undefined &&
-        dto.yearsRequired !== post.yearsRequired) ||
-      (dto.skills !== undefined &&
-        JSON.stringify(dto.skills) !== JSON.stringify(post.skills));
-    // The AI also reads the title and text, so a change there asks for a fresh level too.
-    const levelTextChanged =
-      (dto.title !== undefined && dto.title.trim() !== post.title) ||
-      (dto.description !== undefined &&
-        dto.description.trim() !== post.description) ||
-      (dto.requirements !== undefined &&
-        (this.optionalTrim(dto.requirements) ?? null) !==
-          (post.requirements ?? null));
-    const requeue = levelInputsChanged || levelTextChanged;
+    // 1. Load the post and check ownership/admin permission before validating any input fields.
+    const post = await this.loadManageablePost(id, userId, userRole);
+    // 2. Check salary range, closing date and occupation/specialty before opening a transaction.
+    const occupation = this.validateUpdateInputs(post, dto);
+    // 3. Decide if the AI level must be cleared or re-queued, and whether this closes an OPEN post.
+    const levelInputsChanged = this.didLevelInputsChange(post, dto, occupation);
+    const requeue = levelInputsChanged || this.didLevelTextChange(post, dto);
     const closing =
       dto.status === HiringPostStatus.CLOSED &&
       post.status === HiringPostStatus.OPEN;
 
-    // One transaction (a group of changes saved together or not at all) for the edit and the sweep.
+    // 4. Save everything in one transaction: check openings/reopening under the post lock first
+    //    (which may close a full post), claim a manual close if still OPEN, then write the fields.
     const { updated, swept, sweepReason } = await this.prisma.$transaction(
       async (tx) => {
-        // Openings and reopening are checked first, under the post lock; this may close a full post.
-        const fill = await this.checkOpenings(tx, id, dto, userId);
-        let swept = fill.swept;
-        const sweepReason: SweepReason = fill.filled
-          ? 'POSITION_FILLED'
-          : 'POST_CLOSED';
-        if (closing) {
-          // Claim the close only while the post is still OPEN. The update takes a row lock (the database
-          // keeps this post row for this transaction until it ends), so a second close, or a candidate
-          // accepting an offer (which locks the post row first), waits; the sweep runs once.
-          const claimed = await tx.hiringPost.updateMany({
-            where: { id, status: HiringPostStatus.OPEN },
-            data: { status: HiringPostStatus.CLOSED },
-          });
-          if (claimed.count === 1) {
-            swept = await this.sweeper.sweep(tx, id, 'POST_CLOSED', userId);
-          }
-        }
+        const { filled, swept, sweepReason } =
+          await this.resolveOpeningsAndCloseInTx(tx, id, dto, userId, closing);
         const updated = await tx.hiringPost.update({
           where: { id },
-          data: {
-            ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-            ...(dto.description !== undefined
-              ? { description: dto.description.trim() }
-              : {}),
-            ...(dto.requirements !== undefined
-              ? { requirements: this.optionalTrim(dto.requirements) }
-              : {}),
-            ...(dto.location !== undefined
-              ? { location: this.optionalTrim(dto.location) }
-              : {}),
-            ...(dto.employmentType !== undefined
-              ? { employmentType: this.optionalTrim(dto.employmentType) }
-              : {}),
-            ...(dto.salaryMin !== undefined
-              ? { salaryMin: dto.salaryMin }
-              : {}),
-            ...(dto.salaryMax !== undefined
-              ? { salaryMax: dto.salaryMax }
-              : {}),
-            ...(dto.salaryCurrency !== undefined
-              ? { salaryCurrency: dto.salaryCurrency }
-              : {}),
-            ...(dto.salaryPeriod !== undefined
-              ? { salaryPeriod: dto.salaryPeriod }
-              : {}),
-            ...(fill.filled
-              ? { status: HiringPostStatus.CLOSED }
-              : dto.status !== undefined
-                ? { status: dto.status }
-                : {}),
-            ...(dto.companyName !== undefined
-              ? { companyName: this.optionalTrim(dto.companyName) }
-              : {}),
-            ...(occupation !== null
-              ? {
-                  occupationCode: occupation.code,
-                  specialty: occupation.specialty,
-                }
-              : {}),
-            ...(dto.yearsRequired !== undefined
-              ? { yearsRequired: dto.yearsRequired }
-              : {}),
-            ...(dto.skills !== undefined ? { skills: dto.skills } : {}),
-            ...(dto.openings !== undefined ? { openings: dto.openings } : {}),
-            ...(dto.closesAt !== undefined
-              ? { closesAt: new Date(dto.closesAt) }
-              : {}),
-            ...(levelInputsChanged
-              ? {
-                  predictedSeniority: null,
-                  predictedSeniorityConfidence: null,
-                  predictedSeniorityModel: null,
-                  predictedSeniorityMetadata: Prisma.DbNull,
-                  predictedSeniorityAt: null,
-                }
-              : {}),
-            ...(requeue ? queuedHiringPostFields() : {}),
-          },
+          data: this.buildPostUpdateData(
+            dto,
+            occupation,
+            filled,
+            levelInputsChanged,
+            requeue,
+          ),
           include: hiringPostInclude,
         });
         return { updated, swept, sweepReason };
       },
     );
-    if (requeue) this.aiQueue.kick();
-    if (swept.length) {
-      await this.sweeper.announceSwept(this.prisma, {
-        postId: id,
-        postTitle: updated.title,
-        reason: sweepReason,
-        actorId: userId,
-        actorName: updated.recruiter.name,
-        candidateIds: swept,
-      });
-    }
+
+    // 5. After the transaction commits, wake the AI queue and notify any swept candidates.
+    await this.runUpdateSideEffects(
+      id,
+      updated,
+      userId,
+      requeue,
+      swept,
+      sweepReason,
+    );
 
     return {
       message: 'Update hiring post successfully',
@@ -413,6 +310,241 @@ export class HiringPostsService {
         await this.pipelineCounts([id]),
       ),
     };
+  }
+
+  /** Load a post by ID and make sure the caller is its owner or an admin. */
+  private async loadManageablePost(
+    id: number,
+    userId: number,
+    userRole: Role,
+  ): Promise<HiringPostWithMeta> {
+    const post = await this.findPostOrThrow(id);
+    this.assertCanManage(post.recruiterId, userId, userRole);
+    return post;
+  }
+
+  /** Validate salary range, closing date and occupation/specialty in order before writing. */
+  private validateUpdateInputs(
+    post: HiringPostWithMeta,
+    dto: UpdateHiringPostDto,
+  ): { code: string; specialty: string | null } | null {
+    this.assertSalaryRange(
+      dto.salaryMin ?? post.salaryMin ?? undefined,
+      dto.salaryMax ?? post.salaryMax ?? undefined,
+    );
+    this.assertClosesInFuture(dto.closesAt);
+    return this.resolveUpdatedOccupation(post, dto);
+  }
+
+  /**
+   * Resolve the new occupation and specialty when either is sent.
+   * A changed occupation drops the stored specialty unless a new one is sent, and an empty
+   * specialty on an old post with no occupation changes nothing.
+   */
+  private resolveUpdatedOccupation(
+    post: HiringPostWithMeta,
+    dto: UpdateHiringPostDto,
+  ): { code: string; specialty: string | null } | null {
+    const occupationSent =
+      dto.occupationCode !== undefined ||
+      (dto.specialty !== undefined &&
+        (post.occupationCode !== null ||
+          this.optionalTrim(dto.specialty) !== null));
+    if (!occupationSent) return null;
+
+    const nextCode = dto.occupationCode ?? post.occupationCode;
+    const nextSpecialty =
+      dto.specialty !== undefined
+        ? dto.specialty
+        : nextCode === post.occupationCode
+          ? post.specialty
+          : null;
+    return this.occupationChoice(nextCode, nextSpecialty);
+  }
+
+  /** True when occupation, required years or skills changed, so the old AI level is no longer valid. */
+  private didLevelInputsChange(
+    post: HiringPostWithMeta,
+    dto: UpdateHiringPostDto,
+    occupation: { code: string; specialty: string | null } | null,
+  ): boolean {
+    if (occupation !== null && occupation.code !== post.occupationCode) {
+      return true;
+    }
+    if (
+      dto.yearsRequired !== undefined &&
+      dto.yearsRequired !== post.yearsRequired
+    ) {
+      return true;
+    }
+    return (
+      dto.skills !== undefined &&
+      JSON.stringify(dto.skills) !== JSON.stringify(post.skills)
+    );
+  }
+
+  /** True when title, description or requirements changed, so the AI should re-evaluate the post. */
+  private didLevelTextChange(
+    post: HiringPostWithMeta,
+    dto: UpdateHiringPostDto,
+  ): boolean {
+    if (dto.title !== undefined && dto.title.trim() !== post.title) {
+      return true;
+    }
+    if (
+      dto.description !== undefined &&
+      dto.description.trim() !== post.description
+    ) {
+      return true;
+    }
+    return (
+      dto.requirements !== undefined &&
+      this.optionalTrim(dto.requirements) !== (post.requirements ?? null)
+    );
+  }
+
+  /**
+   * Run the openings/reopening checks under the post lock first, then claim a manual close
+   * while the post is still OPEN so concurrent closes or offer acceptances only sweep once.
+   */
+  private async resolveOpeningsAndCloseInTx(
+    tx: Prisma.TransactionClient,
+    id: number,
+    dto: UpdateHiringPostDto,
+    userId: number,
+    closing: boolean,
+  ): Promise<{ filled: boolean; swept: number[]; sweepReason: SweepReason }> {
+    const fill = await this.checkOpenings(tx, id, dto, userId);
+    let swept = fill.swept;
+    const sweepReason: SweepReason = fill.filled
+      ? 'POSITION_FILLED'
+      : 'POST_CLOSED';
+    if (closing) {
+      const claimed = await tx.hiringPost.updateMany({
+        where: { id, status: HiringPostStatus.OPEN },
+        data: { status: HiringPostStatus.CLOSED },
+      });
+      if (claimed.count === 1) {
+        swept = await this.sweeper.sweep(tx, id, 'POST_CLOSED', userId);
+      }
+    }
+    return { filled: fill.filled, swept, sweepReason };
+  }
+
+  /** Combine all field-group patches into one Prisma update payload. */
+  private buildPostUpdateData(
+    dto: UpdateHiringPostDto,
+    occupation: { code: string; specialty: string | null } | null,
+    filled: boolean,
+    clearLevel: boolean,
+    requeue: boolean,
+  ): Prisma.HiringPostUpdateInput {
+    return {
+      ...this.buildPostTextUpdateData(dto),
+      ...this.buildSalaryUpdateData(dto),
+      ...this.buildQualificationUpdateData(dto, occupation),
+      ...this.buildStatusAndAiUpdateData(dto, filled, clearLevel, requeue),
+    };
+  }
+
+  private buildPostTextUpdateData(
+    dto: UpdateHiringPostDto,
+  ): Prisma.HiringPostUpdateInput {
+    const data: Prisma.HiringPostUpdateInput = {};
+    if (dto.title !== undefined) data.title = dto.title.trim();
+    if (dto.description !== undefined) {
+      data.description = dto.description.trim();
+    }
+    if (dto.requirements !== undefined) {
+      data.requirements = this.optionalTrim(dto.requirements);
+    }
+    if (dto.location !== undefined) {
+      data.location = this.optionalTrim(dto.location);
+    }
+    if (dto.employmentType !== undefined) {
+      data.employmentType = this.optionalTrim(dto.employmentType);
+    }
+    if (dto.companyName !== undefined) {
+      data.companyName = this.optionalTrim(dto.companyName);
+    }
+    return data;
+  }
+
+  private buildSalaryUpdateData(
+    dto: UpdateHiringPostDto,
+  ): Prisma.HiringPostUpdateInput {
+    const data: Prisma.HiringPostUpdateInput = {};
+    if (dto.salaryMin !== undefined) data.salaryMin = dto.salaryMin;
+    if (dto.salaryMax !== undefined) data.salaryMax = dto.salaryMax;
+    if (dto.salaryCurrency !== undefined) {
+      data.salaryCurrency = dto.salaryCurrency;
+    }
+    if (dto.salaryPeriod !== undefined) data.salaryPeriod = dto.salaryPeriod;
+    return data;
+  }
+
+  private buildQualificationUpdateData(
+    dto: UpdateHiringPostDto,
+    occupation: { code: string; specialty: string | null } | null,
+  ): Prisma.HiringPostUpdateInput {
+    const data: Prisma.HiringPostUpdateInput = {};
+    if (occupation !== null) {
+      data.occupationCode = occupation.code;
+      data.specialty = occupation.specialty;
+    }
+    if (dto.yearsRequired !== undefined) {
+      data.yearsRequired = dto.yearsRequired;
+    }
+    if (dto.skills !== undefined) data.skills = dto.skills;
+    if (dto.openings !== undefined) data.openings = dto.openings;
+    if (dto.closesAt !== undefined) data.closesAt = new Date(dto.closesAt);
+    return data;
+  }
+
+  private buildStatusAndAiUpdateData(
+    dto: UpdateHiringPostDto,
+    filled: boolean,
+    clearLevel: boolean,
+    requeue: boolean,
+  ): Prisma.HiringPostUpdateInput {
+    const data: Prisma.HiringPostUpdateInput = {};
+    if (filled) {
+      data.status = HiringPostStatus.CLOSED;
+    } else if (dto.status !== undefined) {
+      data.status = dto.status;
+    }
+    if (clearLevel) {
+      data.predictedSeniority = null;
+      data.predictedSeniorityConfidence = null;
+      data.predictedSeniorityModel = null;
+      data.predictedSeniorityMetadata = Prisma.DbNull;
+      data.predictedSeniorityAt = null;
+    }
+    if (requeue) {
+      Object.assign(data, queuedHiringPostFields());
+    }
+    return data;
+  }
+
+  /** Run post-commit notifications and AI queue wakeup after an update succeeds. */
+  private async runUpdateSideEffects(
+    postId: number,
+    updated: HiringPostWithMeta,
+    userId: number,
+    requeue: boolean,
+    swept: number[],
+    sweepReason: SweepReason,
+  ): Promise<void> {
+    if (requeue) this.aiQueue.kick();
+    if (!swept.length) return;
+    await this.sweeper.announceSwept(this.prisma, {
+      postId,
+      postTitle: updated.title,
+      reason: sweepReason,
+      actorId: userId,
+      actorName: updated.recruiter.name,
+      candidateIds: swept,
+    });
   }
 
   /**

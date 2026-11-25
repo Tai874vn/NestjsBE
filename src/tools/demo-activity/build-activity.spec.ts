@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { checkAmendment } from '../../modules/contracts/contract-rules';
 import { evaluateDeadlines } from '../../modules/contracts/deadline-rules';
 import { priceSplit } from './build-contracts';
@@ -74,6 +75,25 @@ describe('buildActivity', () => {
 
   it('is the same for the same seed', () => {
     expect(JSON.stringify(buildActivity(input()))).toBe(JSON.stringify(activity));
+  });
+
+  it('produces byte-for-byte identical output for fixed small and big inputs', () => {
+    const hashOf = (value: ReturnType<typeof buildActivity>) =>
+      createHash('sha256')
+        .update(
+          JSON.stringify(value, (_key, item: unknown) =>
+            item instanceof Map ? { __map: [...item.entries()] } : item,
+          ),
+        )
+        .digest('hex');
+
+    expect({
+      small: hashOf(activity),
+      big: hashOf(buildActivity(bigInput())),
+    }).toEqual({
+      small: '56dd172e84deb4daf4ed2e3d33a51098bd5333f640201b3c186535f12fb59570',
+      big: 'a12843e03382a9f58bc9a3b15cca19b6481fbca91045885d3fe3524b777b4be6',
+    });
   });
 
   it('only lets people in a fitting occupation apply, once each', () => {
