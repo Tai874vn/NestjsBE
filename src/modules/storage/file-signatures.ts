@@ -143,6 +143,26 @@ function isZlibOutputLimitError(error: unknown): boolean {
  * Decompress every `/FlateDecode` stream in a PDF with strict per-stream and total byte caps,
  * and scan the unpacked bytes for hidden active content (for example inside `/ObjStm`).
  */
+/** The dictionary text of the object that owns the stream starting at `streamIndex`. */
+export function ownStreamDictionary(text: string, streamIndex: number): string {
+  const objHeader = /\d+\s+\d+\s+obj\b/g;
+  // Search a bounded window, then keep the LAST object header before the stream keyword.
+  const windowStart = Math.max(0, streamIndex - 8192);
+  objHeader.lastIndex = windowStart;
+  let start = -1;
+  let found: RegExpExecArray | null;
+  while ((found = objHeader.exec(text)) !== null && found.index < streamIndex) {
+    start = found.index;
+  }
+  return text.slice(start >= 0 ? start : windowStart, streamIndex);
+}
+
+/** Only the value of the /Filter entry (one name or a [ ... ] array), so no other key is counted. */
+export function filterValue(dictionary: string): string {
+  const filter = /\/Filter\s*(\[[^\]]*\]|\/[A-Za-z0-9_.-]+)/.exec(dictionary);
+  return filter ? filter[1] : '';
+}
+
 function scanCompressedPdfStreams(buffer: Buffer): void {
   const text = buffer.toString('latin1');
   const streamMarker = /\bstream(?:\r\n|\n)/g;
@@ -161,9 +181,12 @@ function scanCompressedPdfStreams(buffer: Buffer): void {
     streamMarker.lastIndex = endIdx + 'endstream'.length;
     if (dataEnd <= dataStart) continue;
 
-    // Inspect the dictionary right before `stream` to see if it uses FlateDecode.
-    const dictWindow = text.slice(Math.max(0, match.index - 2048), match.index);
-    const decodedDict = decodePdfHexNames(dictWindow);
+    // Read only THIS stream's own /Filter value (from its "N G obj" header to "stream").
+    // A fixed look-back window also caught the filters of earlier objects, so a normal
+    // single-compressed stream was inflated twice and valid PDFs (Word, Google Docs exports) were rejected.
+    const decodedDict = filterValue(
+      decodePdfHexNames(ownStreamDictionary(text, match.index)),
+    );
     const flateMatches = decodedDict.match(/\/FlateDecode(?![A-Za-z0-9_.-])/g);
     const isFlate = Boolean(flateMatches && flateMatches.length > 0);
     const hasOtherFilter =

@@ -321,6 +321,55 @@ describe('StorageService', () => {
     });
   });
 
+  describe('PDF streams are read per object (regression: valid PDFs were rejected)', () => {
+    /** Several back-to-back objects, each with ONE FlateDecode stream, like a Word or Google Docs export. */
+    function makeMultiStreamPdf(payloads: string[]): Buffer {
+      const parts: Buffer[] = [Buffer.from('%PDF-1.7\n', 'latin1')];
+      payloads.forEach((payload, index) => {
+        const compressed = deflateSync(Buffer.from(payload, 'latin1'));
+        parts.push(
+          Buffer.from(
+            `${index + 1} 0 obj\n<< /Filter /FlateDecode /Length ${compressed.length} >>\nstream\n`,
+            'latin1',
+          ),
+          compressed,
+          Buffer.from('\nendstream\nendobj\n', 'latin1'),
+        );
+      });
+      parts.push(Buffer.from('%%EOF\n', 'latin1'));
+      return Buffer.concat(parts);
+    }
+
+    it('accepts a PDF whose earlier objects also use /FlateDecode', async () => {
+      const pdf = makeMultiStreamPdf([
+        'BT /F1 12 Tf (Experience) Tj ET',
+        'BT /F1 12 Tf (Education) Tj ET',
+        'BT /F1 12 Tf (Skills) Tj ET',
+        'BT /F1 12 Tf (Projects) Tj ET',
+      ]);
+
+      const result = await service.uploadDocument(
+        makeMulterFile(pdf, { originalname: 'cv.pdf', mimetype: 'application/pdf' }),
+        'resumes',
+      );
+      expect(result.key).toMatch(/^documents\/resumes\/[0-9a-f-]{36}\.pdf$/);
+    });
+
+    it('still rejects JavaScript hidden in a later compressed stream', async () => {
+      const pdf = makeMultiStreamPdf([
+        'BT /F1 12 Tf (Experience) Tj ET',
+        '<< /S /JavaScript /JS (app.alert(1)) >>',
+      ]);
+
+      await expect(
+        service.uploadDocument(
+          makeMulterFile(pdf, { originalname: 'cv.pdf', mimetype: 'application/pdf' }),
+          'resumes',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('document validation (Finding 1)', () => {
     it('accepts a clean PDF with clickable /URI links and stores it in private/documents/resumes', async () => {
       const pdf = Buffer.from(
