@@ -1019,18 +1019,24 @@ model LedgerEntry {
 /// A VNPay sandbox top-up. txnRef is unique so each payment adds credits only once.
 /// The migration adds CHECK credits BETWEEN 10 AND 10000.
 model TopUp {
-  id               Int         @id @default(autoincrement())
-  userId           Int
-  credits          Int
+  id                   Int         @id @default(autoincrement())
+  userId               Int
+  credits              Int
   /// credits x 1,000 VND test money.
-  amountVnd        Int
-  txnRef           String      @unique
-  status           TopUpStatus @default(PENDING)
-  vnpTransactionNo String?
-  bankCode         String?
-  responseCode     String?
-  paidAt           DateTime?
-  createdAt        DateTime    @default(now())
+  amountVnd            Int
+  txnRef               String      @unique
+  status               TopUpStatus @default(PENDING)
+  /// Which gateway took the money: "VNPAY" (older top-ups) or "SEPAY".
+  provider             String      @default("SEPAY")
+  /// VNPay fields, kept for the older top-ups.
+  vnpTransactionNo     String?
+  bankCode             String?
+  responseCode         String?
+  /// SePay's transaction id and payment method (BANK_TRANSFER, CARD, ...), from the IPN.
+  gatewayTransactionId String?
+  paymentMethod        String?
+  paidAt               DateTime?
+  createdAt            DateTime    @default(now())
 
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   ledger LedgerEntry[]

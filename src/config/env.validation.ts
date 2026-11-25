@@ -80,15 +80,15 @@ export const envValidationSchema = Joi.object({
   LIVEKIT_API_KEY: Joi.string().empty('').optional(),
   LIVEKIT_API_SECRET: Joi.string().empty('').optional(),
 
-  // VNPay sandbox top-up (optional: without TMN code, hash secret and return URL the top-up is
-  // hidden and POST /wallet/top-ups answers 503)
-  VNPAY_TMN_CODE: Joi.string().empty('').optional(),
-  VNPAY_HASH_SECRET: Joi.string().empty('').optional(),
-  VNPAY_PAY_URL: Joi.string()
-    .uri()
+  // SePay payment gateway top-up (optional: without merchant id, secret key and IPN key the
+  // top-up is hidden and POST /wallet/top-ups answers 503). SEPAY_ENV: sandbox (default) or production.
+  SEPAY_MERCHANT_ID: Joi.string().empty('').optional(),
+  SEPAY_SECRET_KEY: Joi.string().empty('').optional(),
+  SEPAY_IPN_SECRET: Joi.string().empty('').optional(),
+  SEPAY_ENV: Joi.string()
+    .valid('sandbox', 'production')
     .empty('')
-    .default('https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
-  VNPAY_RETURN_URL: Joi.string().uri().empty('').optional(),
+    .default('sandbox'),
 
   // Local file storage root (defaults to /app/uploads in production, ./uploads locally)
   UPLOADS_DIR: Joi.string().empty('').optional(),

@@ -2,19 +2,18 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseIntPipe,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ValidatedUser } from '../../../types';
 import { TopUpDto } from '../dto/top-up.dto';
 import { WalletLedgerQueryDto } from '../dto/wallet-ledger-query.dto';
 import { TopUpsService } from '../top-ups.service';
-import { vnpayIpAddr } from '../vnpay.service';
 import { WalletService } from '../wallet.service';
 
 /**
@@ -49,31 +48,27 @@ export class WalletController {
     };
   }
 
-  /** Starts a VNPay sandbox top-up; the frontend sends the browser to payUrl. 503 when VNPay is not set up. */
+  /**
+   * Starts a SePay sandbox top-up. The answer is a signed form; the frontend posts it to SePay.
+   * 503 when SePay is not set up.
+   */
   @Post('top-ups')
-  async startTopUp(
-    @CurrentUser() user: ValidatedUser,
-    @Body() dto: TopUpDto,
-    @Req() req: Request,
-  ) {
+  async startTopUp(@CurrentUser() user: ValidatedUser, @Body() dto: TopUpDto) {
     return {
       message: 'Top up started',
-      content: await this.topUps.start(user.id, dto.credits, vnpayIpAddr(req)),
+      content: await this.topUps.start(user.id, dto.credits),
     };
   }
 
-  /**
-   * The frontend's return page sends every vnp_* param it got back from VNPay here. It finishes
-   * the top-up the same way the IPN does (credits are added at most once).
-   */
-  @Get('top-ups/vnpay-return')
-  async vnpayReturn(
+  /** The return page asks this until the top-up is PAID (or gives up after a while). */
+  @Get('top-ups/:id')
+  async topUpStatus(
     @CurrentUser() user: ValidatedUser,
-    @Query() query: Record<string, string>,
+    @Param('id', ParseIntPipe) id: number,
   ) {
     return {
       message: 'Top up checked',
-      content: await this.topUps.finishReturn(user.id, query),
+      content: await this.topUps.status(user.id, id),
     };
   }
 }
