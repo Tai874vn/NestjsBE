@@ -93,10 +93,6 @@ export const envValidationSchema = Joi.object({
   // Local file storage root (defaults to /app/uploads in production, ./uploads locally)
   UPLOADS_DIR: Joi.string().empty('').optional(),
 
-  // Deprecated: Cloudinary package and env vars stay only until `npm run migrate:files` has run.
-  CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
-  CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
-  CLOUDINARY_API_SECRET: Joi.string().empty('').optional(),
 
   // Sentry error tracking and performance tracing (optional; empty DSN turns Sentry off)
   SENTRY_DSN: Joi.string().uri().empty('').optional(),
