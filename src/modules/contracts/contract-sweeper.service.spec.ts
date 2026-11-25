@@ -242,6 +242,9 @@ function setup(
       key === 'CONTRACT_GRACE_MINUTES' ? grace : undefined,
     ),
   };
+  const redis = {
+    invalidateUserProfile: jest.fn().mockResolvedValue(undefined),
+  };
   const query = new ContractsQueryService(prisma as never);
   const step = new ContractStepService(prisma as never, events as never, query);
   const ending = new ContractEndingService(wallet as never, events as never);
@@ -250,6 +253,7 @@ function setup(
     wallet as never,
     events as never,
     ending,
+    redis as never,
   );
   const sweeper = new ContractSweeperService(
     prisma as never,
@@ -257,11 +261,13 @@ function setup(
     events as never,
     ending,
     config as never,
+    redis as never,
   );
   return {
     prisma,
     wallet,
     events,
+    redis,
     sweeper,
     contractsService,
     hooks,
@@ -349,11 +355,12 @@ describe('ContractSweeperService', () => {
           submittedAt: ago(3 * DAY + MINUTE),
         }),
       ]);
-      const { sweeper, wallet, events, prisma, contracts } = setup([c]);
+      const { sweeper, wallet, events, redis, prisma, contracts } = setup([c]);
 
       const first = await sweeper.sweepOnce(NOW);
 
       expect(first).toEqual({ expired: 0, warned: 0, ended: 0, completed: 1 });
+      expect(redis.invalidateUserProfile).toHaveBeenCalledWith(9);
       expect(wallet.release).toHaveBeenCalledTimes(1);
       expect(wallet.release).toHaveBeenCalledWith(prisma, {
         clientId: 3,

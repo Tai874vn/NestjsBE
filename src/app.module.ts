@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { join } from 'path';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { RedisModule } from './modules/redis/redis.module';
@@ -16,7 +15,7 @@ import { HiringPostsModule } from './modules/hiring-posts/hiring-posts.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { SkillModule } from './modules/skill/skill.module';
 import { OccupationsModule } from './modules/occupations/occupations.module';
-import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { envValidationSchema } from './config/env.validation';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
@@ -39,16 +38,13 @@ import { DatabaseModule } from './database/database.module';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: envValidationSchema,
       validationOptions: {
         abortEarly: true, // Stop validation at first error
       },
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
     }),
     ThrottlerModule.forRoot({
       errorMessage: 'Too many requests. Please try again shortly.',
@@ -57,7 +53,7 @@ import { DatabaseModule } from './database/database.module';
     ObservabilityModule,
     DatabaseModule,
     RedisModule,
-    CloudinaryModule,
+    StorageModule,
     AuthModule,
     UsersModule,
     CategoriesModule,

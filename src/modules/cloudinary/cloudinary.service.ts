@@ -11,6 +11,10 @@ import { Readable } from 'stream';
 /** Cloudinary status codes that mean the uploaded file itself is bad, not our account or server. */
 const USER_FILE_UPLOAD_ERROR_CODES = new Set([400, 413, 415, 422]);
 
+/**
+ * @deprecated Replaced by StorageService. The cloudinary package and env vars stay only until
+ * `npm run migrate:files` has finished migrating existing database URLs to local storage.
+ */
 @Injectable()
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);

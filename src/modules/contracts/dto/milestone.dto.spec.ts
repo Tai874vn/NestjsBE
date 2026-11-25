@@ -14,18 +14,10 @@ async function messages<T extends object>(
   return errors.flatMap((e) => Object.values(e.constraints ?? {}));
 }
 
-const CLOUD = 'jobaura-test';
-const image = `https://res.cloudinary.com/${CLOUD}/image/upload/v1/contracts/a.png`;
+const image =
+  '/uploads/images/contracts/550e8400-e29b-41d4-a716-446655440000.webp';
 
 describe('milestone DTOs', () => {
-  const old = process.env.CLOUDINARY_CLOUD_NAME;
-  beforeAll(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
-  });
-  afterAll(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = old;
-  });
-
   it('SubmitWorkDto accepts a note with our images and web links; null lists become empty', async () => {
     expect(
       await messages(SubmitWorkDto, {

@@ -14,12 +14,11 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { imageFileFilter } from '../../../common/image-file-filter';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
+import { imageUploadOptions } from '../../storage/upload-options';
 import {
   CommentsQueryDto,
   CreatePostCommentDto,
@@ -34,7 +33,7 @@ import { PostsService } from '../services/posts.service';
 export class PostsController {
   constructor(
     private readonly postsService: PostsService,
-    private readonly cloudinary: CloudinaryService,
+    private readonly storage: StorageService,
   ) {}
 
   @Get('feed')
@@ -48,13 +47,7 @@ export class PostsController {
   }
 
   @Post()
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('image', imageUploadOptions))
   async createPost(
     @CurrentUser() user: ValidatedUser,
     @Body() dto: CreatePostDto,
@@ -62,13 +55,13 @@ export class PostsController {
   ) {
     let uploaded: { url: string; publicId: string } | undefined;
     if (file) {
-      const result = await this.cloudinary.uploadImage(file, 'posts');
-      uploaded = { url: result.secure_url, publicId: result.public_id };
+      const result = await this.storage.uploadImage(file, 'posts');
+      uploaded = { url: result.url, publicId: result.key };
     }
     try {
       return await this.postsService.createPost(user.id, dto, uploaded);
     } catch (error) {
-      if (uploaded) await this.cloudinary.deleteImage(uploaded.publicId);
+      if (uploaded) await this.storage.deleteImage(uploaded.publicId);
       throw error;
     }
   }

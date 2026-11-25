@@ -6,6 +6,9 @@ import {
   AiSkillSummary,
 } from '../../recommendations/services/ai-recommendation.client';
 
+const SKILL_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SKILL_SEARCH_MAX_CACHED_QUERY_LENGTH = 40;
+
 /**
  * Skills come from the AI service's dictionary (ESCO and O*NET), the same one the seniority model is trained
  * with. Users pick from it; free-typed names are resolved to it or rejected.
@@ -38,18 +41,31 @@ export class SkillService {
   }
 
   async search(query: string, field?: string, limit = 10) {
-    const trimmed = query.trim();
-    if (!trimmed) {
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!normalizedQuery) {
       return { message: 'Search skills successfully', content: [] };
     }
-    const cacheKey = `${CACHE_KEYS.SKILL_LIST}:search:${field ?? ''}:${limit}:${trimmed.toLowerCase()}`;
+
+    const normalizedField = field?.trim().toLowerCase() ?? '';
+    const load = async () => ({
+      message: 'Search skills successfully',
+      content: await this.aiClient.searchSkills(
+        normalizedQuery,
+        normalizedField || undefined,
+        limit,
+      ),
+    });
+
+    // Skip caching long free-text queries so arbitrary input cannot fill up cache memory.
+    if (normalizedQuery.length > SKILL_SEARCH_MAX_CACHED_QUERY_LENGTH) {
+      return load();
+    }
+
+    const cacheKey = `${CACHE_KEYS.SKILL_LIST}:search:${normalizedField}:${limit}:${normalizedQuery}`;
     return this.redisService.getOrSet(
       cacheKey,
-      async () => ({
-        message: 'Search skills successfully',
-        content: await this.aiClient.searchSkills(trimmed, field, limit),
-      }),
-      CACHE_TTL.LONG,
+      load,
+      SKILL_SEARCH_CACHE_TTL_MS,
     );
   }
 

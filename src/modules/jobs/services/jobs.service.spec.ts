@@ -95,6 +95,44 @@ describe('JobsService bounded queries', () => {
     expect(result.content.data).toEqual(rows.slice(0, 2));
     expect(result.content.nextCursor).toEqual(expect.any(String));
   });
+
+  it('caches only unfiltered pages 1-5 with the default sort, and never caches free-text search', async () => {
+    const prisma = {
+      job: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+    const redis = {
+      getOrSet: jest.fn((_key, loader) => loader()),
+    };
+    const service = createService(prisma, redis);
+
+    // Unfiltered pages 1 and 5 with default sort are cached.
+    await service.findAllWithPagination({ page: 1, pageSize: 12 });
+    await service.findAllWithPagination({ page: 5, pageSize: 12 });
+    expect(redis.getOrSet).toHaveBeenCalledTimes(2);
+
+    redis.getOrSet.mockClear();
+
+    // Deep page, filters, custom sort, cursor with token, and free-text search bypass Redis.
+    await service.findAllWithPagination({ page: 6, pageSize: 12 });
+    await service.findAllWithPagination({ page: 1, keyword: 'logo' });
+    await service.findAllWithPagination({ page: 1, categoryId: 2 });
+    await service.findAllWithPagination({ page: 1, subcategoryId: 5 });
+    await service.findAllWithPagination({ page: 1, minPrice: 100 });
+    await service.findAllWithPagination({ page: 1, maxPrice: 500 });
+    await service.findAllWithPagination({ page: 1, minRating: 4 });
+    await service.findAllWithPagination({ page: 1, sort: 'price_asc' });
+    const cursor = Buffer.from(
+      JSON.stringify({ createdAt: '2026-06-25T08:00:00.000Z', id: 12 }),
+    ).toString('base64url');
+    await service.findAllWithCursor({ limit: 10, cursor });
+    await service.findAllWithCursor({ limit: 10, keyword: 'react' });
+    await service.searchByName('logo design');
+
+    expect(redis.getOrSet).not.toHaveBeenCalled();
+  });
 });
 
 describe('JobsService service fields', () => {
@@ -227,5 +265,47 @@ describe('JobMutationService.remove (service delete)', () => {
         actionUrl: '/contracts?tab=client',
       }),
     );
+  });
+
+  it('deletes the old job image on replace and when the service is removed', async () => {
+    const oldImage =
+      '/uploads/images/jobs/550e8400-e29b-41d4-a716-446655440000.webp';
+    const newImage =
+      '/uploads/images/jobs/11111111-1111-4111-8111-111111111111.webp';
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ title: 'Bakery logo' }]),
+      contract: { count: jest.fn().mockResolvedValue(0) },
+      proposal: { findMany: jest.fn().mockResolvedValue([]) },
+      job: { delete: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      job: {
+        findUnique: jest.fn().mockResolvedValue({
+          creatorId: 9,
+          workMode: 'REMOTE',
+          serviceArea: null,
+          image: oldImage,
+        }),
+        update: jest.fn().mockResolvedValue({ id: 4, image: newImage }),
+      },
+      $transaction: jest.fn((callback: (t: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const storage = { deleteImage: jest.fn().mockResolvedValue(undefined) };
+    const mutations = new JobMutationService(
+      prisma as any,
+      { invalidateJobMutation: jest.fn() } as any,
+      undefined,
+      undefined,
+      storage as any,
+    );
+
+    await mutations.uploadImage(4, newImage, 9, Role.USER);
+    expect(storage.deleteImage).toHaveBeenCalledWith(oldImage);
+
+    storage.deleteImage.mockClear();
+    await mutations.remove(4, 9, Role.USER);
+    expect(storage.deleteImage).toHaveBeenCalledWith(oldImage);
   });
 });

@@ -30,8 +30,8 @@ async function parse<T extends object>(
   return { dto, messages: messagesOf(errors) };
 }
 
-const CLOUD = 'jobaura-test';
-const image = `https://res.cloudinary.com/${CLOUD}/image/upload/v1/contracts/a.png`;
+const image =
+  '/uploads/images/contracts/550e8400-e29b-41d4-a716-446655440000.webp';
 
 function milestone(overrides: Record<string, unknown> = {}) {
   return {
@@ -55,14 +55,6 @@ function body(overrides: Record<string, unknown> = {}) {
 }
 
 describe('proposal DTOs', () => {
-  const oldCloud = process.env.CLOUDINARY_CLOUD_NAME;
-  beforeEach(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
-  });
-  afterAll(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = oldCloud;
-  });
-
   it('accepts a full body and trims the brief', async () => {
     const { dto, messages } = await parse(
       CreateProposalDto,
@@ -92,28 +84,20 @@ describe('proposal DTOs', () => {
     expect(dto.referenceImages).toEqual([]);
   });
 
-  // Review Focus 5: images only from our Cloudinary account.
+  // Review Focus 5: images only from our local JobAura upload path.
   it.each([
     'https://res.cloudinary.com/other-cloud/image/upload/a.png',
-    'http://res.cloudinary.com/jobaura-test/image/upload/a.png',
-    'https://evil.com/jobaura-test/a.png',
-    `https://res.cloudinary.com/${CLOUD}/../other-cloud/a.png`,
-    `https://res.cloudinary.com.evil.com/${CLOUD}/a.png`,
-    `https://user@res.cloudinary.com/${CLOUD}/a.png`,
+    'https://res.cloudinary.com/jobaura-test/image/upload/a.png',
+    'https://evil.com/uploads/images/contracts/550e8400-e29b-41d4-a716-446655440000.webp',
+    '/uploads/images/contracts/550e8400-e29b-41d4-a716-446655440000.png',
+    '/uploads/images/contracts/../avatars/550e8400-e29b-41d4-a716-446655440000.webp',
+    '/uploads/private/documents/resumes/550e8400-e29b-41d4-a716-446655440000.pdf',
     'not a url',
   ])('refuses the image %s', async (url) => {
     const { messages } = await parse(
       VersionBodyDto,
       body({ referenceImages: [image, url] }),
     );
-    expect(messages).toEqual([
-      'referenceImages must be uploaded through JobAura.',
-    ]);
-  });
-
-  it('refuses every image when the cloud name is not set', async () => {
-    delete process.env.CLOUDINARY_CLOUD_NAME;
-    const { messages } = await parse(VersionBodyDto, body());
     expect(messages).toEqual([
       'referenceImages must be uploaded through JobAura.',
     ]);

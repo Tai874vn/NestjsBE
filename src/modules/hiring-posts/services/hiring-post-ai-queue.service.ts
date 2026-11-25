@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../../prisma.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
 import { RecommendationPayloadMapperService } from '../../recommendations/services/recommendation-payload-mapper.service';
@@ -130,6 +131,9 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
         'Hiring post AI queue failed',
         error instanceof Error ? error.stack : String(error),
       );
+      Sentry.captureException(error, {
+        tags: { context: 'hiring-post-ai-queue' },
+      });
     } finally {
       this.running = false;
     }
@@ -202,6 +206,9 @@ export class HiringPostAiQueueService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Hiring post AI evaluation unavailable for post ${claimed.id}: ${error instanceof Error ? error.message : String(error)}`,
         );
+        Sentry.captureException(error, {
+          tags: { context: 'hiring-post-ai-queue.evaluate' },
+        });
         update = {
           aiStatus: HIRING_POST_AI_STATUS.AI_UNAVAILABLE,
           aiStatusMessage: HIRING_POST_AI_UNAVAILABLE_MESSAGE,

@@ -22,6 +22,7 @@ import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
+import { isLocalImageUrl } from '../../storage/storage-paths';
 
 export const MAX_REFERENCES = 10;
 export const PROPOSAL_MAX_PAGE_SIZE = 50;
@@ -47,27 +48,12 @@ export function isWebLink(value: unknown): boolean {
 }
 
 /**
- * An image uploaded through JobAura: it lives in our Cloudinary account, so it starts with
- * `https://res.cloudinary.com/<CLOUDINARY_CLOUD_NAME>/`. The text must already be in its clean
- * form (the parsed URL written back gives the same text), so tricks like `/../other-cloud/` or
- * a user name before the host do not pass. With no cloud name set, no image passes.
+ * An image uploaded through JobAura: it lives in our local storage under
+ * `/uploads/images/<folder>/<uuid>.webp`. Any other path, extension, traversal or external host
+ * is rejected.
  */
 export function isOurImage(value: unknown): boolean {
-  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
-  if (!cloud || typeof value !== 'string' || value.length > 2000) return false;
-  try {
-    const url = new URL(value);
-    return (
-      url.href === value &&
-      url.protocol === 'https:' &&
-      url.host === 'res.cloudinary.com' &&
-      url.username === '' &&
-      url.password === '' &&
-      url.pathname.startsWith(`/${cloud}/`)
-    );
-  } catch {
-    return false;
-  }
+  return isLocalImageUrl(value);
 }
 
 /** Each item is a web link (see isWebLink). Used by proposals and, later, submissions. */
@@ -78,7 +64,7 @@ export function IsWebLink(options?: ValidationOptions) {
   );
 }
 
-/** Each item is an image from our Cloudinary account (see isOurImage). */
+/** Each item is an image uploaded through JobAura (see isOurImage). */
 export function IsOurImage(options?: ValidationOptions) {
   return ValidateBy(
     { name: 'isOurImage', validator: { validate: isOurImage } },

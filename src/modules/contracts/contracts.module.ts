@@ -20,7 +20,7 @@ import { ProposalsService } from './proposals.service';
  * Service contracts: proposals, contracts and milestones.
  * It holds the history rows, notifications and chat lines (ContractEventsService), the proposals
  * with their versions (ProposalsService, answered over HTTP by ProposalsController), the image
- * upload for proposals and submissions (ContractFilesController; CloudinaryModule is global),
+ * upload for proposals and submissions (ContractFilesController; StorageModule is global),
  * and the contracts: reading (ContractsQueryService), the lock-and-run helper of every contract
  * step (ContractStepService), the milestone steps and the client's own end (ContractsService,
  * answered by ContractsController and MilestonesController) and the early end shared with the

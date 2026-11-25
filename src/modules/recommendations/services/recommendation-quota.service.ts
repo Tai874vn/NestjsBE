@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService } from '../../redis/redis.service';
 
 const DAILY_RECOMMENDATION_LIMIT = 5;
 const ADMIN_DAILY_RECOMMENDATION_LIMIT = 100;
@@ -15,23 +14,19 @@ export type RecommendationQuota = {
 
 @Injectable()
 export class RecommendationQuotaService {
-  constructor(
-    private readonly redisService: RedisService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getQuotaForUser(
     userId: number,
     role?: Role | string | null,
   ): Promise<RecommendationQuota> {
-    const { key, ttl, dayStart, resetAt } = this.quotaWindow(userId);
+    const { dayStart, resetAt } = this.quotaWindow();
     const limit = this.limitForRole(role);
     const usage = await this.prisma.recommendationQuotaUsage.findUnique({
       where: { userId_day: { userId, day: dayStart } },
       select: { used: true },
     });
     const used = usage?.used ?? 0;
-    await this.redisService.set(key, used, ttl);
     return this.quotaFromUsage(used, resetAt, limit);
   }
 
@@ -56,7 +51,7 @@ export class RecommendationQuotaService {
     userId: number,
     role?: Role | string | null,
   ): Promise<RecommendationQuota> {
-    const { key, ttl, dayStart, resetAt } = this.quotaWindow(userId);
+    const { dayStart, resetAt } = this.quotaWindow();
     const limit = this.limitForRole(role);
     const usage = await this.prisma.$transaction(async (tx) => {
       const nextUsage = await tx.recommendationQuotaUsage.upsert({
@@ -81,7 +76,6 @@ export class RecommendationQuotaService {
       throw this.quotaExceeded();
     }
 
-    await this.redisService.set(key, normalizedUsed, ttl);
     return this.quotaFromUsage(normalizedUsed, resetAt, limit);
   }
 
@@ -89,7 +83,7 @@ export class RecommendationQuotaService {
     userId: number,
     role?: Role | string | null,
   ): Promise<RecommendationQuota> {
-    const { key, ttl, dayStart, resetAt } = this.quotaWindow(userId);
+    const { dayStart, resetAt } = this.quotaWindow();
     const limit = this.limitForRole(role);
     const usage = await this.prisma.$transaction(async (tx) => {
       const current = await tx.recommendationQuotaUsage.findUnique({
@@ -109,7 +103,6 @@ export class RecommendationQuotaService {
     });
 
     const normalizedUsed = Math.max(0, usage.used);
-    await this.redisService.set(key, normalizedUsed, ttl);
     return this.quotaFromUsage(normalizedUsed, resetAt, limit);
   }
 
@@ -140,15 +133,13 @@ export class RecommendationQuotaService {
       : DAILY_RECOMMENDATION_LIMIT;
   }
 
-  private quotaWindow(userId: number) {
+  private quotaWindow() {
     const now = new Date();
     const resetAt = new Date(now);
     resetAt.setUTCHours(24, 0, 0, 0);
     const day = now.toISOString().slice(0, 10);
     const dayStart = new Date(`${day}T00:00:00.000Z`);
     return {
-      key: `ai:recommendations:quota:${userId}:${day}`,
-      ttl: Math.max(60_000, resetAt.getTime() - now.getTime()),
       dayStart,
       resetAt,
     };

@@ -9,6 +9,7 @@ import {
 import { ThrottlerException, throttlerMessage } from '@nestjs/throttler';
 import { BaseWsExceptionFilter } from '@nestjs/websockets';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { STATUS_CODES } from 'node:http';
@@ -320,6 +321,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       `[${requestId}] ${method} ${route} -> ${statusCode}: ${detail}`,
       stack,
     );
+    Sentry.captureException(exception, {
+      tags: {
+        requestId,
+        method,
+        route,
+      },
+    });
   }
 
   private routeOf(request: RequestWithId): string {

@@ -18,8 +18,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const client = { id: 3, role: Role.USER };
 const freelancer = { id: 9, role: Role.USER };
 const stranger = { id: 50, role: Role.USER };
-const CLOUD = 'jobaura-test';
-const image = `https://res.cloudinary.com/${CLOUD}/image/upload/v1/contracts/a.png`;
+const image =
+  '/uploads/images/contracts/550e8400-e29b-41d4-a716-446655440000.webp';
 
 type FakeSubmission = {
   id: number;
@@ -179,6 +179,9 @@ function setup(milestones: FakeMilestone[], status: ContractStatus = C.ACTIVE) {
     record: jest.fn().mockResolvedValue(undefined),
     announce: jest.fn().mockResolvedValue(undefined),
   };
+  const redis = {
+    invalidateUserProfile: jest.fn().mockResolvedValue(undefined),
+  };
   const query = new ContractsQueryService(prisma as never);
   const step = new ContractStepService(prisma as never, events as never, query);
   const ending = new ContractEndingService(wallet as never, events as never);
@@ -187,6 +190,7 @@ function setup(milestones: FakeMilestone[], status: ContractStatus = C.ACTIVE) {
     wallet as never,
     events as never,
     ending,
+    redis as never,
   );
   const amendments = new AmendmentsService(
     prisma as never,
@@ -194,7 +198,17 @@ function setup(milestones: FakeMilestone[], status: ContractStatus = C.ACTIVE) {
     events as never,
     ending,
   );
-  return { prisma, wallet, events, service, query, ending, amendments, state };
+  return {
+    prisma,
+    wallet,
+    events,
+    redis,
+    service,
+    query,
+    ending,
+    amendments,
+    state,
+  };
 }
 
 function contractLocked(prisma: { $queryRaw: jest.Mock }) {
@@ -211,14 +225,6 @@ function contractLocked(prisma: { $queryRaw: jest.Mock }) {
 }
 
 describe('ContractsService', () => {
-  const OLD_CLOUD = process.env.CLOUDINARY_CLOUD_NAME;
-  beforeAll(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
-  });
-  afterAll(() => {
-    process.env.CLOUDINARY_CLOUD_NAME = OLD_CLOUD;
-  });
-
   describe('fund', () => {
     it('locks the contract, holds the credits once, sets FUNDED, clears the warnings and tells the freelancer with a chat line', async () => {
       const { prisma, wallet, events, service, state } = setup([
@@ -542,6 +548,39 @@ describe('ContractsService', () => {
         ConflictException,
       );
       expect(wallet.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('invalidates user:profile:<freelancerId> after commit only when the contract completes', async () => {
+      const mid = setup([
+        milestone(31, 1, M.SUBMITTED, 300),
+        milestone(32, 2, M.PENDING, 700),
+      ]);
+      await mid.service.approve(31, client);
+      expect(mid.redis.invalidateUserProfile).not.toHaveBeenCalled();
+
+      const order: string[] = [];
+      const final = setup([
+        milestone(31, 1, M.APPROVED, 300),
+        milestone(32, 2, M.SUBMITTED, 700),
+      ]);
+      final.prisma.$transaction.mockImplementation(
+        async (cb: (tx: typeof final.prisma) => Promise<unknown>) => {
+          const out = await cb(final.prisma);
+          order.push('tx-committed');
+          return out;
+        },
+      );
+      final.redis.invalidateUserProfile.mockImplementation(() => {
+        order.push('cache-invalidated');
+        return Promise.resolve();
+      });
+
+      await final.service.approve(32, client);
+
+      expect(final.redis.invalidateUserProfile).toHaveBeenCalledWith(
+        freelancer.id,
+      );
+      expect(order).toEqual(['tx-committed', 'cache-invalidated']);
     });
   });
 

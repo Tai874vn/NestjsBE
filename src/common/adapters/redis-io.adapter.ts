@@ -5,6 +5,8 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { watchRedisErrors } from '../redis/redis-client-errors';
 import { Server, ServerOptions } from 'socket.io';
 
+type SharedRedisClient = ReturnType<typeof createClient>;
+
 /**
  * LETS SEVERAL BACKEND COPIES SHARE ONE REAL-TIME CHAT.
  *
@@ -15,38 +17,64 @@ import { Server, ServerOptions } from 'socket.io';
  * Solution: the Redis adapter uses Redis "pub/sub" (publish/subscribe: one side publishes a message on a
  * channel, everyone subscribed to that channel receives it). When backend 1 sends to a room, the message
  * also goes through Redis, and backend 2 delivers it to its own connected users in that room.
- * pubClient sends, subClient listens (Redis needs two separate connections for this).
+ * pubClient sends (reusing the shared REDIS_CLIENT when passed), subClient listens (Redis needs a
+ * dedicated subscriber connection for pub/sub).
  *
  * If Redis is not reachable, we fall back to the normal in-memory adapter: chat still works, but only
  * between users on the same backend copy. Set up in main.ts.
  */
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
-  private logger = new Logger('RedisIoAdapter');
-  private pubClient: ReturnType<typeof createClient> | null = null;
-  private subClient: ReturnType<typeof createClient> | null = null;
+  private readonly adapterLogger = new Logger('RedisIoAdapter');
+  private pubClient: SharedRedisClient | null = null;
+  private subClient: SharedRedisClient | null = null;
+  private ownsPubClient = false;
 
   constructor(app: INestApplication) {
     super(app);
   }
 
-  async connectToRedis(redisUrl: string): Promise<void> {
-    try {
-      const pubClient = createClient({ url: redisUrl });
-      const subClient = pubClient.duplicate();
-      watchRedisErrors(pubClient, this.logger, 'socket.io pub');
-      watchRedisErrors(subClient, this.logger, 'socket.io sub');
+  async connectToRedis(source: string | SharedRedisClient): Promise<void> {
+    let createdPubClient: SharedRedisClient | null = null;
+    let createdSubClient: SharedRedisClient | null = null;
 
-      await Promise.all([pubClient.connect(), subClient.connect()]);
+    try {
+      const pubClient =
+        typeof source === 'string' ? createClient({ url: source }) : source;
+      const ownsPubClient = typeof source === 'string';
+      if (ownsPubClient) {
+        createdPubClient = pubClient;
+        watchRedisErrors(pubClient, this.adapterLogger, 'socket.io pub');
+      }
+
+      const subClient = pubClient.duplicate();
+      createdSubClient = subClient;
+      watchRedisErrors(subClient, this.adapterLogger, 'socket.io sub');
+
+      if (ownsPubClient) {
+        await Promise.all([pubClient.connect(), subClient.connect()]);
+      } else {
+        await subClient.connect();
+      }
 
       this.pubClient = pubClient;
       this.subClient = subClient;
+      this.ownsPubClient = ownsPubClient;
       this.adapterConstructor = createAdapter(pubClient, subClient);
-      this.logger.log(
+      this.adapterLogger.log(
         'Socket.io Redis adapter connected — cross-instance messaging enabled',
       );
     } catch (error) {
-      this.logger.warn(
+      await Promise.all(
+        [createdSubClient, createdPubClient]
+          .filter((client): client is SharedRedisClient => Boolean(client))
+          .map((client) =>
+            client.isOpen
+              ? client.quit().catch(() => undefined)
+              : Promise.resolve(client.destroy()),
+          ),
+      );
+      this.adapterLogger.warn(
         `Failed to connect Redis adapter: ${error instanceof Error ? error.message : 'Unknown error'}. Falling back to in-memory adapter.`,
       );
     }
@@ -62,12 +90,16 @@ export class RedisIoAdapter extends IoAdapter {
 
   async close(server: Server): Promise<void> {
     await super.close(server);
+    const clientsToClose: Array<SharedRedisClient | null> = [
+      this.subClient,
+      this.ownsPubClient ? this.pubClient : null,
+    ];
     await Promise.all(
-      [this.pubClient, this.subClient]
-        .filter((client): client is ReturnType<typeof createClient> =>
+      clientsToClose
+        .filter((client): client is SharedRedisClient =>
           Boolean(client?.isOpen),
         )
-        .map((client) => client.quit()),
+        .map((client) => client.quit().catch(() => undefined)),
     );
   }
 }

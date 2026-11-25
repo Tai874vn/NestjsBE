@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import type { Server } from 'node:http';
 import request from 'supertest';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
 import { PostsService } from '../services/posts.service';
 import { PostsController } from './posts.controller';
 
@@ -20,7 +20,7 @@ describe('PostsController comment replies', () => {
       controllers: [PostsController],
       providers: [
         { provide: PostsService, useValue: service },
-        { provide: CloudinaryService, useValue: {} },
+        { provide: StorageService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)

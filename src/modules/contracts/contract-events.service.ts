@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { ChatGateway } from '../chat/gateways/chat.gateway';
 import { ChatMessageFanoutService } from '../chat/services/chat-message-fanout.service';
 import { ChatService } from '../chat/services/chat.service';
@@ -166,6 +167,9 @@ export class ContractEventsService {
         this.logger.error(
           `Profile cache clear failed for ${where}: ${this.errorText(error)}`,
         );
+        Sentry.captureException(error, {
+          tags: { context: 'contract-events.cache-clear' },
+        });
       }
     }
     try {
@@ -195,6 +199,9 @@ export class ContractEventsService {
       this.logger.error(
         `Contract notification failed for ${where}: ${this.errorText(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'contract-events.notification' },
+      });
     }
 
     if (!input.chat) return;
@@ -214,6 +221,9 @@ export class ContractEventsService {
       this.logger.error(
         `Contract chat line failed for ${where}: ${this.errorText(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'contract-events.chat' },
+      });
     }
   }
 

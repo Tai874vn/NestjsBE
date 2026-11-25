@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
@@ -142,6 +143,9 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
         'Resume AI queue failed',
         error instanceof Error ? error.stack : String(error),
       );
+      Sentry.captureException(error, {
+        tags: { context: 'resume-ai-queue' },
+      });
     } finally {
       this.running = false;
     }
@@ -244,6 +248,11 @@ export class ResumeAiQueueService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `Resume AI evaluation failed for resume ${claimed.id} (user ${claimed.userId}): ${error instanceof Error ? error.message : String(error)}`,
       );
+      if (!(error instanceof BadRequestException)) {
+        Sentry.captureException(error, {
+          tags: { context: 'resume-ai-queue.evaluate' },
+        });
+      }
       update =
         error instanceof BadRequestException
           ? {

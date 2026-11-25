@@ -313,27 +313,31 @@ describe('UserResumeService', () => {
     expect(profileService.setSkillNames).not.toHaveBeenCalled();
   });
 
-  it('stores uploaded resume document metadata for the current user', async () => {
+  it('stores uploaded resume document metadata and returns the authenticated download path', async () => {
     const { service, prisma, redisService } = createService();
+    const docKey =
+      'documents/resumes/550e8400-e29b-41d4-a716-446655440000.pdf';
     prisma.user.findUnique.mockResolvedValue({ id: 1 });
-    prisma.userResume.upsert.mockResolvedValue({ id: 10 });
+    prisma.userResume.upsert.mockImplementation((args) =>
+      Promise.resolve({ id: 10, userId: 1, data: {}, ...args.update }),
+    );
 
-    await service.uploadResumeFile(1, {
+    const result = await service.uploadResumeFile(1, {
       originalName: ' resume.pdf ',
       mimeType: 'application/pdf',
       size: 2048,
-      url: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
-      publicId: 'resumes/resume',
+      url: docKey,
+      publicId: docKey,
     });
 
     expect(prisma.userResume.upsert.mock.calls[0][0].update).toEqual({
       sourceFileName: 'resume.pdf',
-      sourceFileUrl:
-        'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
+      sourceFileUrl: docKey,
       sourceFileMimeType: 'application/pdf',
       sourceFileSize: 2048,
-      sourceFilePublicId: 'resumes/resume',
+      sourceFilePublicId: docKey,
     });
+    expect(result.content.sourceFileUrl).toBe(`/api/files/${docKey}`);
     expect(redisService.invalidateUserCaches).toHaveBeenCalledWith(1);
   });
 });

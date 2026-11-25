@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, Logger, Query } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Public } from '../../../common/decorators/public.decorator';
 import { IPN_MESSAGES, TopUpsService } from '../top-ups.service';
 
@@ -26,6 +27,9 @@ export class VnpayController {
       this.logger.error(
         `VNPay IPN failed for ${String(query.vnp_TxnRef)}: ${(error as Error).message}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'vnpay.ipn' },
+      });
       return { RspCode: '99', Message: IPN_MESSAGES['99'] };
     }
   }

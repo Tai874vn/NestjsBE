@@ -10,6 +10,7 @@ export class ChatPresenceService {
   private readonly logger = new Logger('ChatPresenceService');
   private readonly onlineUsers = new Map<number, Set<string>>();
   private readonly redisClient: ReturnType<typeof createClient> | null;
+  private redisErrorLogged = false;
 
   constructor(
     @Optional()
@@ -29,10 +30,15 @@ export class ChatPresenceService {
 
   async addOnlineUser(userId: number, socketId: string): Promise<void> {
     if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      await this.redisClient.sAdd(key, socketId);
-      await this.redisClient.expire(key, ONLINE_TTL);
-      return;
+      try {
+        const key = `${ONLINE_KEY_PREFIX}${userId}`;
+        await this.redisClient.sAdd(key, socketId);
+        await this.redisClient.expire(key, ONLINE_TTL);
+        this.redisErrorLogged = false;
+        return;
+      } catch (error) {
+        this.warnOnce('addOnlineUser', error);
+      }
     }
 
     if (!this.onlineUsers.has(userId)) {
@@ -42,23 +48,33 @@ export class ChatPresenceService {
   }
 
   async refreshOnlineUser(userId: number): Promise<void> {
-    if (this.redisClient) {
+    if (!this.redisClient) return;
+
+    try {
       await this.redisClient.expire(
         `${ONLINE_KEY_PREFIX}${userId}`,
         ONLINE_TTL,
       );
+      this.redisErrorLogged = false;
+    } catch (error) {
+      this.warnOnce('refreshOnlineUser', error);
     }
   }
 
   async removeOnlineUser(userId: number, socketId: string): Promise<number> {
     if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      await this.redisClient.sRem(key, socketId);
-      const remaining = await this.redisClient.sCard(key);
-      if (remaining === 0) {
-        await this.redisClient.del(key);
+      try {
+        const key = `${ONLINE_KEY_PREFIX}${userId}`;
+        await this.redisClient.sRem(key, socketId);
+        const remaining = await this.redisClient.sCard(key);
+        if (remaining === 0) {
+          await this.redisClient.del(key);
+        }
+        this.redisErrorLogged = false;
+        return remaining;
+      } catch (error) {
+        this.warnOnce('removeOnlineUser', error);
       }
-      return remaining;
     }
 
     const sockets = this.onlineUsers.get(userId);
@@ -75,8 +91,14 @@ export class ChatPresenceService {
 
   async getOnlineSockets(userId: number): Promise<string[]> {
     if (this.redisClient) {
-      const key = `${ONLINE_KEY_PREFIX}${userId}`;
-      return this.redisClient.sMembers(key);
+      try {
+        const key = `${ONLINE_KEY_PREFIX}${userId}`;
+        const members = await this.redisClient.sMembers(key);
+        this.redisErrorLogged = false;
+        return members;
+      } catch (error) {
+        this.warnOnce('getOnlineSockets', error);
+      }
     }
 
     const sockets = this.onlineUsers.get(userId);
@@ -84,18 +106,33 @@ export class ChatPresenceService {
   }
 
   async getOnlineUserIds(userIds: number[]): Promise<number[]> {
-    if (!this.redisClient) {
-      return userIds.filter((userId) => this.onlineUsers.has(userId));
-    }
     if (userIds.length === 0) {
       return [];
     }
 
-    const pipeline = this.redisClient.multi();
-    for (const userId of userIds) {
-      pipeline.sCard(`${ONLINE_KEY_PREFIX}${userId}`);
+    if (this.redisClient) {
+      try {
+        const pipeline = this.redisClient.multi();
+        for (const userId of userIds) {
+          pipeline.sCard(`${ONLINE_KEY_PREFIX}${userId}`);
+        }
+        const counts = await pipeline.exec();
+        this.redisErrorLogged = false;
+        return userIds.filter((_, index) => Number(counts[index]) > 0);
+      } catch (error) {
+        this.warnOnce('getOnlineUserIds', error);
+      }
     }
-    const counts = await pipeline.exec();
-    return userIds.filter((_, index) => Number(counts[index]) > 0);
+
+    return userIds.filter((userId) => this.onlineUsers.has(userId));
+  }
+
+  private warnOnce(operation: string, error: unknown): void {
+    if (this.redisErrorLogged) return;
+    this.redisErrorLogged = true;
+    const reason = error instanceof Error ? error.message : String(error);
+    this.logger.warn(
+      `Chat presence Redis ${operation} failed (${reason}). Falling back to in-memory tracking.`,
+    );
   }
 }

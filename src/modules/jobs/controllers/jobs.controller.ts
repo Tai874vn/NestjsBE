@@ -14,7 +14,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { JobsService } from '../services/jobs.service';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
@@ -25,17 +24,17 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
+import { imageUploadOptions } from '../../storage/upload-options';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
-import { imageFileFilter } from '../../../common/image-file-filter';
 
 @Controller('jobs')
 @UseGuards(JwtAuthGuard)
 export class JobsController {
   constructor(
     private readonly jobsService: JobsService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly storageService: StorageService,
   ) {}
 
   @Post()
@@ -125,13 +124,7 @@ export class JobsController {
   }
 
   @Post('upload-image/:jobId')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   async uploadImage(
     @Param('jobId', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
@@ -143,16 +136,16 @@ export class JobsController {
 
     await this.jobsService.ensureCanManageJob(id, user.id, user.role);
 
-    const result = await this.cloudinaryService.uploadImage(file, 'jobs');
+    const result = await this.storageService.uploadImage(file, 'jobs');
     try {
       return await this.jobsService.uploadImage(
         id,
-        result.secure_url,
+        result.url,
         user.id,
         user.role,
       );
     } catch (error) {
-      await this.cloudinaryService.deleteImage(result.public_id);
+      await this.storageService.deleteImage(result.key);
       throw error;
     }
   }

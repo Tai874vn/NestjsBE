@@ -90,8 +90,17 @@ export const envValidationSchema = Joi.object({
     .default('https://sandbox.vnpayment.vn/paymentv2/vpcpay.html'),
   VNPAY_RETURN_URL: Joi.string().uri().empty('').optional(),
 
-  // Cloudinary (if used)
+  // Local file storage root (defaults to /app/uploads in production, ./uploads locally)
+  UPLOADS_DIR: Joi.string().empty('').optional(),
+
+  // Deprecated: Cloudinary package and env vars stay only until `npm run migrate:files` has run.
   CLOUDINARY_CLOUD_NAME: Joi.string().empty('').optional(),
   CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
   CLOUDINARY_API_SECRET: Joi.string().empty('').optional(),
+
+  // Sentry error tracking and performance tracing (optional; empty DSN turns Sentry off)
+  SENTRY_DSN: Joi.string().uri().empty('').optional(),
+  SENTRY_ENVIRONMENT: Joi.string().max(64).empty('').optional(),
+  SENTRY_RELEASE: Joi.string().max(200).empty('').optional(),
+  SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).empty('').optional(),
 });

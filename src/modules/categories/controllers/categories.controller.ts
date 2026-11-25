@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Header,
   Post,
   Body,
   Put,
@@ -19,6 +20,7 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
+import { PUBLIC_TAXONOMY_CACHE_CONTROL } from '../../../common/middleware/cache-control.middleware';
 
 @Controller('categories')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,18 +35,21 @@ export class CategoriesController {
 
   @Public()
   @Get()
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   findAll() {
     return this.categoriesService.findAll();
   }
 
   @Public()
   @Get('paginated-search')
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   findAllWithPagination(@Query() paginationDto: PaginationDto) {
     return this.categoriesService.findAllWithPagination(paginationDto);
   }
 
   @Public()
   @Get(':id')
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.categoriesService.findOne(id);
   }

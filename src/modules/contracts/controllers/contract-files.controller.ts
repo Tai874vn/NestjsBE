@@ -7,34 +7,27 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { imageFileFilter } from '../../../common/image-file-filter';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
+import { imageUploadOptions } from '../../storage/upload-options';
 
 /**
- * Image upload for proposals and submissions (any role). The answer is the Cloudinary URL, which
- * the client then puts in referenceImages (or a submission's images). Only URLs from our own
- * Cloudinary account are accepted there.
+ * Image upload for proposals and submissions (any role). The answer is our local relative URL,
+ * which the client then puts in referenceImages (or a submission's images). Only local URLs
+ * uploaded through JobAura are accepted there.
  */
 @Controller('contracts')
 @UseGuards(JwtAuthGuard)
 export class ContractFilesController {
-  constructor(private readonly cloudinary: CloudinaryService) {}
+  constructor(private readonly storage: StorageService) {}
 
   @Post('attachments')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   async upload(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('file is required.');
     }
-    const result = await this.cloudinary.uploadImage(file, 'contracts');
-    return { message: 'File uploaded', content: { url: result.secure_url } };
+    const result = await this.storage.uploadImage(file, 'contracts');
+    return { message: 'File uploaded', content: { url: result.url } };
   }
 }

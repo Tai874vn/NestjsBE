@@ -59,6 +59,7 @@
     "db:seed:feed": "ts-node prisma/seed-feed.ts",
     "db:taxonomy": "ts-node prisma/sync-job-taxonomy.ts",
     "db:seed:professional": "node ./node_modules/ts-node/dist/bin.js prisma/seed-professional.ts",
+    "migrate:files": "ts-node src/tools/migrate-cloudinary-files.ts",
     "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main.js",
@@ -82,12 +83,12 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/platform-socket.io": "^11.1.28",
-    "@nestjs/serve-static": "^5.0.5",
     "@nestjs/swagger": "^11.4.5",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.28",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@sentry/nestjs": "^11.17.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@types/multer": "^2.0.0",
     "bcrypt": "^6.0.0",
@@ -106,6 +107,7 @@
     "redis": "^5.10.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.5",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
@@ -155,6 +157,7 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
+    "maxWorkers": 4,
     "testEnvironmentOptions": {
       "globalsCleanup": "off"
     }

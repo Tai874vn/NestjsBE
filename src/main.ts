@@ -1,11 +1,15 @@
+import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
+import { createClient } from 'redis';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { buildCorsOptions } from './common/config/cors-options';
+import { applyApiCacheControl } from './common/middleware/cache-control.middleware';
+import { REDIS_CLIENT } from './modules/redis/redis.constants';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +18,7 @@ async function bootstrap() {
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: false, limit: '1mb' }));
   app.use(cookieParser());
+  app.use(applyApiCacheControl);
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.setGlobalPrefix(process.env.GLOBAL_PREFIX!);
   app.enableCors(buildCorsOptions());
@@ -26,10 +31,13 @@ async function bootstrap() {
     }),
   );
 
-  const redisUrl = process.env.REDIS_URL;
-  if (redisUrl) {
+  // Reuse the single shared REDIS_CLIENT for the Socket.IO adapter so no connection is leaked.
+  const redisClient = app.get<ReturnType<typeof createClient> | null>(
+    REDIS_CLIENT,
+  );
+  if (redisClient) {
     const redisIoAdapter = new RedisIoAdapter(app);
-    await redisIoAdapter.connectToRedis(redisUrl);
+    await redisIoAdapter.connectToRedis(redisClient);
     app.useWebSocketAdapter(redisIoAdapter);
   }
 

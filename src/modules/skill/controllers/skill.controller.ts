@@ -1,7 +1,16 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { SkillService } from '../services/skill.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
+import { PUBLIC_TAXONOMY_CACHE_CONTROL } from '../../../common/middleware/cache-control.middleware';
 import { ExtractSkillsDto, SearchSkillsDto } from '../dto/skill.dto';
 
 @Controller('skill')
@@ -11,18 +20,21 @@ export class SkillController {
 
   @Public()
   @Get()
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   findAll() {
     return this.skillService.findAll();
   }
 
   @Public()
   @Get('search')
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   search(@Query() query: SearchSkillsDto) {
     return this.skillService.search(query.q, query.field, query.limit);
   }
 
   @Public()
   @Get('fields-of-study')
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   fieldsOfStudy() {
     return this.skillService.fieldsOfStudy();
   }

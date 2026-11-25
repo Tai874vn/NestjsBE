@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
 import { Role } from '../../../common/constants/roles';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import {
@@ -52,7 +52,7 @@ type FeedPostSource = {
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinary: CloudinaryService,
+    private readonly storage: StorageService,
     @Optional()
     private readonly notifications?: NotificationsService,
   ) {}
@@ -183,7 +183,7 @@ export class PostsService {
   async deletePost(postId: number, userId: number, role: Role) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
-      select: { authorId: true, imagePublicId: true },
+      select: { authorId: true, imagePublicId: true, imageUrl: true },
     });
     if (!post) throw new NotFoundException('Post not found');
     if (post.authorId !== userId && role !== Role.ADMIN) {
@@ -191,8 +191,8 @@ export class PostsService {
     }
 
     await this.prisma.post.delete({ where: { id: postId } });
-    if (post.imagePublicId)
-      await this.cloudinary.deleteImage(post.imagePublicId);
+    const imageRef = post.imagePublicId ?? post.imageUrl;
+    if (imageRef) await this.storage.deleteImage(imageRef);
     return { message: 'Post deleted successfully' };
   }
 

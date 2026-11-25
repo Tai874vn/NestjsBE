@@ -9,16 +9,28 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  isURL,
   Matches,
   MaxLength,
   Min,
   MinLength,
+  ValidateBy,
   ValidateNested,
 } from 'class-validator';
 import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
+import { isLocalImageUrl } from '../../storage/storage-paths';
+
+/** Allow either our own local `/uploads/images/<folder>/<uuid>.webp` path or an external http(s) URL. */
+export function isPortfolioImageUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return (
+    isLocalImageUrl(value) ||
+    isURL(value, { require_protocol: true, protocols: ['http', 'https'] })
+  );
+}
 
 export class UpdateMyProfileDto {
   @IsOptional()
@@ -187,7 +199,13 @@ export class UpsertPortfolioItemDto {
 
   @Transform(optionalTrimString)
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @ValidateBy({
+    name: 'isPortfolioImageUrl',
+    validator: {
+      validate: isPortfolioImageUrl,
+      defaultMessage: () => 'image must be a valid URL address',
+    },
+  })
   @MaxLength(300)
   image?: string;
 

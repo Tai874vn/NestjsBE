@@ -4,6 +4,8 @@ import { createHash } from 'crypto';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
 
+const POOL_BUCKET_MS = 60 * 60 * 1000; // 1-hour windows for shared pool timestamps
+
 @Injectable()
 export class RecommendationFingerprintService {
   private readonly modelVersion: string;
@@ -33,10 +35,12 @@ export class RecommendationFingerprintService {
       this.modelVersion,
       // Candidates are matched to hiring posts; the tag keeps older results (other candidates' services) unused.
       'hiring-posts',
+      // Keep the candidate's own timestamps exact so their edits bust their own cache immediately.
       user?.updatedAt,
       user?.resume?.updatedAt,
       latestSkill._max.updatedAt,
-      latestPost._max.updatedAt,
+      // Bucket the global hiring-post pool timestamp to 1-hour windows so one post edit does not bust every user's cache.
+      this.bucketToHour(latestPost._max.updatedAt),
     ]);
   }
 
@@ -53,14 +57,40 @@ export class RecommendationFingerprintService {
       this.prisma.userSkill.aggregate({ _max: { updatedAt: true } }),
     ]);
 
-    return this.hash([
-      this.modelVersion,
-      hiringPostId,
-      hiringPostUpdatedAt,
+    const latestPoolUpdate = this.latestDate(
       latestCandidate._max.updatedAt,
       latestResume._max.updatedAt,
       latestSkill._max.updatedAt,
+    );
+
+    return this.hash([
+      this.modelVersion,
+      hiringPostId,
+      // Keep the target hiring post's own timestamp exact so recruiter edits invalidate immediately.
+      hiringPostUpdatedAt,
+      // Bucket the shared candidate pool timestamp to 1-hour windows.
+      this.bucketToHour(latestPoolUpdate),
     ]);
+  }
+
+  private bucketToHour(value: Date | null | undefined): string {
+    if (!value) return '';
+    const bucketStart =
+      Math.floor(value.getTime() / POOL_BUCKET_MS) * POOL_BUCKET_MS;
+    return new Date(bucketStart).toISOString();
+  }
+
+  private latestDate(
+    ...dates: Array<Date | null | undefined>
+  ): Date | undefined {
+    let latest: Date | undefined;
+    for (const date of dates) {
+      if (!date) continue;
+      if (!latest || date.getTime() > latest.getTime()) {
+        latest = date;
+      }
+    }
+    return latest;
   }
 
   private hash(

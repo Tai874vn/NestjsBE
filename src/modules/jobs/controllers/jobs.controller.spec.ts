@@ -15,18 +15,18 @@ describe('JobsController service publishing policy', () => {
     ]);
   });
 
-  it('checks job ownership before uploading images to Cloudinary', async () => {
+  it('checks job ownership before uploading images to local storage', async () => {
     const jobsService = {
       ensureCanManageJob: jest.fn().mockRejectedValue(new ForbiddenException()),
       uploadImage: jest.fn(),
     };
-    const cloudinaryService = {
+    const storageService = {
       uploadImage: jest.fn(),
       deleteImage: jest.fn(),
     };
     const controller = new JobsController(
       jobsService as never,
-      cloudinaryService as never,
+      storageService as never,
     );
 
     await expect(
@@ -42,6 +42,6 @@ describe('JobsController service publishing policy', () => {
       7,
       Role.USER,
     );
-    expect(cloudinaryService.uploadImage).not.toHaveBeenCalled();
+    expect(storageService.uploadImage).not.toHaveBeenCalled();
   });
 });

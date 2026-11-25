@@ -7,7 +7,13 @@ describe('buildCorsOptions', () => {
     expect(options).toEqual({
       origin: ['https://jobaura.example'],
       credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-CSRF-Token',
+        'sentry-trace',
+        'baggage',
+      ],
       exposedHeaders: ['X-Request-ID'],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     });

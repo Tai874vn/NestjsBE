@@ -32,17 +32,17 @@ describe('PostsService social feed', () => {
         findMany: jest.fn(),
       },
     };
-    const cloudinary = { deleteImage: jest.fn() };
+    const storage = { deleteImage: jest.fn() };
     const notifications = {
       notifyPostLike: jest.fn(),
       notifyPostComment: jest.fn(),
     };
     const service = new PostsService(
       prisma as never,
-      cloudinary as never,
+      storage as never,
       notifications as never,
     );
-    return { service, prisma, cloudinary, notifications };
+    return { service, prisma, storage, notifications };
   };
 
   it('returns newest posts with a stable next cursor and viewer like state', async () => {
@@ -159,14 +159,21 @@ describe('PostsService social feed', () => {
   });
 
   it('only lets the author or admin delete a post and cleans up its image', async () => {
-    const { service, prisma, cloudinary } = createService();
-    prisma.post.findUnique.mockResolvedValue({ authorId: 4, imagePublicId: 'posts/image-1' });
+    const { service, prisma, storage } = createService();
+    prisma.post.findUnique.mockResolvedValue({
+      authorId: 4,
+      imagePublicId: 'images/posts/550e8400-e29b-41d4-a716-446655440000.webp',
+    });
 
-    await expect(service.deletePost(10, 6, Role.USER)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.deletePost(10, 6, Role.USER)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
 
     await service.deletePost(10, 4, Role.USER);
     expect(prisma.post.delete).toHaveBeenCalledWith({ where: { id: 10 } });
-    expect(cloudinary.deleteImage).toHaveBeenCalledWith('posts/image-1');
+    expect(storage.deleteImage).toHaveBeenCalledWith(
+      'images/posts/550e8400-e29b-41d4-a716-446655440000.webp',
+    );
   });
 
   it('rejects comments for a missing post', async () => {

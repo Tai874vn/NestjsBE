@@ -7,7 +7,7 @@ import { Role } from '../../common/constants/roles';
 import { RedisService, CACHE_KEYS } from './redis.service';
 
 @ApiTags('Cache')
-@Controller('api/cache')
+@Controller('cache')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 @ApiBearerAuth()

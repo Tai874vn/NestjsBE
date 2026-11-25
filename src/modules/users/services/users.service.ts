@@ -2,15 +2,17 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import { RedisService } from '../../redis/redis.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';
 import { AuthSessionService } from '../../auth/session/auth-session.service';
+import { StorageService } from '../../storage/storage.service';
 
 @Injectable()
 export class UsersService {
@@ -18,6 +20,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly sessions: AuthSessionService,
+    @Optional() private readonly storage?: StorageService,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -151,16 +154,7 @@ export class UsersService {
   }
 
   async findOne(id: number) {
-    const cacheKey = `${CACHE_KEYS.USER}${id}`;
-
-    const cached = await this.redisService.get<{
-      message: string;
-      content: unknown;
-    }>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
+    // Query PostgreSQL directly by primary key instead of caching private PII in Redis.
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -189,13 +183,10 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const result = {
+    return {
       message: 'Get user successfully',
       content: user,
     };
-
-    await this.redisService.set(cacheKey, result, CACHE_TTL.LONG);
-    return result;
   }
 
   async searchByName(name: string) {
@@ -297,6 +288,12 @@ export class UsersService {
   async remove(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: {
+        resume: { select: { sourceFilePublicId: true, sourceFileUrl: true } },
+        posts: { select: { imagePublicId: true, imageUrl: true } },
+        jobs: { select: { image: true } },
+        portfolioItems: { select: { image: true } },
+      },
     });
 
     if (!user) {
@@ -304,6 +301,23 @@ export class UsersService {
     }
 
     await this.sessions.deleteUser(id);
+
+    // Delete local files for the user and all cascaded child rows after the DB delete commits.
+    if (user.avatar) await this.storage?.deleteImage(user.avatar);
+    if (user.coverImage) await this.storage?.deleteImage(user.coverImage);
+    const resumeKey =
+      user.resume?.sourceFilePublicId ?? user.resume?.sourceFileUrl;
+    if (resumeKey) await this.storage?.deleteDocument(resumeKey);
+    for (const post of user.posts ?? []) {
+      const postImage = post.imagePublicId ?? post.imageUrl;
+      if (postImage) await this.storage?.deleteImage(postImage);
+    }
+    for (const job of user.jobs ?? []) {
+      if (job.image) await this.storage?.deleteImage(job.image);
+    }
+    for (const item of user.portfolioItems ?? []) {
+      if (item.image) await this.storage?.deleteImage(item.image);
+    }
 
     // Invalidate user caches
     await this.redisService.invalidateUserCaches(id);

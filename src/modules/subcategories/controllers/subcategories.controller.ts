@@ -14,7 +14,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { SubcategoriesService } from '../services/subcategories.service';
 import { CreateSubcategoryDto } from '../dto/create-subcategory.dto';
 import { UpdateSubcategoryDto } from '../dto/update-subcategory.dto';
@@ -24,15 +23,15 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
-import { imageFileFilter } from '../../../common/image-file-filter';
+import { StorageService } from '../../storage/storage.service';
+import { imageUploadOptions } from '../../storage/upload-options';
 
 @Controller('subcategories')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SubcategoriesController {
   constructor(
     private readonly subcategoriesService: SubcategoriesService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly storageService: StorageService,
   ) {}
 
   @Post()
@@ -82,13 +81,7 @@ export class SubcategoriesController {
 
   @Post('upload-image/:subcategoryId')
   @Roles(Role.ADMIN)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   async uploadImage(
     @Param('subcategoryId', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
@@ -97,14 +90,11 @@ export class SubcategoriesController {
       throw new BadRequestException('Subcategory image file is required');
     }
 
-    const result = await this.cloudinaryService.uploadImage(
-      file,
-      'subcategories',
-    );
+    const result = await this.storageService.uploadImage(file, 'subcategories');
     try {
-      return await this.subcategoriesService.uploadImage(id, result.secure_url);
+      return await this.subcategoriesService.uploadImage(id, result.url);
     } catch (error) {
-      await this.cloudinaryService.deleteImage(result.public_id);
+      await this.storageService.deleteImage(result.key);
       throw error;
     }
   }

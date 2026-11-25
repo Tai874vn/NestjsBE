@@ -4,7 +4,6 @@ import type { Request } from 'express';
 const allowedImageMimeTypes = new Set([
   'image/jpeg',
   'image/png',
-  'image/gif',
   'image/webp',
 ]);
 
@@ -14,7 +13,12 @@ export function imageFileFilter(
   callback: (error: Error | null, acceptFile: boolean) => void,
 ) {
   if (!allowedImageMimeTypes.has(file.mimetype)) {
-    callback(new BadRequestException('Only image files are allowed'), false);
+    callback(
+      new BadRequestException(
+        'This image could not be read. Use a JPG, PNG or WebP file.',
+      ),
+      false,
+    );
     return;
   }
 

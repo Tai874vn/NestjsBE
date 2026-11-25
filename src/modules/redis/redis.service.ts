@@ -1,38 +1,29 @@
-import { Injectable, Inject, Logger, OnModuleDestroy } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { REDIS_CLIENT } from './redis.constants';
 
-// Define cache interface for compatibility
-interface CacheStore {
-  get<T>(key: string): Promise<T | undefined>;
-  set(key: string, value: unknown, ttl?: number): Promise<void>;
-  del(key: string): Promise<void>;
-  reset?(): Promise<void>;
-  keys?(pattern: string): Promise<string[]>;
-  scan?(pattern: string): Promise<string[]>;
-  unlink?(keys: string[]): Promise<void>;
-  store?: {
-    keys?: (pattern: string) => Promise<string[]>;
-    scan?: (pattern: string) => Promise<string[]>;
-    unlink?: (keys: string[]) => Promise<void>;
-    client?: {
-      incr?: (key: string) => Promise<number>;
-      decr?: (key: string) => Promise<number>;
-      pExpire?: (key: string, ttlMs: number) => Promise<unknown>;
-      set?: (
-        key: string,
-        value: string,
-        options: { NX: true; PX: number },
-      ) => Promise<string | null>;
-      eval?: (
-        script: string,
-        options: { keys: string[]; arguments: string[] },
-      ) => Promise<unknown>;
-      quit?: () => Promise<unknown>;
-      isOpen?: boolean;
-    };
-    reset?: () => Promise<void>;
-  };
+// Minimal node-redis client interface used by RedisService (easy to mock in tests).
+export interface RedisCacheClient {
+  get(key: string): Promise<string | null>;
+  set(
+    key: string,
+    value: string,
+    options?: { PX?: number; NX?: boolean },
+  ): Promise<string | null>;
+  del(keys: string | string[]): Promise<number>;
+  unlink?(keys: string | string[]): Promise<number>;
+  scanIterator(options: {
+    MATCH: string;
+    COUNT?: number;
+  }): AsyncIterable<string | string[]>;
+  incr(key: string): Promise<number>;
+  decr(key: string): Promise<number>;
+  pExpire(key: string, ttlMs: number): Promise<unknown>;
+  eval(
+    script: string,
+    options: { keys: string[]; arguments: string[] },
+  ): Promise<unknown>;
+  isOpen?: boolean;
 }
 
 // Cache key prefixes for different entities
@@ -59,158 +50,248 @@ export const CACHE_TTL = {
   VERY_LONG: 24 * 60 * 60 * 1000, // 24 hours - for rarely changing data
 } as const;
 
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+export const LOCAL_CACHE_MAX_ENTRIES = 5_000;
+const UNLINK_BATCH_SIZE = 100;
+
+const RELEASE_LOCK_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+
+type LocalCacheEntry = {
+  value: unknown;
+  expiresAt: number;
+};
+
+type LocalLockEntry = {
+  token: string;
+  expiresAt: number;
+};
+
 @Injectable()
-export class RedisService implements OnModuleDestroy {
+export class RedisService {
   private readonly logger = new Logger(RedisService.name);
   private readonly namespace = 'jobaura:cache:';
-  private readonly localLocks = new Map<
-    string,
-    { token: string; expiresAt: number }
-  >();
+  private readonly localCache = new Map<string, LocalCacheEntry>();
+  private readonly localLocks = new Map<string, LocalLockEntry>();
+  private readonly inFlight = new Map<string, Promise<unknown>>();
+  private readonly maxLocalEntries: number;
+  private redisErrorLogged = false;
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: CacheStore) {}
-
-  async onModuleDestroy(): Promise<void> {
-    const client = this.cacheManager.store?.client;
-    if (client?.quit && client.isOpen !== false) {
-      await client.quit();
-    }
+  constructor(
+    @Optional()
+    @Inject(REDIS_CLIENT)
+    private readonly client: RedisCacheClient | null = null,
+    @Optional() maxLocalEntries = LOCAL_CACHE_MAX_ENTRIES,
+  ) {
+    this.maxLocalEntries = maxLocalEntries;
   }
 
   /**
-   * Get a value from cache
+   * Read a value from Redis, or from the bounded in-memory map when Redis is not configured.
+   * Returns undefined on a miss or when Redis fails.
    */
   async get<T>(key: string): Promise<T | undefined> {
-    // The cache is an optimisation: while Redis is down, read from the source instead of failing.
-    try {
-      return await this.cacheManager.get<T>(this.key(key));
-    } catch (error) {
-      this.logger.warn(
-        `Cache get failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return undefined;
+    const namespacedKey = this.key(key);
+
+    if (this.client) {
+      try {
+        const raw = await this.client.get(namespacedKey);
+        this.markRedisHealthy();
+        if (raw === null) return undefined;
+        return JSON.parse(raw) as T;
+      } catch (error) {
+        this.warnOnce('get', error);
+        return undefined;
+      }
     }
+
+    return this.getLocal<T>(namespacedKey);
   }
 
   /**
-   * Set a value in cache with optional TTL
+   * Store a value with an optional TTL in milliseconds (defaults to 5 minutes).
    */
   async set(key: string, value: unknown, ttl?: number): Promise<void> {
-    try {
-      await this.cacheManager.set(this.key(key), value, ttl);
-    } catch (error) {
-      // Not cached this time; the next read goes to the source.
-      this.logger.warn(
-        `Cache set failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const namespacedKey = this.key(key);
+    const ttlMs = this.resolveTtlMs(ttl);
+
+    if (this.client) {
+      try {
+        await this.client.set(namespacedKey, JSON.stringify(value), {
+          PX: ttlMs,
+        });
+        this.markRedisHealthy();
+      } catch (error) {
+        this.warnOnce('set', error);
+      }
+      return;
     }
+
+    this.setLocal(namespacedKey, value, ttlMs);
   }
 
   /**
-   * Delete a specific key from cache
+   * Delete one key from cache.
    */
   async del(key: string): Promise<void> {
-    try {
-      await this.cacheManager.del(this.key(key));
-    } catch (error) {
-      // Redis is down. If it comes back with this key, the entry still expires with its TTL.
-      this.logger.warn(
-        `Cache del failed for "${key}": ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const namespacedKey = this.key(key);
+
+    if (this.client) {
+      try {
+        await this.client.del(namespacedKey);
+        this.markRedisHealthy();
+      } catch (error) {
+        this.warnOnce('del', error);
+      }
+      return;
     }
+
+    this.localCache.delete(namespacedKey);
   }
 
+  /**
+   * Atomically increase a counter and apply a TTL on the first increment.
+   */
   async increment(key: string, ttl?: number): Promise<number> {
-    const client = this.cacheManager.store?.client;
-    if (client?.incr) {
-      const namespacedKey = this.key(key);
-      const value = await client.incr(namespacedKey);
-      if (value === 1 && ttl && client.pExpire) {
-        await client.pExpire(namespacedKey, ttl);
+    const namespacedKey = this.key(key);
+
+    if (this.client) {
+      try {
+        const value = await this.client.incr(namespacedKey);
+        if (value === 1 && ttl && ttl > 0) {
+          await this.client.pExpire(
+            namespacedKey,
+            Math.max(1, Math.floor(ttl)),
+          );
+        }
+        this.markRedisHealthy();
+        return value;
+      } catch (error) {
+        this.warnOnce('increment', error);
+        return 0;
       }
-      return value;
     }
 
-    const current = (await this.get<number>(key)) ?? 0;
+    const current = this.getLocal<number>(namespacedKey) ?? 0;
     const next = current + 1;
-    await this.set(key, next, ttl);
-    return next;
-  }
-
-  async decrement(key: string, ttl?: number): Promise<number> {
-    const client = this.cacheManager.store?.client;
-    if (client?.decr) {
-      const namespacedKey = this.key(key);
-      const value = await client.decr(namespacedKey);
-      if (ttl && client.pExpire) {
-        await client.pExpire(namespacedKey, ttl);
-      }
-      return value;
-    }
-
-    const current = (await this.get<number>(key)) ?? 0;
-    const next = Math.max(0, current - 1);
-    await this.set(key, next, ttl);
+    this.setLocal(namespacedKey, next, this.resolveTtlMs(ttl));
     return next;
   }
 
   /**
-   * Delete multiple keys matching a pattern
-   * Note: This requires the Redis store to support keys() method
+   * Atomically decrease a counter and refresh its TTL when provided.
    */
-  async delByPattern(pattern: string): Promise<void> {
-    let keys: string[] = [];
-    const namespacedPattern = this.key(pattern);
+  async decrement(key: string, ttl?: number): Promise<number> {
+    const namespacedKey = this.key(key);
 
-    if (this.cacheManager.scan) {
-      keys = await this.cacheManager.scan(namespacedPattern);
-    } else if (this.cacheManager.store?.scan) {
-      keys = await this.cacheManager.store.scan(namespacedPattern);
-    } else if (this.cacheManager.keys) {
-      keys = await this.cacheManager.keys(namespacedPattern);
-    } else if (this.cacheManager.store?.keys) {
-      keys = await this.cacheManager.store.keys(namespacedPattern);
+    if (this.client) {
+      try {
+        const value = await this.client.decr(namespacedKey);
+        if (ttl && ttl > 0) {
+          await this.client.pExpire(
+            namespacedKey,
+            Math.max(1, Math.floor(ttl)),
+          );
+        }
+        this.markRedisHealthy();
+        return value;
+      } catch (error) {
+        this.warnOnce('decrement', error);
+        return 0;
+      }
     }
 
-    if (this.cacheManager.unlink) {
-      await this.cacheManager.unlink(keys);
-    } else if (this.cacheManager.store?.unlink) {
-      await this.cacheManager.store.unlink(keys);
-    } else {
-      await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+    const current = this.getLocal<number>(namespacedKey) ?? 0;
+    const next = Math.max(0, current - 1);
+    this.setLocal(namespacedKey, next, this.resolveTtlMs(ttl));
+    return next;
+  }
+
+  /**
+   * Delete every key matching a glob pattern (for example "job:list:*").
+   * Uses SCAN + UNLINK on Redis and regex matching on the in-memory fallback.
+   */
+  async delByPattern(pattern: string): Promise<void> {
+    const namespacedPattern = this.key(pattern);
+
+    if (this.client) {
+      try {
+        const matchedKeys: string[] = [];
+        for await (const entry of this.client.scanIterator({
+          MATCH: namespacedPattern,
+          COUNT: UNLINK_BATCH_SIZE,
+        })) {
+          if (Array.isArray(entry)) {
+            matchedKeys.push(...entry);
+          } else {
+            matchedKeys.push(entry);
+          }
+
+          if (matchedKeys.length >= UNLINK_BATCH_SIZE) {
+            await this.unlinkBatch(matchedKeys.splice(0, UNLINK_BATCH_SIZE));
+          }
+        }
+
+        if (matchedKeys.length > 0) {
+          await this.unlinkBatch(matchedKeys);
+        }
+        this.markRedisHealthy();
+      } catch (error) {
+        this.warnOnce('delByPattern', error);
+      }
+      return;
+    }
+
+    const matcher = this.patternToRegExp(namespacedPattern);
+    for (const key of this.localCache.keys()) {
+      if (matcher.test(key)) {
+        this.localCache.delete(key);
+      }
     }
   }
 
+  /**
+   * Take a short-lived lock (SET NX PX on Redis, or an in-process map fallback).
+   */
   async acquireLock(key: string, ttlMs: number): Promise<string | undefined> {
     const namespacedKey = this.key(`lock:${key}`);
     const token = randomUUID();
-    const client = this.cacheManager.store?.client;
-    if (client?.set) {
-      const result = await client.set(namespacedKey, token, {
-        NX: true,
-        PX: ttlMs,
-      });
-      return result === 'OK' ? token : undefined;
+    const safeTtlMs = Math.max(1, Math.floor(ttlMs));
+
+    if (this.client) {
+      try {
+        const result = await this.client.set(namespacedKey, token, {
+          NX: true,
+          PX: safeTtlMs,
+        });
+        this.markRedisHealthy();
+        return result === 'OK' ? token : undefined;
+      } catch (error) {
+        this.warnOnce('acquireLock', error);
+        // Fall back to a local lock so callers do not fail with false conflicts while Redis is down.
+        return this.acquireLocalLock(namespacedKey, token, safeTtlMs);
+      }
     }
 
-    const current = this.localLocks.get(namespacedKey);
-    if (current && current.expiresAt > Date.now()) return undefined;
-    this.localLocks.set(namespacedKey, {
-      token,
-      expiresAt: Date.now() + ttlMs,
-    });
-    return token;
+    return this.acquireLocalLock(namespacedKey, token, safeTtlMs);
   }
 
+  /**
+   * Release a lock only if the stored token matches our token.
+   */
   async releaseLock(key: string, token: string): Promise<void> {
     const namespacedKey = this.key(`lock:${key}`);
-    const client = this.cacheManager.store?.client;
-    if (client?.eval) {
-      await client.eval(
-        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-        { keys: [namespacedKey], arguments: [token] },
-      );
-      return;
+
+    if (this.client) {
+      try {
+        await this.client.eval(RELEASE_LOCK_SCRIPT, {
+          keys: [namespacedKey],
+          arguments: [token],
+        });
+        this.markRedisHealthy();
+      } catch (error) {
+        this.warnOnce('releaseLock', error);
+      }
     }
 
     if (this.localLocks.get(namespacedKey)?.token === token) {
@@ -219,7 +300,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   /**
-   * Get or set pattern - tries to get from cache, if not found, executes factory and caches result
+   * Read from cache, or run the factory once for concurrent misses (single-flight) and cache the result.
    */
   async getOrSet<T>(
     key: string,
@@ -231,22 +312,38 @@ export class RedisService implements OnModuleDestroy {
       return cached;
     }
 
-    const value = await factory();
-    await this.set(key, value, ttl);
-    return value;
+    const namespacedKey = this.key(key);
+    const existing = this.inFlight.get(namespacedKey);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+
+    const pending = (async () => {
+      const value = await factory();
+      await this.set(key, value, ttl);
+      return value;
+    })();
+
+    this.inFlight.set(namespacedKey, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.inFlight.get(namespacedKey) === pending) {
+        this.inFlight.delete(namespacedKey);
+      }
+    }
   }
 
   /**
-   * Invalidate job-related caches
+   * Invalidate job-related caches, including category job counts.
    */
   async invalidateJobCaches(jobId?: number): Promise<void> {
-    // Always invalidate menu and list caches
     await this.del(CACHE_KEYS.JOB_MENU);
     await this.delByPattern(`${CACHE_KEYS.JOB_LIST}*`);
     await this.delByPattern(`${CACHE_KEYS.JOB_SEARCH}*`);
     await this.delByPattern(`${CACHE_KEYS.JOB_BY_CATEGORY}*`);
+    await this.delByPattern(`${CACHE_KEYS.CATEGORY_DETAIL}*`);
 
-    // If specific job ID, invalidate that job's detail cache
     if (jobId) {
       await this.invalidateJobDetail(jobId);
     }
@@ -262,24 +359,31 @@ export class RedisService implements OnModuleDestroy {
   }
 
   /**
-   * Invalidate user-related caches
+   * Invalidate a user's public profile cache key ("user:profile:<id>").
+   */
+  async invalidateUserProfile(userId: number): Promise<void> {
+    await this.del(`${CACHE_KEYS.USER}profile:${userId}`);
+  }
+
+  /**
+   * Invalidate user-related public caches.
    */
   async invalidateUserCaches(userId?: number): Promise<void> {
-    await this.del(CACHE_KEYS.USER_LIST);
     await this.del(CACHE_KEYS.SKILL_LIST);
 
     if (userId) {
-      await this.del(`${CACHE_KEYS.USER}${userId}`);
-      await this.del(`${CACHE_KEYS.USER}profile:${userId}`);
+      await this.invalidateUserProfile(userId);
     }
   }
 
   /**
-   * Invalidate category-related caches
+   * Invalidate category caches and job listings that embed category/subcategory data.
    */
   async invalidateCategoryCaches(categoryId?: number): Promise<void> {
     await this.del(CACHE_KEYS.CATEGORY_LIST);
     await this.del(CACHE_KEYS.JOB_MENU);
+    await this.delByPattern(`${CACHE_KEYS.JOB_LIST}*`);
+    await this.delByPattern(`${CACHE_KEYS.JOB_BY_CATEGORY}*`);
 
     if (categoryId) {
       await this.del(`${CACHE_KEYS.CATEGORY}${categoryId}`);
@@ -288,30 +392,132 @@ export class RedisService implements OnModuleDestroy {
   }
 
   /**
-   * Invalidate comment caches for a job
+   * Invalidate comment, job detail, and job list caches (ratings and review counts appear on cards).
    */
   async invalidateCommentCaches(jobId: number): Promise<void> {
     await this.del(`${CACHE_KEYS.COMMENT_BY_JOB}${jobId}`);
-    // Also invalidate the job detail since it includes comments
     await this.invalidateJobDetail(jobId);
+    await this.delByPattern(`${CACHE_KEYS.JOB_LIST}*`);
   }
 
   /**
-   * Reset all caches
+   * Clear all cache entries in the "jobaura:cache:" namespace.
    */
   async reset(): Promise<void> {
-    if (
-      this.cacheManager.scan ||
-      this.cacheManager.store?.scan ||
-      this.cacheManager.keys ||
-      this.cacheManager.store?.keys
-    ) {
+    if (this.client) {
       await this.delByPattern('*');
-    } else if (this.cacheManager.reset) {
-      await this.cacheManager.reset();
-    } else if (this.cacheManager.store?.reset) {
-      await this.cacheManager.store.reset();
+      return;
     }
+
+    this.localCache.clear();
+  }
+
+  private async unlinkBatch(keys: string[]): Promise<void> {
+    if (!this.client || keys.length === 0) return;
+    if (this.client.unlink) {
+      await this.client.unlink(keys);
+    } else {
+      await this.client.del(keys);
+    }
+  }
+
+  private getLocal<T>(namespacedKey: string): T | undefined {
+    const entry = this.localCache.get(namespacedKey);
+    if (!entry) return undefined;
+
+    if (entry.expiresAt <= Date.now()) {
+      this.localCache.delete(namespacedKey);
+      return undefined;
+    }
+
+    // Move recently read key to the newest position (LRU order).
+    this.localCache.delete(namespacedKey);
+    this.localCache.set(namespacedKey, entry);
+    return entry.value as T;
+  }
+
+  private setLocal(namespacedKey: string, value: unknown, ttlMs: number): void {
+    const now = Date.now();
+    this.localCache.delete(namespacedKey);
+
+    if (this.localCache.size >= this.maxLocalEntries) {
+      this.pruneExpiredLocalCache(now);
+    }
+
+    while (this.localCache.size >= this.maxLocalEntries) {
+      const oldestKey = this.localCache.keys().next().value as
+        | string
+        | undefined;
+      if (oldestKey === undefined) break;
+      this.localCache.delete(oldestKey);
+    }
+
+    this.localCache.set(namespacedKey, {
+      value,
+      expiresAt: now + ttlMs,
+    });
+  }
+
+  private pruneExpiredLocalCache(now: number): void {
+    for (const [key, entry] of this.localCache) {
+      if (entry.expiresAt <= now) {
+        this.localCache.delete(key);
+      }
+    }
+  }
+
+  private acquireLocalLock(
+    namespacedKey: string,
+    token: string,
+    ttlMs: number,
+  ): string | undefined {
+    const now = Date.now();
+    this.pruneExpiredLocalLocks(now);
+
+    const current = this.localLocks.get(namespacedKey);
+    if (current && current.expiresAt > now) {
+      return undefined;
+    }
+
+    this.localLocks.set(namespacedKey, {
+      token,
+      expiresAt: now + ttlMs,
+    });
+    return token;
+  }
+
+  private pruneExpiredLocalLocks(now: number): void {
+    for (const [key, entry] of this.localLocks) {
+      if (entry.expiresAt <= now) {
+        this.localLocks.delete(key);
+      }
+    }
+  }
+
+  private resolveTtlMs(ttl?: number): number {
+    if (ttl !== undefined && ttl > 0) {
+      return Math.max(1, Math.floor(ttl));
+    }
+    return DEFAULT_CACHE_TTL_MS;
+  }
+
+  private patternToRegExp(glob: string): RegExp {
+    const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const regexBody = escaped.replace(/\*/g, '.*').replace(/\?/g, '.');
+    return new RegExp(`^${regexBody}$`);
+  }
+
+  private markRedisHealthy(): void {
+    this.redisErrorLogged = false;
+  }
+
+  private warnOnce(operation: string, error: unknown): void {
+    if (this.redisErrorLogged) return;
+    this.redisErrorLogged = true;
+    const reason = error instanceof Error ? error.message : String(error);
+    this.logger.warn(
+      `Redis cache ${operation} failed (${reason}). Degrading gracefully until Redis recovers.`,
+    );
   }
 
   private key(key: string): string {

@@ -52,74 +52,16 @@ export class JobSearchService {
 
   async findAllWithPagination(query: JobSearchQueryDto) {
     const { page = 1, pageSize = 10 } = query;
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}seller:v4:${this.jobSearchCacheKey(query)}`;
+    const load = async () => {
+      const skip = (page - 1) * pageSize;
+      const where = this.buildJobSearchWhere(query);
+      const orderBy = this.buildJobSearchOrderBy(query.sort);
 
-    return this.redisService.getOrSet(
-      cacheKey,
-      async () => {
-        const skip = (page - 1) * pageSize;
-        const where = this.buildJobSearchWhere(query);
-        const orderBy = this.buildJobSearchOrderBy(query.sort);
-
-        const [jobs, total] = await Promise.all([
-          this.prisma.job.findMany({
-            where,
-            skip,
-            take: pageSize,
-            include: {
-              user: { select: { id: true, name: true, avatar: true } },
-              subcategory: {
-                include: {
-                  category: true,
-                },
-              },
-            },
-            orderBy,
-          }),
-          this.prisma.job.count({ where }),
-        ]);
-
-        return {
-          message: 'Get jobs with pagination successfully',
-          content: {
-            data: jobs,
-            total,
-            page,
-            pageSize,
-            totalPages: Math.ceil(total / pageSize),
-          },
-        };
-      },
-      CACHE_TTL.SHORT,
-    );
-  }
-
-  async findAllWithCursor(query: JobCursorQueryDto) {
-    const limit = query.limit ?? 10;
-    const cursor = this.decodeCursor(query.cursor);
-    const cacheKey = `${CACHE_KEYS.JOB_LIST}cursor:v2:${this.jobSearchCacheKey(query)}:cursor:${query.cursor || 'first'}:limit:${limit}`;
-
-    return this.redisService.getOrSet(
-      cacheKey,
-      async () => {
-        const where = this.andJobWhere(
-          this.buildJobSearchWhere(query),
-          cursor
-            ? {
-                OR: [
-                  { createdAt: { lt: new Date(cursor.createdAt) } },
-                  {
-                    createdAt: new Date(cursor.createdAt),
-                    id: { lt: cursor.id },
-                  },
-                ],
-              }
-            : {},
-        );
-
-        const rows = await this.prisma.job.findMany({
+      const [jobs, total] = await Promise.all([
+        this.prisma.job.findMany({
           where,
-          take: limit + 1,
+          skip,
+          take: pageSize,
           include: {
             user: { select: { id: true, name: true, avatar: true } },
             subcategory: {
@@ -128,27 +70,89 @@ export class JobSearchService {
               },
             },
           },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        });
-        const hasMore = rows.length > limit;
-        const page = rows.slice(0, limit);
+          orderBy,
+        }),
+        this.prisma.job.count({ where }),
+      ]);
 
-        return {
-          message: 'Get jobs with cursor successfully',
-          content: {
-            data: page,
-            nextCursor:
-              hasMore && page.length
-                ? this.encodeCursor({
-                    createdAt: page[page.length - 1].createdAt.toISOString(),
-                    id: page[page.length - 1].id,
-                  })
-                : null,
+      return {
+        message: 'Get jobs with pagination successfully',
+        content: {
+          data: jobs,
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    };
+
+    // Only cache unfiltered pages 1-5 with the default sort to prevent unbounded cache keys.
+    if (!this.isCacheableListPage(query, page)) {
+      return load();
+    }
+
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}seller:v4:page:${page}:size:${pageSize}`;
+    return this.redisService.getOrSet(cacheKey, load, CACHE_TTL.SHORT);
+  }
+
+  async findAllWithCursor(query: JobCursorQueryDto) {
+    const limit = query.limit ?? 10;
+    const cursor = this.decodeCursor(query.cursor);
+    const load = async () => {
+      const where = this.andJobWhere(
+        this.buildJobSearchWhere(query),
+        cursor
+          ? {
+              OR: [
+                { createdAt: { lt: new Date(cursor.createdAt) } },
+                {
+                  createdAt: new Date(cursor.createdAt),
+                  id: { lt: cursor.id },
+                },
+              ],
+            }
+          : {},
+      );
+
+      const rows = await this.prisma.job.findMany({
+        where,
+        take: limit + 1,
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+          subcategory: {
+            include: {
+              category: true,
+            },
           },
-        };
-      },
-      CACHE_TTL.SHORT,
-    );
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      const hasMore = rows.length > limit;
+      const page = rows.slice(0, limit);
+
+      return {
+        message: 'Get jobs with cursor successfully',
+        content: {
+          data: page,
+          nextCursor:
+            hasMore && page.length
+              ? this.encodeCursor({
+                  createdAt: page[page.length - 1].createdAt.toISOString(),
+                  id: page[page.length - 1].id,
+                })
+              : null,
+        },
+      };
+    };
+
+    // Only cache the first unfiltered cursor page with default sort.
+    if (cursor || !this.isUnfilteredDefaultSort(query)) {
+      return load();
+    }
+
+    const cacheKey = `${CACHE_KEYS.JOB_LIST}cursor:v2:first:limit:${limit}`;
+    return this.redisService.getOrSet(cacheKey, load, CACHE_TTL.SHORT);
   }
 
   async findByCreator(creatorId: number, paginationDto: PaginationDto) {
@@ -293,35 +297,28 @@ export class JobSearchService {
   }
 
   async searchByName(title: string) {
-    const cacheKey = `${CACHE_KEYS.JOB_SEARCH}${title.toLowerCase()}`;
-
-    return this.redisService.getOrSet(
-      cacheKey,
-      async () => {
-        const jobs = await this.prisma.job.findMany({
-          where: {
-            title: {
-              contains: title,
-              mode: 'insensitive' as const,
-            },
-          },
-          include: {
-            subcategory: {
-              include: {
-                category: true,
-              },
-            },
-          },
-          take: 50,
-        });
-
-        return {
-          message: 'Search jobs successfully',
-          content: jobs,
-        };
+    // Free-text searches have unbounded cardinality, so query PostgreSQL directly.
+    const jobs = await this.prisma.job.findMany({
+      where: {
+        title: {
+          contains: title,
+          mode: 'insensitive' as const,
+        },
       },
-      CACHE_TTL.SHORT,
-    );
+      include: {
+        subcategory: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      take: 50,
+    });
+
+    return {
+      message: 'Search jobs successfully',
+      content: jobs,
+    };
   }
 
   private buildJobSearchWhere(query: JobSearchQueryDto): Prisma.JobWhereInput {
@@ -394,20 +391,20 @@ export class JobSearchService {
     return [{ id: 'desc' }];
   }
 
-  private jobSearchCacheKey(query: JobSearchQueryDto): string {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 10;
-    return [
-      `page:${page}`,
-      `size:${pageSize}`,
-      `keyword:${query.keyword?.trim() || ''}`,
-      `category:${query.categoryId ?? ''}`,
-      `subcategory:${query.subcategoryId ?? ''}`,
-      `minPrice:${query.minPrice ?? ''}`,
-      `maxPrice:${query.maxPrice ?? ''}`,
-      `minRating:${query.minRating ?? ''}`,
-      `sort:${query.sort ?? ''}`,
-    ].join(':');
+  private isCacheableListPage(query: JobSearchQueryDto, page: number): boolean {
+    return page >= 1 && page <= 5 && this.isUnfilteredDefaultSort(query);
+  }
+
+  private isUnfilteredDefaultSort(query: JobSearchQueryDto): boolean {
+    return (
+      !query.keyword?.trim() &&
+      query.categoryId === undefined &&
+      query.subcategoryId === undefined &&
+      query.minPrice === undefined &&
+      query.maxPrice === undefined &&
+      query.minRating === undefined &&
+      query.sort === undefined
+    );
   }
 
   private encodeCursor(cursor: JobCursor) {

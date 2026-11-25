@@ -4,8 +4,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ContractStatus, MilestoneStatus, Prisma } from '@prisma/client';
+import { RedisService } from '../redis/redis.service';
 import { MilestoneMove, WalletService } from '../wallet/wallet.service';
 import {
   fmtCredits,
@@ -61,6 +63,7 @@ export class ContractsService {
     private readonly wallet: WalletService,
     private readonly events: ContractEventsService,
     private readonly ending: ContractEndingService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   /**
@@ -243,6 +246,12 @@ export class ContractsService {
         );
         return { m, completed };
       },
+      afterCommit: async (contract, { completed }) => {
+        if (completed) {
+          // Completed hire count on the freelancer's public profile changed.
+          await this.redisService?.invalidateUserProfile(contract.freelancerId);
+        }
+      },
       notice: (contract, { m, completed }) => {
         const paid = `${fmtCredits(m.amount)} credits`;
         return {
@@ -373,7 +382,7 @@ export class ContractsService {
 
   /**
    * The work of a submission. The DTO checks the same; this second check keeps the rule in the
-   * service too: images only from our Cloudinary account, links only http/https (so never
+   * service too: images only from JobAura local storage, links only http/https (so never
    * `javascript:`), at most 10 of each.
    */
   private checkWork(input: SubmitWorkInput): SubmitWorkInput {

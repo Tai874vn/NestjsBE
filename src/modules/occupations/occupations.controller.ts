@@ -1,6 +1,14 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { PUBLIC_TAXONOMY_CACHE_CONTROL } from '../../common/middleware/cache-control.middleware';
 import { OccupationsService } from './occupations.service';
 import { SearchOccupationsDto } from './dto/search-occupations.dto';
 
@@ -11,12 +19,14 @@ export class OccupationsController {
 
   @Public()
   @Get()
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   search(@Query() query: SearchOccupationsDto) {
     return this.occupations.search(query.q ?? '', query.limit);
   }
 
   @Public()
   @Get(':code')
+  @Header('Cache-Control', PUBLIC_TAXONOMY_CACHE_CONTROL)
   findOne(@Param('code') code: string) {
     return this.occupations.occupation(code);
   }

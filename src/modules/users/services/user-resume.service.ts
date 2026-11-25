@@ -24,6 +24,7 @@ import {
   ResumeAiQueueService,
 } from './resume-ai-queue.service';
 import { UserProfileService } from './user-profile.service';
+import { toPublicDocumentUrl } from '../../storage/storage-paths';
 
 const ISCED_DETAILED_CODE = /^\d{4}$/;
 
@@ -154,7 +155,11 @@ export class UserResumeService {
    * jobs as the AI counts them.
    */
   private async withSharedSkills<
-    T extends { userId: number; data: Prisma.JsonValue },
+    T extends {
+      userId: number;
+      data: Prisma.JsonValue;
+      sourceFileUrl?: string | null;
+    },
   >(resume: T) {
     const skills = await this.prisma.userSkill.findMany({
       where: { userId: resume.userId },
@@ -162,8 +167,15 @@ export class UserResumeService {
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     });
     const data = asRecord(resume.data);
+    const hasSourceFileUrl = Object.prototype.hasOwnProperty.call(
+      resume,
+      'sourceFileUrl',
+    );
     return {
       ...resume,
+      ...(hasSourceFileUrl
+        ? { sourceFileUrl: toPublicDocumentUrl(resume.sourceFileUrl) }
+        : {}),
       data: {
         ...data,
         Skills: skills.map((skill) => skill.name).join(', '),
@@ -215,10 +227,10 @@ export class UserResumeService {
     await this.ensureUserExists(userId);
     const resume = await this.prisma.userResume.findUnique({
       where: { userId },
-      select: { sourceFilePublicId: true },
+      select: { sourceFilePublicId: true, sourceFileUrl: true },
     });
 
-    return resume?.sourceFilePublicId ?? null;
+    return resume?.sourceFilePublicId ?? resume?.sourceFileUrl ?? null;
   }
 
   private async ensureUserExists(userId: number) {

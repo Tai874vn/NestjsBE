@@ -1,3 +1,7 @@
+jest.mock('@sentry/nestjs', () => ({
+  captureException: jest.fn(),
+}));
+
 import {
   ArgumentsHost,
   BadRequestException,
@@ -12,6 +16,7 @@ import {
 import { ThrottlerException } from '@nestjs/throttler';
 import { WsException } from '@nestjs/websockets';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import {
   AllExceptionsFilter,
   GENERIC_SERVER_ERROR_MESSAGE,
@@ -74,6 +79,7 @@ describe('AllExceptionsFilter', () => {
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     filter = new AllExceptionsFilter();
     errorSpy = jest
       .spyOn(Logger.prototype, 'error')
@@ -470,5 +476,55 @@ describe('AllExceptionsFilter', () => {
     expect(status).not.toHaveBeenCalled();
     expect(json).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('captures 5xx errors in Sentry with requestId, method and route before sending the response', () => {
+    const order: string[] = [];
+    const captureMock = Sentry.captureException as jest.Mock;
+    captureMock.mockImplementationOnce(() => {
+      order.push('sentry');
+      return 'event-1';
+    });
+
+    const { host, status, json } = createHttpHost({
+      requestId: 'req-sentry-500',
+      method: 'POST',
+      originalUrl: '/api/contracts/42?token=hidden',
+    });
+    json.mockImplementationOnce(() => {
+      order.push('response');
+    });
+
+    const failure = new Error('database connection dropped');
+    filter.catch(failure, host);
+
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    expect(captureMock).toHaveBeenCalledWith(failure, {
+      tags: {
+        requestId: 'req-sentry-500',
+        method: 'POST',
+        route: '/api/contracts/42',
+      },
+    });
+    expect(status).toHaveBeenCalledWith(500);
+    expect(order).toEqual(['sentry', 'response']);
+  });
+
+  it('never captures 4xx client errors in Sentry', () => {
+    const captureMock = Sentry.captureException as jest.Mock;
+    const cases: unknown[] = [
+      new BadRequestException('Invalid input'),
+      new UnauthorizedException('Missing token'),
+      new NotFoundException('Job not found'),
+      new ThrottlerException(),
+      prismaKnownError('P2002', 'Duplicate key'),
+    ];
+
+    for (const err of cases) {
+      const { host } = createHttpHost({ requestId: 'req-4xx' });
+      filter.catch(err, host);
+    }
+
+    expect(captureMock).not.toHaveBeenCalled();
   });
 });

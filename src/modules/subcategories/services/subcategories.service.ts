@@ -1,15 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { CreateSubcategoryDto } from '../dto/create-subcategory.dto';
 import { UpdateSubcategoryDto } from '../dto/update-subcategory.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { StorageService } from '../../storage/storage.service';
 
 @Injectable()
 export class SubcategoriesService {
   constructor(
     private prisma: PrismaService,
     private redisService: RedisService,
+    @Optional() private readonly storage?: StorageService,
   ) {}
 
   async create(createDto: CreateSubcategoryDto) {
@@ -115,8 +117,21 @@ export class SubcategoriesService {
       },
     });
 
-    // Invalidate category caches
+    // Clean up an old local image when the update replaces or clears it.
+    if (
+      updateDto.image !== undefined &&
+      subcategory.image &&
+      subcategory.image !== updated.image
+    ) {
+      await this.storage?.deleteImage(subcategory.image);
+    }
+
+    // Invalidate both the old and new category caches if the subcategory moved.
+    const nextCategoryId = updateDto.categoryId ?? updated.categoryId;
     await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
+    if (nextCategoryId && nextCategoryId !== subcategory.categoryId) {
+      await this.redisService.invalidateCategoryCaches(nextCategoryId);
+    }
 
     return {
       message: 'Subcategory updated successfully',
@@ -136,6 +151,10 @@ export class SubcategoriesService {
     await this.prisma.subcategory.delete({
       where: { id },
     });
+
+    if (subcategory.image) {
+      await this.storage?.deleteImage(subcategory.image);
+    }
 
     // Invalidate category caches
     await this.redisService.invalidateCategoryCaches(subcategory.categoryId);
@@ -158,6 +177,10 @@ export class SubcategoriesService {
       where: { id },
       data: { image: filename },
     });
+
+    if (subcategory.image && subcategory.image !== filename) {
+      await this.storage?.deleteImage(subcategory.image);
+    }
 
     // Invalidate category caches
     await this.redisService.invalidateCategoryCaches(subcategory.categoryId);

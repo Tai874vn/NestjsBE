@@ -2,9 +2,11 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/redis.service';
+import { StorageService } from '../../storage/storage.service';
 import { UpsertPortfolioItemDto } from '../dto/profile.dto';
 import { ProfileCompletionService } from './profile-completion.service';
 
@@ -14,6 +16,7 @@ export class UserPortfolioService {
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
     private readonly profileCompletionService: ProfileCompletionService,
+    @Optional() private readonly storage?: StorageService,
   ) {}
 
   async createPortfolioItem(userId: number, dto: UpsertPortfolioItemDto) {
@@ -44,7 +47,7 @@ export class UserPortfolioService {
     itemId: number,
     dto: UpsertPortfolioItemDto,
   ) {
-    await this.ensurePortfolioOwnership(userId, itemId);
+    const existing = await this.ensurePortfolioOwnership(userId, itemId);
 
     const item = await this.prisma.userPortfolioItem.update({
       where: { id: itemId },
@@ -57,6 +60,15 @@ export class UserPortfolioService {
       },
     });
 
+    // Clean up an old local image if it was replaced or cleared.
+    if (
+      dto.image !== undefined &&
+      existing.image &&
+      existing.image !== item.image
+    ) {
+      await this.storage?.deleteImage(existing.image);
+    }
+
     await this.profileCompletionService.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
 
@@ -67,11 +79,15 @@ export class UserPortfolioService {
   }
 
   async deletePortfolioItem(userId: number, itemId: number) {
-    await this.ensurePortfolioOwnership(userId, itemId);
+    const existing = await this.ensurePortfolioOwnership(userId, itemId);
 
     await this.prisma.userPortfolioItem.delete({
       where: { id: itemId },
     });
+
+    if (existing.image) {
+      await this.storage?.deleteImage(existing.image);
+    }
 
     await this.profileCompletionService.updateProfileCompletion(userId);
     await this.redisService.invalidateUserCaches(userId);
@@ -95,7 +111,7 @@ export class UserPortfolioService {
   private async ensurePortfolioOwnership(userId: number, itemId: number) {
     const item = await this.prisma.userPortfolioItem.findUnique({
       where: { id: itemId },
-      select: { userId: true },
+      select: { userId: true, image: true },
     });
 
     if (!item) {
@@ -105,5 +121,7 @@ export class UserPortfolioService {
     if (item.userId !== userId) {
       throw new ForbiddenException('You can only update your own portfolio');
     }
+
+    return item;
   }
 }

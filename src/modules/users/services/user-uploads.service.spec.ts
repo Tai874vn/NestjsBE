@@ -1,12 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import { UserUploadsService } from './user-uploads.service';
 
-const cloudinary = {
+const storage = {
   uploadDocument: jest.fn(),
   uploadImage: jest.fn(),
   deleteDocument: jest.fn(),
   deleteImage: jest.fn(),
-  extractPublicId: jest.fn(),
+  extractKey: jest.fn(),
 };
 
 const profile = {
@@ -22,13 +22,15 @@ const resume = {
 
 function createService() {
   return new UserUploadsService(
-    cloudinary as never,
+    storage as never,
     profile as never,
     resume as never,
   );
 }
 
-function file(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
+function file(
+  overrides: Partial<Express.Multer.File> = {},
+): Express.Multer.File {
   return {
     originalname: 'resume.pdf',
     mimetype: 'application/pdf',
@@ -45,35 +47,50 @@ function file(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File
 }
 
 describe('UserUploadsService', () => {
+  const docKey = 'documents/resumes/550e8400-e29b-41d4-a716-446655440000.pdf';
+  const oldDocKey =
+    'documents/resumes/11111111-1111-4111-8111-111111111111.pdf';
+  const avatarKey = 'images/avatars/550e8400-e29b-41d4-a716-446655440000.webp';
+  const oldAvatarKey =
+    'images/avatars/22222222-2222-4222-8222-222222222222.webp';
+
   beforeEach(() => {
     jest.clearAllMocks();
-    cloudinary.uploadDocument.mockResolvedValue({
-      secure_url: 'https://res.cloudinary.com/demo/raw/upload/resumes/resume.pdf',
-      public_id: 'resumes/resume',
+    storage.uploadDocument.mockResolvedValue({
+      url: docKey,
+      key: docKey,
+      mimeType: 'application/pdf',
+      size: 1024,
     });
-    cloudinary.uploadImage.mockResolvedValue({
-      secure_url: 'https://res.cloudinary.com/demo/image/upload/avatars/user.png',
-      public_id: 'avatars/user',
+    storage.uploadImage.mockResolvedValue({
+      url: `/uploads/${avatarKey}`,
+      key: avatarKey,
+      mimeType: 'image/webp',
+      size: 512,
     });
-    cloudinary.deleteDocument.mockResolvedValue(undefined);
-    cloudinary.deleteImage.mockResolvedValue(undefined);
-    cloudinary.extractPublicId.mockReturnValue(null);
+    storage.deleteDocument.mockResolvedValue(undefined);
+    storage.deleteImage.mockResolvedValue(undefined);
+    storage.extractKey.mockReturnValue(null);
     resume.getResumeFilePublicId.mockResolvedValue(null);
     profile.getUploadReferences.mockResolvedValue({
       avatar: null,
       coverImage: null,
     });
     resume.uploadResumeFile.mockResolvedValue({ content: { id: 1 } });
-    profile.uploadAvatar.mockResolvedValue({ content: { avatar: 'url' } });
-    profile.uploadCover.mockResolvedValue({ content: { coverImage: 'url' } });
+    profile.uploadAvatar.mockResolvedValue({
+      content: { avatar: `/uploads/${avatarKey}` },
+    });
+    profile.uploadCover.mockResolvedValue({
+      content: { coverImage: `/uploads/${avatarKey}` },
+    });
   });
 
-  it('requires a resume file before uploading to Cloudinary', async () => {
+  it('requires a resume file before uploading to storage', async () => {
     await expect(createService().uploadResumeFile(1)).rejects.toBeInstanceOf(
       BadRequestException,
     );
 
-    expect(cloudinary.uploadDocument).not.toHaveBeenCalled();
+    expect(storage.uploadDocument).not.toHaveBeenCalled();
   });
 
   it('deletes uploaded resume document when database persistence fails', async () => {
@@ -83,7 +100,7 @@ describe('UserUploadsService', () => {
       'db failed',
     );
 
-    expect(cloudinary.deleteDocument).toHaveBeenCalledWith('resumes/resume');
+    expect(storage.deleteDocument).toHaveBeenCalledWith(docKey);
   });
 
   it('deletes uploaded avatar image when profile update fails', async () => {
@@ -93,7 +110,7 @@ describe('UserUploadsService', () => {
       createService().uploadAvatar(1, file({ mimetype: 'image/png' })),
     ).rejects.toThrow('db failed');
 
-    expect(cloudinary.deleteImage).toHaveBeenCalledWith('avatars/user');
+    expect(storage.deleteImage).toHaveBeenCalledWith(avatarKey);
   });
 
   it('deletes uploaded cover image when profile update fails', async () => {
@@ -103,26 +120,33 @@ describe('UserUploadsService', () => {
       createService().uploadCover(1, file({ mimetype: 'image/png' })),
     ).rejects.toThrow('db failed');
 
-    expect(cloudinary.deleteImage).toHaveBeenCalledWith('avatars/user');
+    expect(storage.deleteImage).toHaveBeenCalledWith(avatarKey);
   });
 
   it('deletes the previous resume only after its replacement is saved', async () => {
-    resume.getResumeFilePublicId.mockResolvedValue('resumes/old');
+    resume.getResumeFilePublicId.mockResolvedValue(oldDocKey);
 
     await createService().uploadResumeFile(1, file());
 
-    expect(cloudinary.deleteDocument).toHaveBeenCalledWith('resumes/old');
+    expect(resume.uploadResumeFile).toHaveBeenCalledWith(1, {
+      originalName: 'resume.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      url: docKey,
+      publicId: docKey,
+    });
+    expect(storage.deleteDocument).toHaveBeenCalledWith(oldDocKey);
   });
 
   it('deletes the previous avatar only after its replacement is saved', async () => {
     profile.getUploadReferences.mockResolvedValue({
-      avatar: 'https://res.cloudinary.com/demo/image/upload/v1/avatars/old.png',
+      avatar: `/uploads/${oldAvatarKey}`,
       coverImage: null,
     });
-    cloudinary.extractPublicId.mockReturnValue('avatars/old');
+    storage.extractKey.mockReturnValue(oldAvatarKey);
 
     await createService().uploadAvatar(1, file({ mimetype: 'image/png' }));
 
-    expect(cloudinary.deleteImage).toHaveBeenCalledWith('avatars/old');
+    expect(storage.deleteImage).toHaveBeenCalledWith(oldAvatarKey);
   });
 });

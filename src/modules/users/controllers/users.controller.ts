@@ -13,10 +13,8 @@ import {
   ParseIntPipe,
   UseGuards,
   ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../services/users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -37,7 +35,10 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
 import { Role } from '../../../common/constants/roles';
-import { imageFileFilter } from '../../../common/image-file-filter';
+import {
+  documentUploadOptions,
+  imageUploadOptions,
+} from '../../storage/upload-options';
 import { CandidateDirectoryService } from '../services/candidate-directory.service';
 import { UserPortfolioService } from '../services/user-portfolio.service';
 import { UserProfileService } from '../services/user-profile.service';
@@ -126,30 +127,7 @@ export class UsersController {
 
   @Post('me/resume/file')
   @ApiOperation({ summary: 'Upload CV/resume file for current user' })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
-      fileFilter: (_req, file, callback) => {
-        const allowedMimeTypes = new Set([
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        ]);
-
-        if (!allowedMimeTypes.has(file.mimetype)) {
-          return callback(
-            new BadRequestException(
-              'Only PDF, DOC, and DOCX files are allowed',
-            ),
-            false,
-          );
-        }
-
-        callback(null, true);
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', documentUploadOptions))
   async uploadResumeFile(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
@@ -261,13 +239,7 @@ export class UsersController {
 
   @Post('upload-avatar')
   @ApiOperation({ summary: 'Upload avatar for current user' })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   async uploadAvatar(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,
@@ -277,13 +249,7 @@ export class UsersController {
 
   @Post('upload-cover')
   @ApiOperation({ summary: 'Upload cover image for current user' })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: imageFileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   async uploadCover(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: ValidatedUser,

@@ -1,15 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { StorageService } from '../../storage/storage.service';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     private prisma: PrismaService,
     private redisService: RedisService,
+    @Optional() private readonly storage?: StorageService,
   ) {}
 
   async create(createDto: CreateCategoryDto) {
@@ -140,6 +142,9 @@ export class CategoriesService {
   async remove(id: number) {
     const category = await this.prisma.category.findUnique({
       where: { id },
+      include: {
+        subcategories: { select: { image: true } },
+      },
     });
 
     if (!category) {
@@ -149,6 +154,13 @@ export class CategoriesService {
     await this.prisma.category.delete({
       where: { id },
     });
+
+    // Clean up local images of subcategories removed by the cascade.
+    for (const subcategory of category.subcategories ?? []) {
+      if (subcategory.image) {
+        await this.storage?.deleteImage(subcategory.image);
+      }
+    }
 
     // Invalidate category caches
     await this.redisService.invalidateCategoryCaches(id);

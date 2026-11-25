@@ -6,6 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../../prisma.service';
 import {
   ObservabilityService,
@@ -218,6 +219,9 @@ export class NotificationsService {
       this.logger.error(
         `Failed to create notification: ${error instanceof Error ? error.message : String(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'notifications.create' },
+      });
       return null;
     }
   }

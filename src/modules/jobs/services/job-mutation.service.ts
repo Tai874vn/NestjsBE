@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
@@ -14,6 +15,7 @@ import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobCacheInvalidationService } from './job-cache-invalidation.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { NotificationTemplateService } from '../../notifications/services/notification-template.service';
+import { StorageService } from '../../storage/storage.service';
 
 /** Said (409) when a service with contracts is deleted. */
 export const SERVICE_HAS_CONTRACTS =
@@ -45,8 +47,9 @@ export class JobMutationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheInvalidation: JobCacheInvalidationService,
-    private readonly notifications?: NotificationsService,
-    private readonly templates?: NotificationTemplateService,
+    @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly templates?: NotificationTemplateService,
+    @Optional() private readonly storage?: StorageService,
   ) {}
 
   async create(createDto: CreateJobDto, userId: number) {
@@ -169,6 +172,10 @@ export class JobMutationService {
       return { title: rows[0].title, open };
     });
 
+    if (job.image) {
+      await this.storage?.deleteImage(job.image);
+    }
+
     await this.cacheInvalidation.invalidateJobMutation(job.creatorId, id);
     await this.tellOpenProposals(open, userId, title);
 
@@ -223,7 +230,12 @@ export class JobMutationService {
   async ensureCanManageJob(id: number, userId: number, userRole: Role) {
     const job = await this.prisma.job.findUnique({
       where: { id },
-      select: { creatorId: true, workMode: true, serviceArea: true },
+      select: {
+        creatorId: true,
+        workMode: true,
+        serviceArea: true,
+        image: true,
+      },
     });
 
     if (!job) {
@@ -249,6 +261,10 @@ export class JobMutationService {
       where: { id },
       data: { image: filename },
     });
+
+    if (job.image && job.image !== filename) {
+      await this.storage?.deleteImage(job.image);
+    }
 
     await this.cacheInvalidation.invalidateJobMutation(job.creatorId, id);
 

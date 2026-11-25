@@ -51,6 +51,8 @@ export type ContractStep<R> = {
   write: (input: ContractStepInput) => Promise<R>;
   /** What the other side is told after the save (null: nothing). */
   notice: (contract: LockedContract, result: R) => ContractStepNotice | null;
+  /** Optional post-commit side effect (for example cache invalidation). */
+  afterCommit?: (contract: LockedContract, result: R) => Promise<void>;
   message: string;
 };
 
@@ -127,7 +129,10 @@ export class ContractStepService {
       },
     );
 
-    // After commit: tell the other side. announce() never throws.
+    // After commit: run optional post-commit hooks and tell the other side. announce() never throws.
+    if (step.afterCommit) {
+      await step.afterCommit(contract, result);
+    }
     const notice = step.notice(contract, result);
     if (notice) {
       const client = side === 'client';

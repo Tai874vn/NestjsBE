@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -10,7 +11,9 @@ import {
   MilestoneStatus,
   ProposalStatus,
 } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { fmtCredits } from './contract-rules';
 import { ContractEndingService, EndResult } from './contract-ending.service';
 import {
@@ -108,6 +111,7 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
     private readonly events: ContractEventsService,
     private readonly ending: ContractEndingService,
     private readonly config: ConfigService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   // onModuleInit / onModuleDestroy are lifecycle hooks (functions NestJS calls when the app
@@ -151,6 +155,9 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
         'Contract sweep failed',
         error instanceof Error ? error.stack : String(error),
       );
+      Sentry.captureException(error, {
+        tags: { context: 'contract-sweeper' },
+      });
     } finally {
       this.running = false;
     }
@@ -346,6 +353,13 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
     });
     if (!done) return null;
 
+    // After commit: clear the freelancer's public profile cache when a contract completes.
+    if (done.outcome.act === 'completed') {
+      await this.redisService?.invalidateUserProfile(
+        done.contract.freelancerId,
+      );
+    }
+
     // After commit. announce() never throws.
     for (const notice of this.notices(done.contract, done.outcome, grace)) {
       await this.events.announce(notice);
@@ -521,5 +535,8 @@ export class ContractSweeperService implements OnModuleInit, OnModuleDestroy {
       `Sweep of ${where} failed: ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error.stack : undefined,
     );
+    Sentry.captureException(error, {
+      tags: { context: 'contract-sweeper.item' },
+    });
   }
 }

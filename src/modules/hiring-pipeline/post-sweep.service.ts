@@ -5,6 +5,7 @@ import {
   Prisma,
   PrismaClient,
 } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { isActive } from './application-transitions';
 import { HiringEventsService } from './hiring-events.service';
 
@@ -155,6 +156,9 @@ export class PostSweepService {
       this.logger.error(
         `Could not load swept applications of post ${input.postId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'hiring-post-sweep.announce' },
+      });
       return;
     }
     const message = SWEEP_MESSAGES[input.reason](input.postTitle);

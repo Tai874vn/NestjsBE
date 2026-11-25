@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InterviewMode, Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/nestjs';
 import { ChatGateway } from '../chat/gateways/chat.gateway';
 import { ChatMessageFanoutService } from '../chat/services/chat-message-fanout.service';
 import { ChatService } from '../chat/services/chat.service';
@@ -164,6 +165,9 @@ export class HiringEventsService {
       this.logger.error(
         `Hiring notification failed for application ${input.applicationId}: ${this.errorText(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'hiring-events.notification' },
+      });
     }
 
     if (!input.chat || !input.chatBetween) return;
@@ -183,6 +187,9 @@ export class HiringEventsService {
       this.logger.error(
         `Hiring chat message failed for application ${input.applicationId}: ${this.errorText(error)}`,
       );
+      Sentry.captureException(error, {
+        tags: { context: 'hiring-events.chat' },
+      });
     }
   }
 

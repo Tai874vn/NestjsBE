@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { CloudinaryService } from '../../cloudinary/cloudinary.service';
+import { StorageService } from '../../storage/storage.service';
 import { UserProfileService } from './user-profile.service';
 import { UserResumeService } from './user-resume.service';
 
 @Injectable()
 export class UserUploadsService {
   constructor(
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly storageService: StorageService,
     private readonly userProfileService: UserProfileService,
     private readonly userResumeService: UserResumeService,
   ) {}
@@ -16,23 +16,23 @@ export class UserUploadsService {
       throw new BadRequestException('Resume file is required');
     }
 
-    const previousPublicId =
+    const previousKey =
       await this.userResumeService.getResumeFilePublicId(userId);
-    const result = await this.cloudinaryService.uploadDocument(file, 'resumes');
+    const result = await this.storageService.uploadDocument(file, 'resumes');
     try {
       const response = await this.userResumeService.uploadResumeFile(userId, {
         originalName: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-        url: result.secure_url,
-        publicId: result.public_id,
+        mimeType: result.mimeType,
+        size: result.size,
+        url: result.key,
+        publicId: result.key,
       });
-      if (previousPublicId && previousPublicId !== result.public_id) {
-        await this.cloudinaryService.deleteDocument(previousPublicId);
+      if (previousKey && previousKey !== result.key) {
+        await this.storageService.deleteDocument(previousKey);
       }
       return response;
     } catch (error) {
-      await this.cloudinaryService.deleteDocument(result.public_id);
+      await this.storageService.deleteDocument(result.key);
       throw error;
     }
   }
@@ -43,21 +43,21 @@ export class UserUploadsService {
     }
 
     const previous = await this.userProfileService.getUploadReferences(userId);
-    const previousPublicId = previous.avatar
-      ? this.cloudinaryService.extractPublicId(previous.avatar)
+    const previousKey = previous.avatar
+      ? this.storageService.extractKey(previous.avatar)
       : null;
-    const result = await this.cloudinaryService.uploadImage(file, 'avatars');
+    const result = await this.storageService.uploadImage(file, 'avatars');
     try {
       const response = await this.userProfileService.uploadAvatar(
         userId,
-        result.secure_url,
+        result.url,
       );
-      if (previousPublicId && previousPublicId !== result.public_id) {
-        await this.cloudinaryService.deleteImage(previousPublicId);
+      if (previousKey && previousKey !== result.key) {
+        await this.storageService.deleteImage(previousKey);
       }
       return response;
     } catch (error) {
-      await this.cloudinaryService.deleteImage(result.public_id);
+      await this.storageService.deleteImage(result.key);
       throw error;
     }
   }
@@ -68,21 +68,21 @@ export class UserUploadsService {
     }
 
     const previous = await this.userProfileService.getUploadReferences(userId);
-    const previousPublicId = previous.coverImage
-      ? this.cloudinaryService.extractPublicId(previous.coverImage)
+    const previousKey = previous.coverImage
+      ? this.storageService.extractKey(previous.coverImage)
       : null;
-    const result = await this.cloudinaryService.uploadImage(file, 'covers');
+    const result = await this.storageService.uploadImage(file, 'covers');
     try {
       const response = await this.userProfileService.uploadCover(
         userId,
-        result.secure_url,
+        result.url,
       );
-      if (previousPublicId && previousPublicId !== result.public_id) {
-        await this.cloudinaryService.deleteImage(previousPublicId);
+      if (previousKey && previousKey !== result.key) {
+        await this.storageService.deleteImage(previousKey);
       }
       return response;
     } catch (error) {
-      await this.cloudinaryService.deleteImage(result.public_id);
+      await this.storageService.deleteImage(result.key);
       throw error;
     }
   }
