@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import type { Server } from 'node:http';
 import request from 'supertest';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../storage/services/storage.service';
 import { PostsService } from '../services/posts.service';
 import { PostsController } from './posts.controller';
 

@@ -18,7 +18,7 @@ import {
   ProposalListQueryDto,
   VersionBodyDto,
 } from '../dto/proposal.dto';
-import { ProposalsService } from '../proposals.service';
+import { ProposalsService } from '../services/proposals.service';
 
 /**
  * Proposals on services (any role). Every action answers { message, content: ProposalDetail }.

@@ -7,7 +7,7 @@ import {
   RELATED_FROM,
   findOccupation,
   occupationRelatedness,
-} from '../../occupations/occupation-catalogue';
+} from '../../occupations/utils/occupation-catalogue';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 
 describe('CandidateDirectoryService', () => {

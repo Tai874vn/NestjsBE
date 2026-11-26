@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RedisService } from '../../redis/redis.service';
+import { RedisService } from '../../redis/services/redis.service';
 
 export const RECOMMENDATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const RECOMMENDATION_RUN_LOCK_TTL_MS = 5 * 60 * 1000;

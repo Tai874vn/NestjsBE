@@ -19,8 +19,8 @@ import {
   InterviewTimesDto,
   RequestInterviewDto,
 } from '../dto/interview.dto';
-import { InterviewsService } from '../interviews.service';
-import { VideoCallService } from '../video-call.service';
+import { InterviewsService } from '../services/interviews.service';
+import { VideoCallService } from '../services/video-call.service';
 
 /**
  * Interviews: the request (on an application) and the actions on one interview.

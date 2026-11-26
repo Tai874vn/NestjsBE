@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
-import { FilesController } from './files.controller';
-import { StorageService } from './storage.service';
+import { FilesController } from './controllers/files.controller';
+import { StorageService } from './services/storage.service';
 
 @Global()
 @Module({

@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AccountEmailsService } from './account-emails.service';
-import { EmailTokensService } from './email-tokens.service';
-import { MailService } from './mail.service';
+import { AccountEmailsService } from './services/account-emails.service';
+import { EmailTokensService } from './services/email-tokens.service';
+import { MailService } from './services/mail.service';
 
 @Module({
   imports: [ConfigModule],

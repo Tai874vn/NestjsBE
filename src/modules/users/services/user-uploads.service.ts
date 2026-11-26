@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../storage/services/storage.service';
 import { UserProfileService } from './user-profile.service';
 import { UserResumeService } from './user-resume.service';
 

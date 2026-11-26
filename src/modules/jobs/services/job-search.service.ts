@@ -6,7 +6,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/services/redis.service';
 import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
 import { JobSearchQueryDto, JobSearchSort } from '../dto/job-search-query.dto';
 

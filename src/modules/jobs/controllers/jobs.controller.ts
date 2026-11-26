@@ -24,8 +24,8 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { StorageService } from '../../storage/storage.service';
-import { imageUploadOptions } from '../../storage/upload-options';
+import { StorageService } from '../../storage/services/storage.service';
+import { imageUploadOptions } from '../../storage/utils/upload-options';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
 

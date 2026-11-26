@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { ContractStatus } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/services/redis.service';
 import {
   ReplaceProfileCertificationsDto,
   ReplaceProfileSkillsDto,

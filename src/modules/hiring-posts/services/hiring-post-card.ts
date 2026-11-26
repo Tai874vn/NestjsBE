@@ -1,5 +1,5 @@
 import { HiringApplicationStatus, Prisma, PrismaClient } from '@prisma/client';
-import { findOccupation } from '../../occupations/occupation-catalogue';
+import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 
 // The hiring post "card" (the post as the app shows it), shared by the hiring posts pages and the
 // application detail of the hiring pipeline, so both show the same numbers.

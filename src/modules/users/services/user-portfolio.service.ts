@@ -5,8 +5,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService } from '../../redis/redis.service';
-import { StorageService } from '../../storage/storage.service';
+import { RedisService } from '../../redis/services/redis.service';
+import { StorageService } from '../../storage/services/storage.service';
 import { UpsertPortfolioItemDto } from '../dto/profile.dto';
 import { ProfileCompletionService } from './profile-completion.service';
 

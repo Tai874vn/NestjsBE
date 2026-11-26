@@ -38,7 +38,7 @@ import { Role } from '../../../common/constants/roles';
 import {
   documentUploadOptions,
   imageUploadOptions,
-} from '../../storage/upload-options';
+} from '../../storage/utils/upload-options';
 import { CandidateDirectoryService } from '../services/candidate-directory.service';
 import { UserPortfolioService } from '../services/user-portfolio.service';
 import { UserProfileService } from '../services/user-profile.service';

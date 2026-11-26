@@ -15,7 +15,7 @@ import { UpdateJobDto } from '../dto/update-job.dto';
 import { JobCacheInvalidationService } from './job-cache-invalidation.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { NotificationTemplateService } from '../../notifications/services/notification-template.service';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../storage/services/storage.service';
 
 /** Said (409) when a service with contracts is deleted. */
 export const SERVICE_HAS_CONTRACTS =

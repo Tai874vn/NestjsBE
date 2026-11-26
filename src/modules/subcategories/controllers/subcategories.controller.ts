@@ -23,8 +23,8 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Role } from '../../../common/constants/roles';
-import { StorageService } from '../../storage/storage.service';
-import { imageUploadOptions } from '../../storage/upload-options';
+import { StorageService } from '../../storage/services/storage.service';
+import { imageUploadOptions } from '../../storage/utils/upload-options';
 
 @Controller('subcategories')
 @UseGuards(JwtAuthGuard, RolesGuard)

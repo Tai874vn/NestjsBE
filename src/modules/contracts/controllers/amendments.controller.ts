@@ -9,7 +9,7 @@ import {
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ValidatedUser } from '../../../types';
-import { AmendmentsService } from '../amendments.service';
+import { AmendmentsService } from '../services/amendments.service';
 import { CreateAmendmentDto, DeclineAmendmentDto } from '../dto/amendment.dto';
 
 /**

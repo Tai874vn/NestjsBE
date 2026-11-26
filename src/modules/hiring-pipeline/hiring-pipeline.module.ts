@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { ApplicationPipelineService } from './application-pipeline.service';
-import { ApplicationsQueryService } from './applications-query.service';
-import { ApplicationsService } from './applications.service';
+import { ApplicationPipelineService } from './services/application-pipeline.service';
+import { ApplicationsQueryService } from './services/applications-query.service';
+import { ApplicationsService } from './services/applications.service';
 import { ApplicationsController } from './controllers/applications.controller';
 import { InterviewsController } from './controllers/interviews.controller';
-import { HiringEventsService } from './hiring-events.service';
-import { InterviewsService } from './interviews.service';
-import { PostSweepService } from './post-sweep.service';
-import { VideoCallService } from './video-call.service';
+import { HiringEventsService } from './services/hiring-events.service';
+import { InterviewsService } from './services/interviews.service';
+import { PostSweepService } from './services/post-sweep.service';
+import { VideoCallService } from './services/video-call.service';
 
 /**
  * Hiring pipeline: applications → interviews → offers → hired.

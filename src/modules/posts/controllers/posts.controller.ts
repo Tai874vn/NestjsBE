@@ -17,8 +17,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { ValidatedUser } from '../../../types';
-import { StorageService } from '../../storage/storage.service';
-import { imageUploadOptions } from '../../storage/upload-options';
+import { StorageService } from '../../storage/services/storage.service';
+import { imageUploadOptions } from '../../storage/utils/upload-options';
 import {
   CommentsQueryDto,
   CreatePostCommentDto,

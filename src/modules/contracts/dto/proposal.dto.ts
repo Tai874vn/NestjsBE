@@ -22,7 +22,7 @@ import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
-import { isLocalImageUrl } from '../../storage/storage-paths';
+import { isLocalImageUrl } from '../../storage/utils/storage-paths';
 
 export const MAX_REFERENCES = 10;
 export const PROPOSAL_MAX_PAGE_SIZE = 50;

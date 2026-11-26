@@ -3,7 +3,7 @@ import {
   cleanResumeJobs,
   resumeOccupation,
 } from '../../users/services/resume-career';
-import { findOccupation } from '../../occupations/occupation-catalogue';
+import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 import { Injectable } from '@nestjs/common';
 
 export type UserForRecommendation = {

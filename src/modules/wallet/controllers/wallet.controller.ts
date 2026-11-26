@@ -13,8 +13,8 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ValidatedUser } from '../../../types';
 import { TopUpDto } from '../dto/top-up.dto';
 import { WalletLedgerQueryDto } from '../dto/wallet-ledger-query.dto';
-import { TopUpsService } from '../top-ups.service';
-import { WalletService } from '../wallet.service';
+import { TopUpsService } from '../services/top-ups.service';
+import { WalletService } from '../services/wallet.service';
 
 /**
  * The signed-in user's own demo wallet (any role). Every answer is { message, content }.

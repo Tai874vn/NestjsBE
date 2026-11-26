@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/services/redis.service';
 import {
   AiRecommendationClient,
   AiSkillSummary,

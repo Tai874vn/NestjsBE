@@ -3,7 +3,7 @@ import { HEADERS_METADATA } from '@nestjs/common/constants';
 import type { Request, Response } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { CategoriesController } from '../../modules/categories/controllers/categories.controller';
-import { OccupationsController } from '../../modules/occupations/occupations.controller';
+import { OccupationsController } from '../../modules/occupations/controllers/occupations.controller';
 import { SkillController } from '../../modules/skill/controllers/skill.controller';
 import {
   applyApiCacheControl,

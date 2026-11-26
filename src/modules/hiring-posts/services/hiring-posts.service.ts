@@ -27,7 +27,7 @@ import { ApplyHiringPostDto } from '../dto/apply-hiring-post.dto';
 import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { PostApplicationsQueryDto } from '../dto/post-applications-query.dto';
-import { findOccupation } from '../../occupations/occupation-catalogue';
+import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 import {
   emptyPipeline,
   hiringPostInclude,
@@ -39,16 +39,16 @@ import {
   ViewerApplication,
   viewerApplicationSelect,
 } from './hiring-post-card';
-import { HiringEventsService } from '../../hiring-pipeline/hiring-events.service';
+import { HiringEventsService } from '../../hiring-pipeline/services/hiring-events.service';
 import {
   interviewsInclude,
   resumeSelect,
   toResumeSummary,
-} from '../../hiring-pipeline/applications-query.service';
+} from '../../hiring-pipeline/services/applications-query.service';
 import {
   PostSweepService,
   SweepReason,
-} from '../../hiring-pipeline/post-sweep.service';
+} from '../../hiring-pipeline/services/post-sweep.service';
 
 /** The list filters a facet can leave out to count its own choices. */
 type FacetGroup =

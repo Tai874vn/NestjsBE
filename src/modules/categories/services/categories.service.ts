@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/services/redis.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../storage/services/storage.service';
 
 @Injectable()
 export class CategoriesService {

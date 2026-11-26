@@ -21,7 +21,7 @@ import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
-import { isLocalImageUrl } from '../../storage/storage-paths';
+import { isLocalImageUrl } from '../../storage/utils/storage-paths';
 
 /** Allow either our own local `/uploads/images/<folder>/<uuid>.webp` path or an external http(s) URL. */
 export function isPortfolioImageUrl(value: unknown): boolean {

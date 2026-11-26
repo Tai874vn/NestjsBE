@@ -18,7 +18,7 @@ import {
   optionalTrimString,
   trimString,
 } from '../../../common/dto/string.transforms';
-import { AmendmentChangeParsed } from '../contract-rules';
+import { AmendmentChangeParsed } from '../utils/contract-rules';
 import { MAX_MILESTONE_CREDITS } from './proposal.dto';
 
 export const AMENDMENT_OPS = ['add', 'move', 'amount'] as const;

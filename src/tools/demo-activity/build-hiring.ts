@@ -1,5 +1,5 @@
-import { formatVietnamTime } from '../../modules/hiring-pipeline/interview-times';
-import type { HiringEventType } from '../../modules/hiring-pipeline/hiring-events.service';
+import { formatVietnamTime } from '../../modules/hiring-pipeline/utils/interview-times';
+import type { HiringEventType } from '../../modules/hiring-pipeline/services/hiring-events.service';
 import {
   DAY,
   HOUR,

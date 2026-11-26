@@ -1,4 +1,4 @@
-import type { HiringEventType } from '../../modules/hiring-pipeline/hiring-events.service';
+import type { HiringEventType } from '../../modules/hiring-pipeline/services/hiring-events.service';
 import type {
   ContractFact,
   LedgerFact,

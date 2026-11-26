@@ -10,7 +10,7 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { buildCorsOptions } from './common/config/cors-options';
 import { applyApiCacheControl } from './common/middleware/cache-control.middleware';
 import { devPublicImages } from './common/middleware/dev-public-images';
-import { REDIS_CLIENT } from './modules/redis/redis.constants';
+import { REDIS_CLIENT } from './modules/redis/utils/redis.constants';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

@@ -23,9 +23,9 @@
 import type {
   ContractEventType,
   EndReason,
-} from '../../modules/contracts/contract-events.service';
-import { fmtCredits } from '../../modules/contracts/contract-rules';
-import type { DeadlineRule } from '../../modules/contracts/deadline-rules';
+} from '../../modules/contracts/services/contract-events.service';
+import { fmtCredits } from '../../modules/contracts/utils/contract-rules';
+import type { DeadlineRule } from '../../modules/contracts/utils/deadline-rules';
 import type { Person, Random, ServiceFact } from './build-activity';
 
 const MINUTE = 60_000;

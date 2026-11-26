@@ -1,4 +1,4 @@
-import { interviewTimesText } from '../../modules/hiring-pipeline/interview-times';
+import { interviewTimesText } from '../../modules/hiring-pipeline/utils/interview-times';
 import type { ChatLineFact } from './build-contracts';
 import {
   after,

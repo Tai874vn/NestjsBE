@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService } from '../../redis/redis.service';
+import { RedisService } from '../../redis/services/redis.service';
 import {
   ImportResumeDto,
   UploadedResumeFileMetadata,
@@ -24,7 +24,7 @@ import {
   ResumeAiQueueService,
 } from './resume-ai-queue.service';
 import { UserProfileService } from './user-profile.service';
-import { toPublicDocumentUrl } from '../../storage/storage-paths';
+import { toPublicDocumentUrl } from '../../storage/utils/storage-paths';
 
 const ISCED_DETAILED_CODE = /^\d{4}$/;
 

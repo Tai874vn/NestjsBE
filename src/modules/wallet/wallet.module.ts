@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { StripeController } from './controllers/stripe.controller';
 import { WalletController } from './controllers/wallet.controller';
-import { TopUpsService } from './top-ups.service';
-import { StripeService } from './stripe.service';
-import { WalletService } from './wallet.service';
+import { TopUpsService } from './services/top-ups.service';
+import { StripeService } from './services/stripe.service';
+import { WalletService } from './services/wallet.service';
 
 /**
  * Demo credit wallets: balances, the ledger (every credit move) and the money steps that the

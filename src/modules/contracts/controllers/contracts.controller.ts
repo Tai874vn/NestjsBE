@@ -11,9 +11,9 @@ import {
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { ValidatedUser } from '../../../types';
-import { AmendmentsService } from '../amendments.service';
-import { ContractsQueryService } from '../contracts-query.service';
-import { ContractsService } from '../contracts.service';
+import { AmendmentsService } from '../services/amendments.service';
+import { ContractsQueryService } from '../services/contracts-query.service';
+import { ContractsService } from '../services/contracts.service';
 import { AcceptEndRequestDto, CreateEndRequestDto } from '../dto/amendment.dto';
 import { ContractListQueryDto } from '../dto/milestone.dto';
 

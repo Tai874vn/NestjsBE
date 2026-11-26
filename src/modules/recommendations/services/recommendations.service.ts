@@ -19,7 +19,7 @@ import {
   RecommendationCacheService,
 } from './recommendation-cache.service';
 import { RecommendationQuotaService } from './recommendation-quota.service';
-import { findOccupation } from '../../occupations/occupation-catalogue';
+import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 import { RecommendationFingerprintService } from './recommendation-fingerprint.service';
 import {
   RecommendationScore,

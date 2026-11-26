@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { EmailTokenPurpose } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
-import { AccountEmailsService } from '../../mail/account-emails.service';
-import { EmailTokensService } from '../../mail/email-tokens.service';
+import { AccountEmailsService } from '../../mail/services/account-emails.service';
+import { EmailTokensService } from '../../mail/services/email-tokens.service';
 
 export const LINK_INVALID_MESSAGE =
   'This link is not valid or has expired. Ask for a new one.';

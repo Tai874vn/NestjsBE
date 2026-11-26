@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmailTokenPurpose } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
-import { AccountEmailsService } from '../../mail/account-emails.service';
-import { EmailTokensService } from '../../mail/email-tokens.service';
+import { AccountEmailsService } from '../../mail/services/account-emails.service';
+import { EmailTokensService } from '../../mail/services/email-tokens.service';
 import { AuthSessionService } from '../session/auth-session.service';
 import { invalidLink } from './email-verification.service';
 

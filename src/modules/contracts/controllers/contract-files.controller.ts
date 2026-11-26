@@ -8,8 +8,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { StorageService } from '../../storage/storage.service';
-import { imageUploadOptions } from '../../storage/upload-options';
+import { StorageService } from '../../storage/services/storage.service';
+import { imageUploadOptions } from '../../storage/utils/upload-options';
 
 /**
  * Image upload for proposals and submissions (any role). The answer is our local relative URL,

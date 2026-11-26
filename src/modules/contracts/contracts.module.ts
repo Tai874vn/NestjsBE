@@ -2,19 +2,19 @@ import { Module } from '@nestjs/common';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
-import { AmendmentsService } from './amendments.service';
-import { ContractEndingService } from './contract-ending.service';
-import { ContractEventsService } from './contract-events.service';
-import { ContractStepService } from './contract-step.service';
-import { ContractSweeperService } from './contract-sweeper.service';
+import { AmendmentsService } from './services/amendments.service';
+import { ContractEndingService } from './services/contract-ending.service';
+import { ContractEventsService } from './services/contract-events.service';
+import { ContractStepService } from './services/contract-step.service';
+import { ContractSweeperService } from './services/contract-sweeper.service';
 import { AmendmentsController } from './controllers/amendments.controller';
 import { ContractFilesController } from './controllers/contract-files.controller';
 import { ContractsController } from './controllers/contracts.controller';
 import { MilestonesController } from './controllers/milestones.controller';
 import { ProposalsController } from './controllers/proposals.controller';
-import { ContractsQueryService } from './contracts-query.service';
-import { ContractsService } from './contracts.service';
-import { ProposalsService } from './proposals.service';
+import { ContractsQueryService } from './services/contracts-query.service';
+import { ContractsService } from './services/contracts.service';
+import { ProposalsService } from './services/proposals.service';
 
 /**
  * Service contracts: proposals, contracts and milestones.

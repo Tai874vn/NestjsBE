@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import express from 'express';
-import { resolveUploadsDir } from '../../modules/storage/storage-paths';
+import { resolveUploadsDir } from '../../modules/storage/utils/storage-paths';
 
 /**
  * Local development only: serve the public images (`<UPLOADS_DIR>/public/images`) at

@@ -5,17 +5,21 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService, CACHE_KEYS, CACHE_TTL } from '../../redis/redis.service';
+import {
+  RedisService,
+  CACHE_KEYS,
+  CACHE_TTL,
+} from '../../redis/services/redis.service';
 import { CreateCommentDto } from '../dto/create-comment.dto';
 import { UpdateCommentDto } from '../dto/update-comment.dto';
 import { Role } from '../../../common/constants/roles';
 import { Prisma } from '@prisma/client';
-import { checkReview } from '../../contracts/contract-rules';
-import { ContractEventsService } from '../../contracts/contract-events.service';
+import { checkReview } from '../../contracts/utils/contract-rules';
+import { ContractEventsService } from '../../contracts/services/contract-events.service';
 import {
   ContractStepService,
   ruleToHttp,
-} from '../../contracts/contract-step.service';
+} from '../../contracts/services/contract-step.service';
 
 const ALREADY_REVIEWED = 'You already reviewed this contract.';
 

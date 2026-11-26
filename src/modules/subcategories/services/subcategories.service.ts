@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService } from '../../redis/redis.service';
+import { RedisService } from '../../redis/services/redis.service';
 import { CreateSubcategoryDto } from '../dto/create-subcategory.dto';
 import { UpdateSubcategoryDto } from '../dto/update-subcategory.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
-import { StorageService } from '../../storage/storage.service';
+import { StorageService } from '../../storage/services/storage.service';
 
 @Injectable()
 export class SubcategoriesService {

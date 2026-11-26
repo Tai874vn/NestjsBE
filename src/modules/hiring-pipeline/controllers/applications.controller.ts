@@ -13,7 +13,7 @@ import { Role } from '../../../common/constants/roles';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { ValidatedUser } from '../../../types';
-import { ApplicationsService } from '../applications.service';
+import { ApplicationsService } from '../services/applications.service';
 import { ApplicationActionDto } from '../dto/application-action.dto';
 
 /**

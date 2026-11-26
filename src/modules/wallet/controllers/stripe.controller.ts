@@ -11,8 +11,11 @@ import { SkipThrottle } from '@nestjs/throttler';
 import * as Sentry from '@sentry/nestjs';
 import type { Request } from 'express';
 import { Public } from '../../../common/decorators/public.decorator';
-import { StripeService, WebhookSignatureError } from '../stripe.service';
-import { TopUpsService } from '../top-ups.service';
+import {
+  StripeService,
+  WebhookSignatureError,
+} from '../services/stripe.service';
+import { TopUpsService } from '../services/top-ups.service';
 
 /**
  * Stripe's webhook: Stripe's server POSTs signed events here.

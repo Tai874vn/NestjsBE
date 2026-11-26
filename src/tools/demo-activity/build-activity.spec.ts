@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
-import { checkAmendment } from '../../modules/contracts/contract-rules';
-import { evaluateDeadlines } from '../../modules/contracts/deadline-rules';
+import { checkAmendment } from '../../modules/contracts/utils/contract-rules';
+import { evaluateDeadlines } from '../../modules/contracts/utils/deadline-rules';
 import { priceSplit } from './build-contracts';
 import {
   applicationFit,

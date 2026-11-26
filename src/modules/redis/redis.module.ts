@@ -12,11 +12,11 @@ import {
   REDIS_CLIENT_OPTIONS,
   watchRedisErrors,
 } from '../../common/redis/redis-client-errors';
-import { REDIS_CLIENT } from './redis.constants';
-import { RedisService } from './redis.service';
-import { RedisController } from './redis.controller';
+import { REDIS_CLIENT } from './utils/redis.constants';
+import { RedisService } from './services/redis.service';
+import { RedisController } from './controllers/redis.controller';
 
-export { REDIS_CLIENT } from './redis.constants';
+export { REDIS_CLIENT } from './utils/redis.constants';
 
 const logger = new Logger('RedisModule');
 

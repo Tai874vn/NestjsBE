@@ -2,7 +2,7 @@ import {
   findOccupation,
   occupationRelatedness,
   RELATED_FROM,
-} from '../../occupations/occupation-catalogue';
+} from '../../occupations/utils/occupation-catalogue';
 
 /**
  * A job entry from the resume form: months are "YYYY-MM"; a current job has no end month. `occupation` is an ESCO

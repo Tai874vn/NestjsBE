@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';
 import { PrismaService } from '../../../prisma.service';
-import { RedisService } from '../../redis/redis.service';
+import { RedisService } from '../../redis/services/redis.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { resumeOccupation } from './resume-career';
