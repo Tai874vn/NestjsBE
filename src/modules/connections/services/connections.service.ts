@@ -56,6 +56,8 @@ type ConnectionWithUsers = {
   recipient: PublicConnectionUser;
 };
 
+/** How many related people (shared skill or city) are ranked for the suggestions list. */
+const SUGGESTION_POOL = 300;
 @Injectable()
 export class ConnectionsService {
   constructor(
@@ -273,42 +275,70 @@ export class ConnectionsService {
       id: { notIn: [...excludedIds] },
       ...(keyword ? this.userKeywordWhere(keyword) : {}),
     };
-    const [candidates, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: publicUserSelect,
-      }),
+    // Rank first, then cut the page. People who share a skill or the city with the viewer come first;
+    // the rest (newest accounts first) fill the list after them.
+    const viewerSkillNames = viewer.profileSkills.map((skill) => skill.name);
+    const related: Prisma.UserWhereInput[] = [];
+    if (viewerSkillNames.length)
+      related.push({
+        profileSkills: {
+          some: { name: { in: viewerSkillNames, mode: 'insensitive' } },
+        },
+      });
+    if (viewer.location)
+      related.push({
+        location: { equals: viewer.location, mode: 'insensitive' },
+      });
+    const windowEnd = page * pageSize;
+    const [close, total] = await Promise.all([
+      related.length
+        ? this.prisma.user.findMany({
+            where: { AND: [where, { OR: related }] },
+            orderBy: { id: 'desc' },
+            take: SUGGESTION_POOL,
+            select: publicUserSelect,
+          })
+        : Promise.resolve([]),
       this.prisma.user.count({ where }),
     ]);
+    const others = await this.prisma.user.findMany({
+      where: { AND: [where, { id: { notIn: close.map((user) => user.id) } }] },
+      orderBy: { id: 'desc' },
+      take: Math.max(0, windowEnd - close.length),
+      select: publicUserSelect,
+    });
     const viewerSkills = new Set(
-      viewer.profileSkills.map((skill) => skill.name.toLowerCase()),
+      viewerSkillNames.map((name) => name.toLowerCase()),
     );
-    const ranked = candidates
-      .map((candidate) => {
-        const sharedSkills = candidate.profileSkills
-          .filter((skill) => viewerSkills.has(skill.name.toLowerCase()))
-          .map((skill) => skill.name);
-        const sameLocation = Boolean(
-          viewer.location &&
-          candidate.location &&
-          viewer.location.toLowerCase() === candidate.location.toLowerCase(),
-        );
-        const score =
+    const score = (candidate: (typeof close)[number]) => {
+      const sharedSkills = candidate.profileSkills
+        .filter((skill) => viewerSkills.has(skill.name.toLowerCase()))
+        .map((skill) => skill.name);
+      const sameLocation = Boolean(
+        viewer.location &&
+        candidate.location &&
+        viewer.location.toLowerCase() === candidate.location.toLowerCase(),
+      );
+      return {
+        ...this.publicUser(candidate),
+        sharedSkills,
+        sameLocation,
+        suggestionScore:
           sharedSkills.length * 5 +
           (sameLocation ? 3 : 0) +
           (candidate.headline ? 1 : 0) +
           (candidate.bio ? 1 : 0) +
-          (candidate.portfolioItems.length ? 1 : 0);
-        return {
-          ...this.publicUser(candidate),
-          sharedSkills,
-          sameLocation,
-          suggestionScore: score,
-        };
-      })
-      .sort((a, b) => b.suggestionScore - a.suggestionScore || b.id - a.id);
+          (candidate.portfolioItems.length ? 1 : 0),
+      };
+    };
+    const byScore = (
+      a: { suggestionScore: number; id: number },
+      b: { suggestionScore: number; id: number },
+    ) => b.suggestionScore - a.suggestionScore || b.id - a.id;
+    const ranked = [
+      ...close.map(score).sort(byScore),
+      ...others.map(score).sort(byScore),
+    ].slice((page - 1) * pageSize, windowEnd);
     return {
       message: 'Connection suggestions fetched',
       content: {

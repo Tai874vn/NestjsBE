@@ -157,6 +157,30 @@ describe('ConnectionsService', () => {
     expect(result.content.data[0]).not.toHaveProperty('phone');
   });
 
+  it('ranks people who share a skill or city before others, then cuts the page', async () => {
+    const { service, prisma } = createService();
+    prisma.connection.findMany.mockResolvedValue([]);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 4,
+      location: 'Hanoi',
+      profileSkills: [{ name: 'React' }],
+    });
+    const person = (id: number, location: string, skills: string[]) => ({
+      id, name: `P${id}`, avatar: null, headline: null, bio: null, location,
+      profileSkills: skills.map((name) => ({ name })), portfolioItems: [],
+    });
+    // 1st call: related people (shared skill or city). 2nd call: everyone else, newest first.
+    prisma.user.findMany
+      .mockResolvedValueOnce([person(30, 'Hanoi', []), person(20, 'Hue', ['react'])])
+      .mockResolvedValueOnce([person(99, 'Hue', [])]);
+    prisma.user.count.mockResolvedValue(3);
+
+    const result = await service.getSuggestions(4, { page: 1, pageSize: 2 });
+
+    expect(result.content.data.map((user) => user.id)).toEqual([20, 30]);
+    expect(prisma.user.findMany.mock.calls[0][0].where.AND[1].OR).toHaveLength(2);
+  });
+
   it('paginates accepted connections in the database', async () => {
     const { service, prisma } = createService();
     prisma.connection.findMany.mockResolvedValue([]);
