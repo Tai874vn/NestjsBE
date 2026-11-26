@@ -2,7 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { LedgerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { fmtCredits } from '../contracts/contract-rules';
-import { SepayService } from './sepay.service';
+import { StripeService } from './stripe.service';
 
 /** Credits every user gets when their wallet is first made (the SEED row). */
 export const STARTING_GRANT = 5000;
@@ -56,6 +56,8 @@ export type WalletSummary = {
     minCredits: number;
     maxCredits: number;
     vndPerCredit: number;
+    currency: string;
+    centsPerCredit: number;
   };
 };
 
@@ -108,7 +110,7 @@ type LedgerRow = Prisma.LedgerEntryGetPayload<{
 export class WalletService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sepay: SepayService,
+    private readonly stripe: StripeService,
   ) {}
 
   /**
@@ -248,11 +250,14 @@ export class WalletService {
       paidOut: 0 - (sums._sum.heldDelta ?? 0),
       earned: sums._sum.availableDelta ?? 0,
       topUp: {
-        // Hidden while the SePay keys are missing.
-        enabled: this.sepay.isConfigured(),
+        // Hidden while the Stripe test keys are missing.
+        enabled: this.stripe.isConfigured(),
         minCredits: TOP_UP_MIN_CREDITS,
         maxCredits: TOP_UP_MAX_CREDITS,
         vndPerCredit: VND_PER_CREDIT,
+        // What Stripe charges per credit (US cents).
+        currency: 'usd',
+        centsPerCredit: 5,
       },
     };
   }

@@ -15,7 +15,20 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
   app.use(helmet());
-  app.use(json({ limit: '1mb' }));
+  app.use(
+    json({
+      limit: '1mb',
+      // Stripe signs the exact request bytes, so the webhook keeps its raw body (and only it).
+      verify: (req, _res, buf) => {
+        const request = req as typeof req & {
+          originalUrl?: string;
+          rawBody?: Buffer;
+        };
+        if (request.originalUrl?.endsWith('/payments/stripe/webhook'))
+          request.rawBody = Buffer.from(buf);
+      },
+    }),
+  );
   app.use(urlencoded({ extended: false, limit: '1mb' }));
   app.use(cookieParser());
   app.use(applyApiCacheControl);

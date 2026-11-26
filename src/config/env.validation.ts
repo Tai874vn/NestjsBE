@@ -80,15 +80,10 @@ export const envValidationSchema = Joi.object({
   LIVEKIT_API_KEY: Joi.string().empty('').optional(),
   LIVEKIT_API_SECRET: Joi.string().empty('').optional(),
 
-  // SePay payment gateway top-up (optional: without merchant id, secret key and IPN key the
-  // top-up is hidden and POST /wallet/top-ups answers 503). SEPAY_ENV: sandbox (default) or production.
-  SEPAY_MERCHANT_ID: Joi.string().empty('').optional(),
-  SEPAY_SECRET_KEY: Joi.string().empty('').optional(),
-  SEPAY_IPN_SECRET: Joi.string().empty('').optional(),
-  SEPAY_ENV: Joi.string()
-    .valid('sandbox', 'production')
-    .empty('')
-    .default('sandbox'),
+  // Stripe Checkout top-up, TEST MODE only (optional: without an sk_test_ key and the webhook
+  // signing secret the top-up is hidden and POST /wallet/top-ups answers 503)
+  STRIPE_SECRET_KEY: Joi.string().empty('').optional(),
+  STRIPE_WEBHOOK_SECRET: Joi.string().empty('').optional(),
 
   // Local file storage root (defaults to /app/uploads in production, ./uploads locally)
   UPLOADS_DIR: Joi.string().empty('').optional(),

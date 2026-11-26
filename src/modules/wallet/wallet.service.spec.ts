@@ -81,8 +81,8 @@ function createService(
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn(prisma),
   );
-  const sepay = { isConfigured: () => topUpConfigured };
-  const service = new WalletService(prisma as never, sepay as never);
+  const stripe = { isConfigured: () => topUpConfigured };
+  const service = new WalletService(prisma as never, stripe as never);
   const tx = prisma as unknown as Prisma.TransactionClient;
   const ledgerRows = () =>
     prisma.ledgerEntry.create.mock.calls.map(
@@ -343,11 +343,13 @@ describe('WalletService', () => {
           minCredits: 10,
           maxCredits: 10000,
           vndPerCredit: 1000,
+          currency: 'usd',
+          centsPerCredit: 5,
         },
       });
     });
 
-    it('reports topUp.enabled = true when the SePay keys are set', async () => {
+    it('reports topUp.enabled = true when the Stripe keys are set', async () => {
       const { service, prisma } = createService({}, true);
       prisma.ledgerEntry.aggregate.mockResolvedValue({ _sum: {} });
       expect((await service.summary(8)).topUp.enabled).toBe(true);

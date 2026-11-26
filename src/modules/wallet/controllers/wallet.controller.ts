@@ -49,8 +49,8 @@ export class WalletController {
   }
 
   /**
-   * Starts a SePay sandbox top-up. The answer is a signed form; the frontend posts it to SePay.
-   * 503 when SePay is not set up.
+   * Starts a Stripe Checkout (test mode) top-up. The frontend sends the browser to checkoutUrl.
+   * 503 when Stripe is not set up.
    */
   @Post('top-ups')
   async startTopUp(@CurrentUser() user: ValidatedUser, @Body() dto: TopUpDto) {

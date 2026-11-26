@@ -33,7 +33,7 @@ const SENSITIVE_QUERY_PARAM_PATTERN =
 // Keys that must never leave the server in extra/context/breadcrumb bags
 // (auth secrets, cookies, bodies, CV/resume data, and chat messages).
 const SENSITIVE_DATA_KEY_PATTERN =
-  /^(?:authorization|cookie|cookies|set-cookie|x-csrf-token|x-secret-key|password|passwd|secret|token|access_?token|refresh_?token|id_?token|vnp_.*|resume|resume_?data|resume_?text|cv|cv_?text|chat|chat_?message|chat_?messages|messages|message_?content|body|request_?body|response_?body)$/i;
+  /^(?:authorization|cookie|cookies|set-cookie|x-csrf-token|stripe-signature|password|passwd|secret|token|access_?token|refresh_?token|id_?token|vnp_.*|resume|resume_?data|resume_?text|cv|cv_?text|chat|chat_?message|chat_?messages|messages|message_?content|body|request_?body|response_?body)$/i;
 
 const HEALTH_CHECK_PATTERN = /(?:^|[\s/])(?:api\/)?health(?:\/|\?|$)/i;
 const SOCKET_IO_PATTERN = /(?:^|[\s/])socket\.io(?:\/|\?|$)/i;

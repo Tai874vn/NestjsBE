@@ -1022,19 +1022,21 @@ model TopUp {
   id                   Int         @id @default(autoincrement())
   userId               Int
   credits              Int
-  /// credits x 1,000 VND test money.
+  /// The credits' value in the demo economy (credits x 1,000 VND). Stripe charges amountMinor/currency.
   amountVnd            Int
   txnRef               String      @unique
   status               TopUpStatus @default(PENDING)
-  /// Which gateway took the money: "VNPAY" (older top-ups) or "SEPAY".
-  provider             String      @default("SEPAY")
+  /// Which gateway took the money: "VNPAY" (older top-ups) or "STRIPE".
+  provider             String      @default("STRIPE")
   /// VNPay fields, kept for the older top-ups.
   vnpTransactionNo     String?
   bankCode             String?
   responseCode         String?
-  /// SePay's transaction id and payment method (BANK_TRANSFER, CARD, ...), from the IPN.
+  /// Stripe: the Checkout Session id (cs_test_...), saved when the top-up starts.
   gatewayTransactionId String?
-  paymentMethod        String?
+  /// What the gateway charged, in its smallest unit (US cents for Stripe), and the currency code.
+  amountMinor          Int?
+  currency             String?
   paidAt               DateTime?
   createdAt            DateTime    @default(now())
 
