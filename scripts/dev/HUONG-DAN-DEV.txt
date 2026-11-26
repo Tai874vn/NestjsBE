@@ -1,0 +1,78 @@
+CHẠY JOBAURA TRÊN MÁY KHÁC ĐỂ SỬA CODE (không Docker, không build)
+=====================================================================
+
+Backend, frontend và AI service chạy thẳng trên máy, có hot reload: sửa code là tự nạp lại.
+Chế độ dev KHÔNG chạy lint, cũng không build. Chỉ khi deploy lên server (Docker) mới build.
+
+Chế độ do biến NODE_ENV trong backend .env quyết định:
+  NODE_ENV=development  -> start.ps1 chạy cả 3 phần trên máy này
+  NODE_ENV=production   -> không chạy gì; production chạy bằng Docker trên server
+
+
+1. Trên MÁY CHÍNH (máy đang chạy web thật)
+------------------------------------------
+Xuất bản sao DB và file upload (CHỨA DỮ LIỆU CÁ NHÂN THẬT, chỉ chép bằng USB/ổ riêng, xoá khi xong):
+
+  powershell -ExecutionPolicy Bypass -File E:\clone\NestjsBE\scripts\dev\export-prod-copy.ps1 -OutDir F:\jobaura-dev-copy
+
+Chép sang máy mới:
+  - thư mục F:\jobaura-dev-copy   (db.dump + uploads)
+  - thư mục model AI: E:\AI_JOBAURA\resume-job-matching-model-10k-1epoch\final   (khoảng 523 MB)
+
+
+2. Trên MÁY MỚI: cài công cụ (một lần, mở terminal mới sau khi cài)
+--------------------------------------------------------------------
+  winget install Git.Git
+  winget install OpenJS.NodeJS.LTS
+  winget install Python.Python.3.12
+  winget install PostgreSQL.PostgreSQL.17      (ghi nhớ mật khẩu user "postgres" lúc cài)
+
+Không cần Docker, không cần Redis (không có Redis thì app vẫn chạy).
+
+
+3. Trên MÁY MỚI: lấy code và cài đặt
+------------------------------------
+  mkdir C:\jobaura ; cd C:\jobaura
+  git clone https://github.com/Tai874vn/NestjsBE.git
+  cd NestjsBE
+  powershell -ExecutionPolicy Bypass -File scripts\dev\setup.ps1 -AiRepo <link repo AIService> -CopyDir D:\jobaura-dev-copy
+
+setup.ps1 sẽ:
+  - clone JobAura (frontend) và AIService vào C:\jobaura\JobAura, C:\jobaura\AIService
+  - tạo 3 file .env từ .env.example (JWT secret và khoá AI mới, khớp nhau giữa backend và AI)
+  - cài package (yarn, npm, pip vào .venv)
+  - tạo user/database jobaura_dev, restore bản sao, chạy migration mới hơn
+  - chép file upload vào NestjsBE\uploads
+  - kiểm tra env
+
+Sau đó mở C:\jobaura\AIService\.env và sửa MODEL_PATH thành chỗ bạn chép model.
+
+
+4. Chạy hằng ngày
+-----------------
+  powershell -ExecutionPolicy Bypass -File C:\jobaura\NestjsBE\scripts\dev\start.ps1
+
+Mở 3 cửa sổ: backend :3002, frontend :3000, AI :8001. Mở http://localhost:3000
+  -NoAi     không chạy AI service (các tính năng AI báo "chưa sẵn sàng")
+  -DryRun   chỉ in ra sẽ chạy gì
+
+Chỉ kiểm tra env:
+  node C:\jobaura\NestjsBE\scripts\dev\check-env.mjs
+  FAIL = phải sửa mới chạy được; WARN = lời khuyên.
+
+
+5. Những thứ khác khi chạy local
+--------------------------------
+- Đăng nhập: tài khoản giống web thật (vì là bản sao DB).
+- Google sign-in: phải thêm http://localhost:3002/api/auth/google/callback vào
+  Google Cloud Console > Credentials > OAuth client > Authorized redirect URIs. Không thêm thì dùng email.
+- Mail (Resend): điền RESEND_API_KEY thì mail thật được gửi, link trong mail mở localhost:3000.
+  Để trống thì mail chỉ ghi ra log của backend.
+- Nạp tiền (Stripe test): điền STRIPE_SECRET_KEY (sk_test_). Stripe không gọi được webhook vào máy local,
+  nhưng trang quay về vẫn tự hỏi Stripe sau 15 giây nên credit vẫn được cộng.
+  Muốn có webhook thật: cài Stripe CLI rồi chạy
+    stripe listen --forward-to localhost:3002/api/payments/stripe/webhook
+  và chép whsec_... nó in ra vào STRIPE_WEBHOOK_SECRET.
+- Ảnh upload: ở local backend tự phục vụ /uploads/images (production thì nginx làm việc này).
+- Máy không có GPU NVIDIA: AI_DEVICE=auto sẽ chạy bằng CPU (chậm hơn nhưng dùng được).
+- Lint/typecheck chỉ chạy khi bạn tự gọi: yarn lint (backend), npm run lint / npm run typecheck (frontend).
