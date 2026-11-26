@@ -2,7 +2,7 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplication, Logger } from '@nestjs/common';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { watchRedisErrors } from '../redis/redis-client-errors';
+import { watchRedisErrors } from '../../modules/redis/utils/redis-client-errors';
 import { Server, ServerOptions } from 'socket.io';
 
 type SharedRedisClient = ReturnType<typeof createClient>;

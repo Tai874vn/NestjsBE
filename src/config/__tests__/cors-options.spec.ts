@@ -1,4 +1,4 @@
-import { buildCorsOptions } from './cors-options';
+import { buildCorsOptions } from '../cors-options';
 
 describe('buildCorsOptions', () => {
   it('exposes X-Request-ID for cross-origin error responses and keeps standard CORS settings', () => {

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { watchRedisErrors } from './redis-client-errors';
+import { watchRedisErrors } from '../redis-client-errors';
 
 describe('watchRedisErrors', () => {
   it('keeps the process alive when a Redis client emits an error', () => {

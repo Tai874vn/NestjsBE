@@ -1,4 +1,4 @@
-import { trustedOrigins } from '../../../common/config/trusted-origins';
+import { trustedOrigins } from '../../../config/trusted-origins';
 import {
   OnGatewayConnection,
   OnGatewayInit,

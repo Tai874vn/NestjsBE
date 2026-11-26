@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { createClient } from 'redis';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
-import { buildCorsOptions } from './common/config/cors-options';
+import { buildCorsOptions } from './config/cors-options';
 import { applyApiCacheControl } from './common/middleware/cache-control.middleware';
 import { devPublicImages } from './common/middleware/dev-public-images';
 import { REDIS_CLIENT } from './modules/redis/utils/redis.constants';

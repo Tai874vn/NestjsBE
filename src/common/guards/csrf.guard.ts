@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
-import { trustedOrigins } from '../config/trusted-origins';
+import { trustedOrigins } from '../../config/trusted-origins';
 
 type CsrfRequest = {
   method?: string;

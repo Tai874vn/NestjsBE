@@ -11,7 +11,7 @@ import { createClient } from 'redis';
 import {
   REDIS_CLIENT_OPTIONS,
   watchRedisErrors,
-} from '../../common/redis/redis-client-errors';
+} from './utils/redis-client-errors';
 import { REDIS_CLIENT } from './utils/redis.constants';
 import { RedisService } from './services/redis.service';
 import { RedisController } from './controllers/redis.controller';
