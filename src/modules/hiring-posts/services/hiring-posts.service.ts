@@ -16,7 +16,6 @@ import {
   HIRING_POST_LEVELS,
   HiringPostQueryDto,
   MAX_HIRING_POST_PAGE,
-  HiringPostSort,
 } from '../dto/hiring-post-query.dto';
 import { PrismaService } from '../../../prisma.service';
 import {
@@ -28,6 +27,15 @@ import { CreateHiringPostDto } from '../dto/create-hiring-post.dto';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { PostApplicationsQueryDto } from '../dto/post-applications-query.dto';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
+import {
+  combineOpenFilters,
+  HIRING_POST_ORDER,
+  keywordWhere,
+  locationCounts,
+  MAX_OCCUPATION_FACETS,
+  mergeSpellings,
+  openFilters,
+} from '../utils/hiring-post-search';
 import {
   emptyPipeline,
   hiringPostInclude,
@@ -50,34 +58,6 @@ import {
   SweepReason,
 } from '../../hiring-pipeline/services/post-sweep.service';
 
-/** The list filters a facet can leave out to count its own choices. */
-type FacetGroup =
-  | 'keyword'
-  | 'occupation'
-  | 'level'
-  | 'employmentType'
-  | 'location';
-type OpenFilters = { open: Prisma.HiringPostWhereInput[] } & Partial<
-  Record<FacetGroup, Prisma.HiringPostWhereInput>
->;
-
-const MAX_OCCUPATION_FACETS = 10;
-const MAX_LOCATION_OPTIONS = 50;
-
-/** Every order ends with id, so pages never overlap or skip a post. Salaries are not converted between units. */
-const HIRING_POST_ORDER: Record<
-  HiringPostSort,
-  Prisma.HiringPostOrderByWithRelationInput[]
-> = {
-  newest: [{ updatedAt: 'desc' }, { id: 'desc' }],
-  closing_soon: [{ closesAt: { sort: 'asc', nulls: 'last' } }, { id: 'desc' }],
-  salary_high: [
-    { salaryMax: { sort: 'desc', nulls: 'last' } },
-    { salaryMin: { sort: 'desc', nulls: 'last' } },
-    { id: 'desc' },
-  ],
-};
-
 @Injectable()
 export class HiringPostsService {
   constructor(
@@ -90,7 +70,7 @@ export class HiringPostsService {
   async findOpen(query: HiringPostQueryDto, viewerId?: number) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
-    const where = this.combineOpenFilters(await this.openFilters(query));
+    const where = combineOpenFilters(await openFilters(this.prisma, query));
 
     const [posts, total] = await Promise.all([
       this.prisma.hiringPost.findMany({
@@ -138,7 +118,7 @@ export class HiringPostsService {
     filters.push({ recruiterId: userId });
 
     if (keyword) {
-      filters.push(await this.keywordWhere(keyword));
+      filters.push(await keywordWhere(this.prisma, keyword));
     }
 
     const where: Prisma.HiringPostWhereInput = filters.length
@@ -898,10 +878,10 @@ export class HiringPostsService {
    * counts posts in "Da Nang, Vietnam"; the counts can therefore add up to more than the number of posts.
    */
   async findLocations() {
-    const where = this.combineOpenFilters(await this.openFilters({}));
+    const where = combineOpenFilters(await openFilters(this.prisma, {}));
     return {
       message: 'Get hiring post locations successfully',
-      content: await this.locationCounts(where),
+      content: await locationCounts(this.prisma, where),
     };
   }
 
@@ -911,14 +891,14 @@ export class HiringPostsService {
    * Same query as the list; page, pageSize and sort are ignored.
    */
   async findFacets(query: HiringPostQueryDto) {
-    const filters = await this.openFilters(query);
+    const filters = await openFilters(this.prisma, query);
     const [occupationGroups, levelGroups, employmentTypeGroups, locations] =
       await Promise.all([
         this.prisma.hiringPost.groupBy({
           by: ['occupationCode'],
           where: {
             AND: [
-              this.combineOpenFilters(filters, 'occupation'),
+              combineOpenFilters(filters, 'occupation'),
               { occupationCode: { not: null } },
             ],
           },
@@ -926,15 +906,15 @@ export class HiringPostsService {
         }),
         this.prisma.hiringPost.groupBy({
           by: ['predictedSeniority'],
-          where: this.combineOpenFilters(filters, 'level'),
+          where: combineOpenFilters(filters, 'level'),
           _count: { _all: true },
         }),
         this.prisma.hiringPost.groupBy({
           by: ['employmentType'],
-          where: this.combineOpenFilters(filters, 'employmentType'),
+          where: combineOpenFilters(filters, 'employmentType'),
           _count: { _all: true },
         }),
-        this.locationCounts(this.combineOpenFilters(filters, 'location')),
+        locationCounts(this.prisma, combineOpenFilters(filters, 'location')),
       ]);
 
     const occupations = occupationGroups
@@ -960,7 +940,7 @@ export class HiringPostsService {
     }));
 
     // employmentType is matched "equals, ignoring case", so spellings that differ only in case are one choice.
-    const employmentTypes = this.mergeSpellings(
+    const employmentTypes = mergeSpellings(
       employmentTypeGroups.map((group) => ({
         value: group.employmentType,
         count: group._count._all,
@@ -970,163 +950,6 @@ export class HiringPostsService {
     return {
       message: 'Get hiring post facets successfully',
       content: { occupations, levels, employmentTypes, locations },
-    };
-  }
-
-  /**
-   * The open-post filters, one entry per group, so facets can leave one group out.
-   * Throws 400 for an occupation code that is not in the catalogue, naming it.
-   */
-  private async openFilters(
-    query: Partial<HiringPostQueryDto>,
-  ): Promise<OpenFilters> {
-    const keyword = query.keyword?.trim();
-    const filters: OpenFilters = {
-      open: [
-        { status: HiringPostStatus.OPEN },
-        // A post past its closing date is no longer open, even before anyone closes it.
-        { OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] },
-      ],
-    };
-
-    if (keyword) filters.keyword = await this.keywordWhere(keyword);
-    if (query.occupation?.length) {
-      const unknown = query.occupation.filter((code) => !findOccupation(code));
-      if (unknown.length) {
-        throw new BadRequestException(
-          `Choose the occupation from the list. Unknown occupation: ${unknown.join(', ')}`,
-        );
-      }
-      filters.occupation = {
-        occupationCode: {
-          in: query.occupation.map((code) => findOccupation(code)!.code),
-        },
-      };
-    }
-    if (query.level?.length) {
-      filters.level = { predictedSeniority: { in: query.level } };
-    }
-    if (query.employmentType?.length) {
-      filters.employmentType = {
-        OR: query.employmentType.map((type) => ({
-          employmentType: { equals: type, mode: 'insensitive' as const },
-        })),
-      };
-    }
-    if (query.location) {
-      filters.location = {
-        location: { contains: query.location, mode: 'insensitive' },
-      };
-    }
-    return filters;
-  }
-
-  private combineOpenFilters(
-    filters: OpenFilters,
-    without?: FacetGroup,
-  ): Prisma.HiringPostWhereInput {
-    const { open, ...groups } = filters;
-    return {
-      AND: [
-        ...open,
-        ...Object.entries(groups)
-          .filter(([group, where]) => group !== without && where)
-          .map(([, where]) => where),
-      ],
-    };
-  }
-
-  /**
-   * Locations of the posts matching `where`, merged ignoring case and surrounding spaces, each shown in its
-   * most used spelling. A count is the number of those posts whose location contains the value (ignoring case),
-   * which is exactly what `?location=<value>` finds. Most posts first, then by name; at most 50.
-   */
-  private async locationCounts(where: Prisma.HiringPostWhereInput) {
-    const groups = await this.prisma.hiringPost.groupBy({
-      by: ['location'],
-      where: { AND: [where, { location: { not: null } }] },
-      _count: { _all: true },
-    });
-    const posts = groups.map((group) => ({
-      location: (group.location ?? '').toLowerCase(),
-      count: group._count._all,
-    }));
-    return this.mergeSpellings(
-      groups.map((group) => ({
-        value: group.location,
-        count: group._count._all,
-      })),
-    )
-      .map(({ value, key }) => ({
-        value,
-        count: posts
-          .filter((post) => post.location.includes(key))
-          .reduce((sum, post) => sum + post.count, 0),
-      }))
-      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
-      .slice(0, MAX_LOCATION_OPTIONS);
-  }
-
-  /**
-   * Values that differ only in case or surrounding spaces become one, shown in the spelling most posts use
-   * (ties: alphabetical). Empty values are dropped. Sorted by count, then name.
-   */
-  private mergeSpellings(
-    values: { value: string | null; count: number }[],
-  ): { key: string; value: string; count: number }[] {
-    const merged = new Map<
-      string,
-      { count: number; spellings: Map<string, number> }
-    >();
-    for (const { value, count } of values) {
-      const spelling = value?.trim();
-      if (!spelling) continue;
-      const key = spelling.toLowerCase();
-      const entry = merged.get(key) ?? { count: 0, spellings: new Map() };
-      entry.count += count;
-      entry.spellings.set(
-        spelling,
-        (entry.spellings.get(spelling) ?? 0) + count,
-      );
-      merged.set(key, entry);
-    }
-    return [...merged.entries()]
-      .map(([key, entry]) => ({
-        key,
-        count: entry.count,
-        value: [...entry.spellings.entries()].sort(
-          ([a, aCount], [b, bCount]) => bCount - aCount || a.localeCompare(b),
-        )[0][0],
-      }))
-      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-  }
-
-  /**
-   * Keyword search over the post text, location, employment type, company, recruiter name and skills.
-   * A skill matches when one of the post's skills contains the keyword, ignoring case ("selenium" finds
-   * "Selenium"). Prisma has no case-insensitive match on array items, so those posts are looked up first.
-   */
-  private async keywordWhere(
-    keyword: string,
-  ): Promise<Prisma.HiringPostWhereInput> {
-    const pattern = `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-    const skillMatches = await this.prisma.$queryRaw<{ id: number }[]>`
-      SELECT "id" FROM "hiring_posts"
-      WHERE EXISTS (SELECT 1 FROM unnest("skills") AS skill WHERE skill ILIKE ${pattern})
-    `;
-    return {
-      OR: [
-        { title: { contains: keyword, mode: 'insensitive' } },
-        { description: { contains: keyword, mode: 'insensitive' } },
-        { requirements: { contains: keyword, mode: 'insensitive' } },
-        { location: { contains: keyword, mode: 'insensitive' } },
-        { employmentType: { contains: keyword, mode: 'insensitive' } },
-        { companyName: { contains: keyword, mode: 'insensitive' } },
-        { recruiter: { name: { contains: keyword, mode: 'insensitive' } } },
-        ...(skillMatches.length
-          ? [{ id: { in: skillMatches.map((row) => row.id) } }]
-          : []),
-      ],
     };
   }
 
