@@ -14,6 +14,8 @@ export class SubcategoriesService {
     @Optional() private readonly storage?: StorageService,
   ) {}
 
+  // POST /api/subcategories — Admin adds a subcategory.
+  // Query: subcategory.create
   async create(createDto: CreateSubcategoryDto) {
     const subcategory = await this.prisma.subcategory.create({
       data: createDto,
@@ -31,6 +33,8 @@ export class SubcategoriesService {
     };
   }
 
+  // GET /api/subcategories — Every subcategory.
+  // Query: subcategory.findMany
   async findAll() {
     const subcategories = await this.prisma.subcategory.findMany({
       include: {
@@ -44,6 +48,8 @@ export class SubcategoriesService {
     };
   }
 
+  // GET /api/subcategories/paginated-search — Admin table: subcategories by page, with keyword search.
+  // Query: subcategory.findMany, subcategory.count
   async findAllWithPagination(paginationDto: PaginationDto) {
     const { page = 1, pageSize = 10, keyword } = paginationDto;
     const skip = (page - 1) * pageSize;
@@ -80,6 +86,8 @@ export class SubcategoriesService {
     };
   }
 
+  // GET /api/subcategories/:id — One subcategory.
+  // Query: subcategory.findUnique
   async findOne(id: number) {
     const subcategory = await this.prisma.subcategory.findUnique({
       where: { id },
@@ -99,6 +107,8 @@ export class SubcategoriesService {
     };
   }
 
+  // PUT /api/subcategories/:id — Admin edits a subcategory.
+  // Query: subcategory.findUnique, subcategory.update
   async update(id: number, updateDto: UpdateSubcategoryDto) {
     const subcategory = await this.prisma.subcategory.findUnique({
       where: { id },
@@ -139,6 +149,8 @@ export class SubcategoriesService {
     };
   }
 
+  // DELETE /api/subcategories/:id — Admin deletes a subcategory.
+  // Query: subcategory.findUnique, subcategory.delete
   async remove(id: number) {
     const subcategory = await this.prisma.subcategory.findUnique({
       where: { id },

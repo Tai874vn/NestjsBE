@@ -38,6 +38,8 @@ type SavedPostSource = {
 export class SavedItemsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // PUT /api/saved/posts/:postId — Saves a feed post (saving twice is fine).
+  // Query: post.findUnique, savedPost.upsert
   async savePost(userId: number, postId: number) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
@@ -52,11 +54,15 @@ export class SavedItemsService {
     return { message: 'Post saved successfully' };
   }
 
+  // DELETE /api/saved/posts/:postId — Un-saves a feed post.
+  // Query: savedPost.deleteMany
   async unsavePost(userId: number, postId: number) {
     await this.prisma.savedPost.deleteMany({ where: { userId, postId } });
     return { message: 'Post removed from saved items' };
   }
 
+  // PUT /api/saved/jobs/:jobId — Saves a service post.
+  // Query: job.findUnique, savedJob.upsert
   async saveJob(userId: number, jobId: number) {
     const job = await this.prisma.job.findUnique({
       where: { id: jobId },
@@ -71,11 +77,15 @@ export class SavedItemsService {
     return { message: 'Job saved successfully' };
   }
 
+  // DELETE /api/saved/jobs/:jobId — Un-saves a service post.
+  // Query: savedJob.deleteMany
   async unsaveJob(userId: number, jobId: number) {
     await this.prisma.savedJob.deleteMany({ where: { userId, jobId } });
     return { message: 'Job removed from saved items' };
   }
 
+  // GET /api/saved/posts — Saved feed posts of the user.
+  // Query: savedPost.findMany
   async getSavedPosts(userId: number, query: SavedItemsQueryDto) {
     const limit = query.limit ?? 10;
     const cursor = this.decodeCursor(query.cursor);
@@ -146,6 +156,8 @@ export class SavedItemsService {
     };
   }
 
+  // GET /api/saved/jobs — Saved service posts of the user.
+  // Query: savedJob.findMany
   async getSavedJobs(userId: number, query: SavedItemsQueryDto) {
     const limit = query.limit ?? 12;
     const cursor = this.decodeCursor(query.cursor);

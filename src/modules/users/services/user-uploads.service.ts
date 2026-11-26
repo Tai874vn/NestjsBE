@@ -11,6 +11,8 @@ export class UserUploadsService {
     private readonly userResumeService: UserResumeService,
   ) {}
 
+  // POST /api/users/me/resume/file — Uploads the resume PDF and replaces the old file.
+  // Query: storage upload + user-resume.service.ts uploadResumeFile()
   async uploadResumeFile(userId: number, file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Resume file is required');
@@ -37,6 +39,8 @@ export class UserUploadsService {
     }
   }
 
+  // POST /api/users/upload-avatar — Uploads a new avatar and deletes the old image.
+  // Query: storage upload + user-profile.service.ts uploadAvatar()
   async uploadAvatar(userId: number, file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Avatar file is required');
@@ -62,6 +66,8 @@ export class UserUploadsService {
     }
   }
 
+  // POST /api/users/upload-cover — Uploads a new cover image and deletes the old one.
+  // Query: storage upload + user-profile.service.ts uploadCover()
   async uploadCover(userId: number, file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Cover image file is required');

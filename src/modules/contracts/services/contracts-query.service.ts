@@ -75,6 +75,8 @@ export class ContractsQueryService {
     };
   }
 
+  // GET /api/contracts/:id — One contract with milestones, changes and reviews (only its two sides or admin).
+  // Query: see detail() below
   async findOne(id: number, viewer: { id: number; role?: Role }) {
     return {
       message: 'Contract fetched',

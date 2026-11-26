@@ -38,6 +38,8 @@ export class UserProfileService {
     private readonly resumeAiQueue: ResumeAiQueueService,
   ) {}
 
+  // GET /api/users/profile/:id — Public profile page: user, skills, portfolio, rating and finished contracts (Redis first).
+  // Query: user.findUnique, comment.aggregate, contract.count
   async getPublicProfile(id: number) {
     const cacheKey = `${CACHE_KEYS.USER}profile:${id}`;
 
@@ -151,6 +153,8 @@ export class UserProfileService {
     return result;
   }
 
+  // GET /api/users/me/profile — The signed-in user's own profile for the settings page.
+  // Query: user.findUnique
   async getMyProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -211,6 +215,8 @@ export class UserProfileService {
     };
   }
 
+  // PATCH /api/users/me/profile — Saves the settings form; recomputes profile completion.
+  // Query: user.findUnique, user.update
   async updateMyProfile(userId: number, dto: UpdateMyProfileDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
@@ -295,6 +301,8 @@ export class UserProfileService {
     }
   }
 
+  // PUT /api/users/me/profile/skills — Replaces the skill list; the AI re-reads the resume when there is one.
+  // Query: userSkill.deleteMany, userSkill.createMany, userResume.count, $transaction
   async replaceProfileSkills(userId: number, dto: ReplaceProfileSkillsDto) {
     const skills = dto.skills
       .flatMap((skill) =>
@@ -369,6 +377,8 @@ export class UserProfileService {
     });
   }
 
+  // PUT /api/users/me/profile/certifications — Replaces the certification list.
+  // Query: userCertification.deleteMany, userCertification.createMany, $transaction
   async replaceProfileCertifications(
     userId: number,
     dto: ReplaceProfileCertificationsDto,

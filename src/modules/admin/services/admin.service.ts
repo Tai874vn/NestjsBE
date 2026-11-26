@@ -5,6 +5,8 @@ import { PrismaService } from '../../../prisma.service';
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // GET /api/admin/stats — Counts shown on the admin dashboard.
+  // Query: user.count, job.count, contract.count, comment.count
   async getStats() {
     const [users, jobs, contracts, comments] = await Promise.all([
       this.prisma.user.count(),

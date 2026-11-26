@@ -24,12 +24,16 @@ export class PasswordResetService {
     private readonly sessions: AuthSessionService,
   ) {}
 
+  // POST /api/auth/forgot-password — Sends the reset mail in the background; always answers OK so emails cannot be guessed.
+  // Query: see requestInBackground()
   request(email: string): void {
     void this.requestInBackground(email).catch((error: Error) =>
       this.logger.error(`Password reset mail failed: ${error.message}`),
     );
   }
 
+  // POST /api/auth/reset-password — Uses the one-time reset token and sets the new password.
+  // Query: user.findUnique; token: tokens.consume(); save: sessions.resetPassword()
   async reset(token: string, newPassword: string): Promise<void> {
     const row = await this.tokens.consume(
       token,

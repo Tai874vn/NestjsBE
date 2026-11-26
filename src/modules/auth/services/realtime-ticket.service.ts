@@ -8,6 +8,8 @@ const REALTIME_TICKET_TTL_SECONDS = 60;
 export class RealtimeTicketService {
   constructor(private readonly jwtService: JwtService) {}
 
+  // GET /api/auth/realtime-ticket — Short-lived ticket the browser uses to open the chat/notification socket.
+  // Query: none (signed JWT)
   issue(userId: number, sessionId: string, role: string) {
     if (
       !Number.isSafeInteger(userId) ||

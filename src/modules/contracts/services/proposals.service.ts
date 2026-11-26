@@ -206,6 +206,8 @@ export class ProposalsService {
     return { message: 'Proposal sent', content: detail };
   }
 
+  // GET /api/proposals — Proposals the viewer sent or received, by page.
+  // Query: proposal.findMany, proposal.count
   async list(
     viewer: Viewer,
     query: ProposalListQuery,
@@ -238,6 +240,8 @@ export class ProposalsService {
     };
   }
 
+  // GET /api/proposals/:id — One proposal with all its versions (only its two sides or admin).
+  // Query: see detail() below
   async findOne(id: number, viewer: Viewer) {
     return {
       message: 'Proposal fetched',

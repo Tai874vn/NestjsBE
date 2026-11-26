@@ -46,6 +46,8 @@ export class VideoCallService {
     private readonly config: ConfigService,
   ) {}
 
+  // POST /api/interviews/:id/call-token — LiveKit pass to join the interview call (only its two sides, only while it is not over).
+  // Query: interview.findUnique
   async callToken(id: number, viewer: Viewer): Promise<CallToken> {
     const interview = await this.prisma.interview.findUnique({
       where: { id },

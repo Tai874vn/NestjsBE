@@ -48,6 +48,8 @@ type ChatRoomSource = {
 export class ChatService {
   constructor(private prisma: PrismaService) {}
 
+  // POST /api/chat/rooms — Creates a chat room with its members.
+  // Query: chatRoom.create
   async createRoom(
     creatorId: number,
     createRoomDto: CreateRoomDto,
@@ -116,6 +118,8 @@ export class ChatService {
     }
   }
 
+  // GET /api/chat/start/:userId — Finds the existing one-to-one room of two users (chat button on a profile).
+  // Query: chatRoom.findFirst
   async findPrivateRoom(userId1: number, userId2: number) {
     const room = await this.prisma.chatRoom.findFirst({
       where: {
@@ -182,6 +186,8 @@ export class ChatService {
     return members.map((member) => member.userId);
   }
 
+  // GET /api/chat/rooms — Chat rooms of the user, with the last message, for the room list.
+  // Query: chatRoom.findMany
   async getUserRooms(userId: number): Promise<RoomResponse[]> {
     const rooms = await this.prisma.chatRoom.findMany({
       where: {
@@ -245,6 +251,8 @@ export class ChatService {
     return new Map(counts.map((item) => [item.roomId, Number(item.count)]));
   }
 
+  // GET /api/chat/rooms/:id — One chat room the user belongs to.
+  // Query: chatRoom.findUnique
   async getRoom(roomId: number, userId: number): Promise<RoomResponse> {
     const room = await this.prisma.chatRoom.findUnique({
       where: { id: roomId },
@@ -332,6 +340,8 @@ export class ChatService {
     return this.formatMessageResponse(message);
   }
 
+  // GET /api/chat/rooms/:id/messages — Messages of a room, older pages by cursor.
+  // Query: chatMessage.findMany
   async getMessages(
     userId: number,
     getMessagesDto: GetMessagesDto,
@@ -437,6 +447,8 @@ export class ChatService {
     return new Map(counts.map((item) => [item.userId, Number(item.count)]));
   }
 
+  // POST /api/chat/rooms/:id/leave — Leaves a room; the room is deleted when nobody is left.
+  // Query: chatRoomMember.deleteMany, chatRoomMember.count, chatRoom.delete, $transaction
   async leaveRoom(roomId: number, userId: number): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await tx.chatRoomMember.deleteMany({

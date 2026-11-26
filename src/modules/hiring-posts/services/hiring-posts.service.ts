@@ -82,6 +82,8 @@ export class HiringPostsService {
     private readonly sweeper: PostSweepService,
   ) {}
 
+  // GET /api/hiring-posts — Public list of open hiring posts: search, filters, sort, page.
+  // Query: hiringPost.findMany + count; where from utils/hiring-post-search.ts
   async findOpen(query: HiringPostQueryDto, viewerId?: number) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -123,6 +125,8 @@ export class HiringPostsService {
     };
   }
 
+  // GET /api/hiring-posts/mine — The recruiter's own posts with applicant counts.
+  // Query: hiringPost.findMany, hiringPost.count
   async findMine(userId: number, query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -169,6 +173,8 @@ export class HiringPostsService {
     };
   }
 
+  // GET /api/hiring-posts/:id — One hiring post; a closed one only for its owner or admin.
+  // Query: see findPostOrThrow()
   async findOne(id: number, userId?: number, userRole?: Role) {
     const post = await this.findPostOrThrow(id);
     if (
@@ -445,6 +451,8 @@ export class HiringPostsService {
     return { filled: true, swept };
   }
 
+  // DELETE /api/hiring-posts/:id — Owner (or admin) deletes a hiring post.
+  // Query: hiringPost.delete
   async remove(id: number, userId: number, userRole: Role) {
     const post = await this.findPostOrThrow(id);
     assertCanManage(post.recruiterId, userId, userRole);
@@ -456,6 +464,8 @@ export class HiringPostsService {
     };
   }
 
+  // POST /api/hiring-posts/:id/seniority — Asks the AI service (queue) to guess the seniority of the post.
+  // Query: none here; aiQueue.enqueue()
   async predictSeniority(id: number, userId: number, userRole: Role) {
     const post = await this.findPostOrThrow(id);
     assertCanManage(post.recruiterId, userId, userRole);
@@ -474,6 +484,8 @@ export class HiringPostsService {
     };
   }
 
+  // POST /api/hiring-posts/:id/applications — Candidate applies (or re-applies after withdrawing) with a cover letter; one row per post and person.
+  // Query: hiringApplication.findUnique, hiringPost.findUnique, hiringApplication.update, hiringApplication.create, $transaction, raw SQL
   async apply(id: number, applicantId: number, dto: ApplyHiringPostDto) {
     const post = await this.findPostOrThrow(id);
 
@@ -647,6 +659,8 @@ export class HiringPostsService {
     };
   }
 
+  // GET /api/hiring-posts/applications/me — The candidate's applications, newest first.
+  // Query: hiringApplication.findMany, hiringApplication.count
   async findMyApplications(userId: number, query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;

@@ -38,6 +38,8 @@ export class UserResumeService {
     private readonly profileService: UserProfileService,
   ) {}
 
+  // PUT /api/users/me/resume — Saves the resume form and asks the AI queue to read it (level, skills).
+  // Query: userResume.findUnique, userResume.upsert
   async importResume(userId: number, dto: ImportResumeDto) {
     await this.ensureUserExists(userId);
 
@@ -132,6 +134,8 @@ export class UserResumeService {
     };
   }
 
+  // GET /api/users/me/resume — The user's resume with the AI results.
+  // Query: userResume.findUnique
   async getMyResume(userId: number) {
     await this.ensureUserExists(userId);
 

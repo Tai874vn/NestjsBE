@@ -49,6 +49,8 @@ export class NotificationsService {
     private readonly observability?: ObservabilityService,
   ) {}
 
+  // GET /api/notifications — The bell list: newest notifications, by cursor.
+  // Query: notification.findMany
   async list(userId: number, query: NotificationsQueryDto) {
     const limit = query.limit ?? 20;
     const cursor = this.decodeCursor(query.cursor);
@@ -136,6 +138,8 @@ export class NotificationsService {
     };
   }
 
+  // GET /api/notifications/unread-count — Number on the bell.
+  // Query: see countUnread()
   async unreadCount(userId: number) {
     const unreadCount = await this.countUnread(userId);
     return {
@@ -144,6 +148,8 @@ export class NotificationsService {
     };
   }
 
+  // PATCH /api/notifications/:id/read — Marks one notification read.
+  // Query: notification.updateMany, notification.findUnique
   async markAsRead(notificationId: number, userId: number) {
     const result = await this.prisma.notification.updateMany({
       where: { id: notificationId, recipientId: userId },
@@ -163,6 +169,8 @@ export class NotificationsService {
     };
   }
 
+  // PATCH /api/notifications/read-all — Marks every notification read.
+  // Query: notification.updateMany
   async markAllAsRead(userId: number) {
     await this.prisma.notification.updateMany({
       where: { recipientId: userId, readAt: null },

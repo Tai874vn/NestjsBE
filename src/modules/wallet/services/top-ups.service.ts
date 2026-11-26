@@ -55,6 +55,8 @@ export class TopUpsService {
     private readonly config: ConfigService,
   ) {}
 
+  // POST /api/wallet/top-ups — Starts a wallet top-up: saves it as PENDING and opens a Stripe Checkout page.
+  // Query: topUp.create, topUp.update, $transaction
   async start(
     userId: number,
     credits: number,

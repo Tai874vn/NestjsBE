@@ -44,6 +44,8 @@ export class SkillService {
     );
   }
 
+  // GET /api/skill/search — Skill picker search, answered by the AI service skill dictionary (cached in Redis).
+  // Query: none; aiClient.searchSkills()
   async search(query: string, field?: string, limit = 10) {
     const normalizedQuery = query.trim().replace(/\s+/g, ' ').toLowerCase();
     if (!normalizedQuery) {
@@ -81,6 +83,8 @@ export class SkillService {
     };
   }
 
+  // GET /api/skill/fields-of-study — Fields of study for the resume form (from the AI service, cached).
+  // Query: none; aiClient.fieldsOfStudy()
   async fieldsOfStudy() {
     return this.redisService.getOrSet(
       `${CACHE_KEYS.SKILL_LIST}:fields-of-study`,

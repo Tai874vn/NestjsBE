@@ -18,6 +18,8 @@ export class CategoriesService {
     @Optional() private readonly storage?: StorageService,
   ) {}
 
+  // POST /api/categories — Admin adds a job type (category).
+  // Query: category.create
   async create(createDto: CreateCategoryDto) {
     const category = await this.prisma.category.create({
       data: createDto,
@@ -32,6 +34,8 @@ export class CategoriesService {
     };
   }
 
+  // GET /api/categories — Every category, kept in Redis.
+  // Query: category.findMany
   async findAll() {
     return this.redisService.getOrSet(
       CACHE_KEYS.CATEGORY_LIST,
@@ -51,6 +55,8 @@ export class CategoriesService {
     );
   }
 
+  // GET /api/categories/paginated-search — Admin table: categories by page, with keyword search.
+  // Query: category.findMany, category.count
   async findAllWithPagination(paginationDto: PaginationDto) {
     const { page = 1, pageSize = 10, keyword } = paginationDto;
     const skip = (page - 1) * pageSize;
@@ -86,6 +92,8 @@ export class CategoriesService {
     };
   }
 
+  // GET /api/categories/:id — One category (Redis first).
+  // Query: category.findUnique
   async findOne(id: number) {
     const cacheKey = `${CACHE_KEYS.CATEGORY}${id}`;
 
@@ -117,6 +125,8 @@ export class CategoriesService {
     return result;
   }
 
+  // PUT /api/categories/:id — Admin renames a category; clears the category caches.
+  // Query: category.findUnique, category.update
   async update(id: number, updateDto: UpdateCategoryDto) {
     const category = await this.prisma.category.findUnique({
       where: { id },
@@ -143,6 +153,8 @@ export class CategoriesService {
     };
   }
 
+  // DELETE /api/categories/:id — Admin deletes a category; clears the category caches.
+  // Query: category.findUnique, category.delete
   async remove(id: number) {
     const category = await this.prisma.category.findUnique({
       where: { id },

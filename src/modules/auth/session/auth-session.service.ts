@@ -383,6 +383,8 @@ export class AuthSessionService {
       await this.revoke(row.session.id, row.session.userId);
   }
 
+  // DELETE /api/auth/sessions/:id — Signs one device out: marks the session revoked and kills its refresh tokens.
+  // Query: authSession.findUnique, authSession.update, authRefreshToken.updateMany, $transaction
   async revoke(sid: string, actorId: number, isAdmin = false): Promise<void> {
     const original = await this.database(() =>
       this.prisma.authSession.findUnique({ where: { id: sid } }),
@@ -405,6 +407,8 @@ export class AuthSessionService {
     await this.invalidate(original);
   }
 
+  // GET /api/auth/sessions — The signed-in devices (sessions) of one user, newest first.
+  // Query: authSession.findMany
   list(userId: number) {
     return this.database(() =>
       this.prisma.authSession.findMany({
@@ -422,6 +426,8 @@ export class AuthSessionService {
     );
   }
 
+  // POST /api/auth/logout-all — Signs the user out on every device (raises the token version).
+  // Query: user.update, $transaction
   async logoutAll(userId: number): Promise<void> {
     const sessions = await this.database(() =>
       this.prisma.$transaction(async (tx) => {
@@ -472,6 +478,8 @@ export class AuthSessionService {
     await this.invalidateMany(sessions);
   }
 
+  // PATCH /api/auth/password — Checks the current password, saves the new hash and signs out every device (raises the token version).
+  // Query: user.findUnique, user.update, $transaction
   async changePassword(
     userId: number,
     currentPassword: string,
@@ -535,6 +543,8 @@ export class AuthSessionService {
     await this.invalidateMany(sessions);
   }
 
+  // PATCH /api/auth/users/:id/ban — Admin bans or unbans a user; a ban also signs them out everywhere.
+  // Query: user.findUnique, user.update, $transaction
   async setBanned(
     userId: number,
     banned: boolean,

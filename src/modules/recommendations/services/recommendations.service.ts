@@ -47,6 +47,8 @@ export class RecommendationsService {
     private readonly observability: ObservabilityService,
   ) {}
 
+  // GET /api/recommendations/quota — How many AI matching runs the user has left today.
+  // Query: recommendation-quota.service.ts getQuotaForUser()
   async getQuotaForUser(userId: number, userRole?: Role | string | null) {
     return {
       message: 'Get AI recommendation quota successfully',

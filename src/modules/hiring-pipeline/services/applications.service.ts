@@ -36,6 +36,8 @@ export class ApplicationsService {
     private readonly query: ApplicationsQueryService,
   ) {}
 
+  // GET /api/applications/:id — One application with its interviews and offer (applicant, post owner or admin).
+  // Query: application-query.service.ts detail()
   async findOne(id: number, viewer: Viewer) {
     return {
       message: 'Get hiring application successfully',

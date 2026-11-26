@@ -66,6 +66,8 @@ export class ConnectionsService {
     private readonly notifications?: NotificationsService,
   ) {}
 
+  // POST /api/connections/requests/:userId — Sends a connection request.
+  // Query: user.findUnique, connection.findUnique, connection.create
   async sendRequest(requesterId: number, recipientId: number) {
     if (requesterId === recipientId) {
       throw new BadRequestException('You cannot connect with yourself');
@@ -105,6 +107,8 @@ export class ConnectionsService {
     return { message: 'Connection request sent', content: connection };
   }
 
+  // PUT /api/connections/requests/:id/accept — The receiver accepts a request.
+  // Query: connection.updateMany, connection.findUnique
   async acceptRequest(connectionId: number, userId: number) {
     const connection = await this.getConnection(connectionId);
     if (connection.status !== ConnectionStatus.PENDING) {
@@ -138,6 +142,8 @@ export class ConnectionsService {
     return { message: 'Connection request accepted', content: updated };
   }
 
+  // DELETE /api/connections/:id — Removes a connection, or cancels / declines a request.
+  // Query: connection.delete
   async deleteConnection(connectionId: number, userId: number) {
     const connection = await this.getConnection(connectionId);
     if (
@@ -150,6 +156,8 @@ export class ConnectionsService {
     return { message: 'Connection removed successfully' };
   }
 
+  // GET /api/connections/status/:userId — Connection state between the viewer and one person (button on the profile).
+  // Query: connection.findUnique
   async getStatus(userId: number, targetUserId: number) {
     if (userId === targetUserId) {
       return {
@@ -174,6 +182,8 @@ export class ConnectionsService {
     };
   }
 
+  // GET /api/connections/requests — Pending requests: received and sent.
+  // Query: connection.findMany
   async getRequests(userId: number) {
     const connections = await this.prisma.connection.findMany({
       where: {
@@ -204,6 +214,8 @@ export class ConnectionsService {
     };
   }
 
+  // GET /api/connections — Accepted connections of the user, by page.
+  // Query: connection.findMany, connection.count
   async getConnections(userId: number, query: ConnectionsQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 12;
@@ -247,6 +259,8 @@ export class ConnectionsService {
     };
   }
 
+  // GET /api/connections/suggestions — "People you may know": people with shared skills or the same location first, then everyone else.
+  // Query: user.findUnique, connection.findMany, user.findMany, user.count
   async getSuggestions(userId: number, query: ConnectionsQueryDto) {
     const [viewer, connections] = await Promise.all([
       this.prisma.user.findUnique({

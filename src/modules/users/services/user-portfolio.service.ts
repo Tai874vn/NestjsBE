@@ -19,6 +19,8 @@ export class UserPortfolioService {
     @Optional() private readonly storage?: StorageService,
   ) {}
 
+  // POST /api/users/me/profile/portfolio — Adds a portfolio item to the profile.
+  // Query: userPortfolioItem.create
   async createPortfolioItem(userId: number, dto: UpsertPortfolioItemDto) {
     await this.ensureUserExists(userId);
 
@@ -42,6 +44,8 @@ export class UserPortfolioService {
     };
   }
 
+  // PUT /api/users/me/profile/portfolio/:id — Edits a portfolio item.
+  // Query: userPortfolioItem.update
   async updatePortfolioItem(
     userId: number,
     itemId: number,
@@ -78,6 +82,8 @@ export class UserPortfolioService {
     };
   }
 
+  // DELETE /api/users/me/profile/portfolio/:id — Deletes a portfolio item.
+  // Query: userPortfolioItem.delete
   async deletePortfolioItem(userId: number, itemId: number) {
     const existing = await this.ensurePortfolioOwnership(userId, itemId);
 

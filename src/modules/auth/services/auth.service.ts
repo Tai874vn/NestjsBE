@@ -94,6 +94,8 @@ export class AuthService {
     };
   }
 
+  // POST /api/auth/signin — Email + password sign-in; creates the session and its cookies.
+  // Query: see signInWithPassword() below
   async signIn(
     signInDto: SignInDto,
     metadata: SessionMetadata = {},
@@ -267,6 +269,8 @@ export class AuthService {
     };
   }
 
+  // POST /api/auth/refresh — Swaps the refresh cookie for a new token pair.
+  // Query: auth-session.service.ts refresh()
   refreshTokens(refreshToken: string) {
     return this.sessions.refresh(refreshToken);
   }

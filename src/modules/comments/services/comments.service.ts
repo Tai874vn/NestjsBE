@@ -80,6 +80,8 @@ export class CommentsService {
     };
   }
 
+  // GET /api/comments — Admin table: up to 100 reviews (comments on services).
+  // Query: comment.findMany
   async findAll() {
     const comments = await this.prisma.comment.findMany({
       take: 100,
@@ -167,6 +169,8 @@ export class CommentsService {
     };
   }
 
+  // PUT /api/comments/:id — Author (or admin) edits a review; clears review and user caches.
+  // Query: comment.findUnique, comment.update
   async update(
     id: number,
     updateDto: UpdateCommentDto,
@@ -217,6 +221,8 @@ export class CommentsService {
     };
   }
 
+  // DELETE /api/comments/:id — Author (or admin) deletes a review; clears review and user caches.
+  // Query: comment.findUnique, comment.delete
   async remove(id: number, userId: number, userRole: Role) {
     const comment = await this.prisma.comment.findUnique({
       where: { id },
@@ -250,6 +256,8 @@ export class CommentsService {
     };
   }
 
+  // GET /api/comments/by-job/:jobId — Reviews of one service, kept in Redis.
+  // Query: comment.findMany
   async findByJob(jobId: number) {
     const cacheKey = `${CACHE_KEYS.COMMENT_BY_JOB}${jobId}`;
 

@@ -83,6 +83,8 @@ export class PostsService {
     };
   }
 
+  // GET /api/posts/feed — Home feed: own and connected people first, then others, by cursor.
+  // Query: connection.findMany, then the post query below in this method
   async getFeed(userId: number, query: FeedQueryDto) {
     const limit = query.limit ?? 10;
     const cursor = this.decodeFeedCursor(query.cursor);
@@ -168,6 +170,8 @@ export class PostsService {
     };
   }
 
+  // GET /api/posts/me/stats — Post and like counts on the left rail.
+  // Query: post.count, postLike.count
   async getMyStats(userId: number) {
     const [posts, reactions] = await Promise.all([
       this.prisma.post.count({ where: { authorId: userId } }),
@@ -180,6 +184,8 @@ export class PostsService {
     };
   }
 
+  // DELETE /api/posts/:id — Author deletes a post and its image.
+  // Query: post.findUnique, post.delete
   async deletePost(postId: number, userId: number, role: Role) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
@@ -196,6 +202,8 @@ export class PostsService {
     return { message: 'Post deleted successfully' };
   }
 
+  // PUT /api/posts/:id/like — Likes a post (a second like is ignored).
+  // Query: postLike.create
   async likePost(postId: number, userId: number) {
     const post = await this.ensurePost(postId);
     try {
@@ -217,12 +225,16 @@ export class PostsService {
     return { message: 'Post liked successfully' };
   }
 
+  // DELETE /api/posts/:id/like — Removes the like.
+  // Query: postLike.deleteMany
   async unlikePost(postId: number, userId: number) {
     await this.ensurePost(postId);
     await this.prisma.postLike.deleteMany({ where: { postId, userId } });
     return { message: 'Post unliked successfully' };
   }
 
+  // GET /api/posts/:id/comments — Top-level comments of a post, by page.
+  // Query: see listComments()
   async getComments(postId: number, query: CommentsQueryDto) {
     await this.ensurePost(postId);
     return {
@@ -231,6 +243,8 @@ export class PostsService {
     };
   }
 
+  // GET /api/posts/:postId/comments/:commentId/replies — Replies under one comment, by page.
+  // Query: see listComments()
   async getReplies(postId: number, commentId: number, query: CommentsQueryDto) {
     await this.ensureRootComment(postId, commentId);
     return {
@@ -265,6 +279,8 @@ export class PostsService {
     };
   }
 
+  // POST /api/posts/:id/comments — Adds a comment to a post.
+  // Query: postComment.create
   async createComment(
     postId: number,
     authorId: number,
@@ -289,6 +305,8 @@ export class PostsService {
     };
   }
 
+  // POST /api/posts/:postId/comments/:commentId/replies — Replies to a comment (one level deep).
+  // Query: postComment.create inside this method
   async createReply(
     postId: number,
     commentId: number,
@@ -330,6 +348,8 @@ export class PostsService {
     };
   }
 
+  // PUT /api/posts/:postId/comments/:commentId — Author edits a comment.
+  // Query: postComment.findUnique, postComment.update
   async updateComment(
     postId: number,
     commentId: number,
@@ -358,6 +378,8 @@ export class PostsService {
     };
   }
 
+  // DELETE /api/posts/:postId/comments/:commentId — Author deletes a comment.
+  // Query: postComment.findUnique, postComment.delete
   async deleteComment(
     postId: number,
     commentId: number,

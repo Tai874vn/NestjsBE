@@ -25,6 +25,8 @@ export class UsersService {
     @Optional() private readonly storage?: StorageService,
   ) {}
 
+  // POST /api/users — Admin creates a user.
+  // Query: user.create
   async create(createUserDto: CreateUserDto) {
     const email = this.normalizeEmail(createUserDto.email);
     const existingUser = await this.findUserByEmail(email);
@@ -76,6 +78,8 @@ export class UsersService {
     };
   }
 
+  // GET /api/users — Admin table: every user.
+  // Query: user.findMany
   async findAll() {
     const users = await this.prisma.user.findMany({
       take: 100,
@@ -102,6 +106,8 @@ export class UsersService {
     };
   }
 
+  // GET /api/users/paginated-search — Users by page with keyword search (candidate directory too).
+  // Query: user.findMany, user.count
   async findAllWithPagination(paginationDto: PaginationDto) {
     const { page = 1, pageSize = 10, keyword } = paginationDto;
     const skip = (page - 1) * pageSize;
@@ -157,6 +163,8 @@ export class UsersService {
     };
   }
 
+  // GET /api/users/:id — One user by id.
+  // Query: user.findUnique
   async findOne(id: number) {
     // Query PostgreSQL directly by primary key instead of caching private PII in Redis.
     const user = await this.prisma.user.findUnique({
@@ -193,6 +201,8 @@ export class UsersService {
     };
   }
 
+  // GET /api/users/search/:name — Users whose name matches.
+  // Query: user.findMany
   async searchByName(name: string) {
     const users = await this.prisma.user.findMany({
       where: {
@@ -231,6 +241,8 @@ export class UsersService {
     };
   }
 
+  // PUT /api/users/:id — Admin edits a user.
+  // Query: user.findUnique, user.update
   async update(id: number, updateUserDto: UpdateUserDto) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -304,6 +316,8 @@ export class UsersService {
     return this.emailVerification.requestEmailChange(id, email);
   }
 
+  // DELETE /api/users/:id — Admin deletes a user and signs them out.
+  // Query: user.findUnique; delete: auth-session.service.ts deleteUser()
   async remove(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
