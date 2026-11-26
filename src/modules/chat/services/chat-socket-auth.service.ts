@@ -8,7 +8,7 @@ import { jwtVerifyOptions } from '../../auth/session/auth-jwt.config';
 import type {
   AuthenticatedSocket,
   RealtimeSocketClaims,
-} from './authenticated-socket.type';
+} from '../utils/authenticated-socket.type';
 
 @Injectable()
 export class ChatSocketAuthService {

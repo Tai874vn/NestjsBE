@@ -29,7 +29,7 @@ import { ChatMessageFanoutService } from '../services/chat-message-fanout.servic
 import { ChatPresenceService } from '../services/chat-presence.service';
 import { ChatSocketAuthService } from '../services/chat-socket-auth.service';
 import { ChatSocketRateLimitService } from '../services/chat-socket-rate-limit.service';
-import type { AuthenticatedSocket } from '../services/authenticated-socket.type';
+import type { AuthenticatedSocket } from '../utils/authenticated-socket.type';
 import {
   SendMessageDto,
   GetMessagesDto,

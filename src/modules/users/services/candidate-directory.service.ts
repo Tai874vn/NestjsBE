@@ -4,9 +4,9 @@ import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
 import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
-import { profileStrength } from './profile-strength';
+import { profileStrength } from '../utils/profile-strength';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
-import { resumeOccupation } from './resume-career';
+import { resumeOccupation } from '../utils/resume-career';
 
 type CandidateDirectoryUser = {
   id: number;

@@ -17,8 +17,8 @@ import {
   resumeOccupation,
   resumeOccupationYears,
   withStoredLegacy,
-} from './resume-career';
-import { asRecord, mergeSkills, stringList } from './resume-ai-payload';
+} from '../utils/resume-career';
+import { asRecord, mergeSkills, stringList } from '../utils/resume-ai-payload';
 import {
   RESUME_AI_STATUS,
   ResumeAiQueueService,

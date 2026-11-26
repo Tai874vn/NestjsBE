@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
-import { CreateNotificationInput } from './notification.types';
+import { CreateNotificationInput } from '../utils/notification.types';
 
 /**
  * Input for the hiring pipeline notifications. `forRecruiter` picks the link: the recruiter

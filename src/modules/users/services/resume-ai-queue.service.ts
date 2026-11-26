@@ -12,12 +12,12 @@ import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/services/redis.service';
 import { AiRecommendationClient } from '../../recommendations/services/ai-recommendation.client';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
-import { resumeOccupation } from './resume-career';
+import { resumeOccupation } from '../utils/resume-career';
 import {
   asRecord,
   buildResumeSeniorityPayload,
   mergeSkills,
-} from './resume-ai-payload';
+} from '../utils/resume-ai-payload';
 
 /** Where a resume is in the AI queue. Null in the database means it was never queued. */
 export const RESUME_AI_STATUS = {

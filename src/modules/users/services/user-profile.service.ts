@@ -22,7 +22,7 @@ import { UserLegacyProfileSyncService } from './user-legacy-profile-sync.service
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { SkillService } from '../../skill/services/skill.service';
 import { ResumeAiQueueService } from './resume-ai-queue.service';
-import { resumeEducation } from './resume-career';
+import { resumeEducation } from '../utils/resume-career';
 
 @Injectable()
 export class UserProfileService {

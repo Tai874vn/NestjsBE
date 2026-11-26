@@ -2,7 +2,7 @@ import {
   occupationYears,
   cleanResumeJobs,
   resumeOccupation,
-} from '../../users/services/resume-career';
+} from '../../users/utils/resume-career';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 import { Injectable } from '@nestjs/common';
 

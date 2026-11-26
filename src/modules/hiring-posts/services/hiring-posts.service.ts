@@ -38,7 +38,7 @@ import {
   toViewerApplications,
   ViewerApplication,
   viewerApplicationSelect,
-} from './hiring-post-card';
+} from '../utils/hiring-post-card';
 import { HiringEventsService } from '../../hiring-pipeline/services/hiring-events.service';
 import {
   interviewsInclude,

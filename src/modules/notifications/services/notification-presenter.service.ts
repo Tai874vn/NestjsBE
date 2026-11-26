@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { NotificationWithActor } from './notification.types';
+import { NotificationWithActor } from '../utils/notification.types';
 
 @Injectable()
 export class NotificationPresenterService {

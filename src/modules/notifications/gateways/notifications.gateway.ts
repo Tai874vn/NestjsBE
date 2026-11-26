@@ -15,7 +15,7 @@ import { jwtVerifyOptions } from '../../auth/session/auth-jwt.config';
 import type {
   AuthenticatedSocket,
   RealtimeSocketClaims,
-} from '../../chat/services/authenticated-socket.type';
+} from '../../chat/utils/authenticated-socket.type';
 
 type NotificationPayload = {
   id: number;

@@ -11,15 +11,15 @@ import {
   pipelineCounts,
   toHiringPostCard,
   toViewerApplications,
-} from '../../hiring-posts/services/hiring-post-card';
+} from '../../hiring-posts/utils/hiring-post-card';
 import { candidateCareer } from '../../users/services/candidate-directory.service';
-import { asRecord } from '../../users/services/resume-ai-payload';
+import { asRecord } from '../../users/utils/resume-ai-payload';
 import {
   cleanResumeJobs,
   relatedYears,
   resumeEducation,
   yearsInOccupation,
-} from '../../users/services/resume-career';
+} from '../../users/utils/resume-career';
 
 /** Who is looking: the signed-in user's id and role. */
 export type Viewer = { id: number; role: Role };

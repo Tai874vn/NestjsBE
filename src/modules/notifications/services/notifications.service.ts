@@ -19,7 +19,7 @@ import { NotificationTemplateService } from './notification-template.service';
 import {
   CreateNotificationInput,
   notificationActorSelect,
-} from './notification.types';
+} from '../utils/notification.types';
 
 type NotificationCursor = {
   phase: 'unread' | 'read';
