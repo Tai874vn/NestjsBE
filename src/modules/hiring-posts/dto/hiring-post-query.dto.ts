@@ -19,6 +19,7 @@ export type HiringPostLevel = (typeof HIRING_POST_LEVELS)[number];
 
 export const HIRING_POST_SORTS = [
   'newest',
+  'oldest',
   'closing_soon',
   'salary_high',
 ] as const;
@@ -150,7 +151,7 @@ export class HiringPostQueryDto extends PaginationDto {
   location?: string;
 
   /**
-   * newest (default): last updated first. closing_soon: nearest closing date first, posts without one last.
+   * newest (default): last updated first. oldest: the reverse (least recently updated first). closing_soon: nearest closing date first, posts without one last.
    * salary_high: highest salaryMax, then salaryMin, posts without a salary last. Salaries are compared as
    * stored: amounts in other currencies or periods are NOT converted.
    */

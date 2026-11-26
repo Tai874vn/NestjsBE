@@ -25,6 +25,7 @@ export const HIRING_POST_ORDER: Record<
   Prisma.HiringPostOrderByWithRelationInput[]
 > = {
   newest: [{ updatedAt: 'desc' }, { id: 'desc' }],
+  oldest: [{ updatedAt: 'asc' }, { id: 'asc' }],
   closing_soon: [{ closesAt: { sort: 'asc', nulls: 'last' } }, { id: 'desc' }],
   salary_high: [
     { salaryMax: { sort: 'desc', nulls: 'last' } },

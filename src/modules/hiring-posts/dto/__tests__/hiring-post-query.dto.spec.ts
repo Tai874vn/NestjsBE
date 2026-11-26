@@ -55,7 +55,7 @@ describe('HiringPostQueryDto', () => {
 
   it('rejects an unknown sort with the allowed values', async () => {
     expect((await parse({ sort: 'cheapest' })).messages).toEqual([
-      'sort must be one of newest, closing_soon, salary_high',
+      'sort must be one of newest, oldest, closing_soon, salary_high',
     ]);
     expect((await parse({ sort: 'salary_high' })).messages).toEqual([]);
   });
