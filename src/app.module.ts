@@ -77,11 +77,16 @@ import { DatabaseModule } from './database/database.module';
   controllers: [AppController],
   providers: [
     AppService,
+    // @find app request errors logic [all] — one error shape for every failure
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: RequestObservabilityInterceptor },
+    // @find app request sign-in access [signed-in] — every route needs a session unless @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // @find app request roles access [admin,recruiter] — @Roles(...) on a route limits it to those roles
     { provide: APP_GUARD, useClass: RolesGuard },
+    // @find app request csrf access [signed-in] — cookie requests must carry the CSRF token
     { provide: APP_GUARD, useClass: CsrfGuard },
+    // @find app request rate-limit access [all] — too many requests answer 429
     { provide: APP_GUARD, useClass: HttpThrottlerGuard },
   ],
 })

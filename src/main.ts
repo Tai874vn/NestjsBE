@@ -15,6 +15,7 @@ import { REDIS_CLIENT } from './modules/redis/utils/redis.constants';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+  // @find app request security-headers logic [all] — helmet: browser security headers on every answer
   app.use(helmet());
   app.use(
     json({
@@ -40,6 +41,7 @@ async function bootstrap() {
   app.setGlobalPrefix(process.env.GLOBAL_PREFIX!);
   app.enableCors(buildCorsOptions());
 
+  // @find app request validation logic [all] — ValidationPipe: DTO rules, unknown fields 400, values converted
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

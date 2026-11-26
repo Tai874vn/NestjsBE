@@ -94,6 +94,7 @@ export class HiringPostQueryDto extends PaginationDto {
   })
   @IsString({ each: true })
   @MaxLength(20, { each: true })
+  // @find hiring-posts filters all validation [all] — allowed values and sizes of every list filter (400 when wrong)
   occupation?: string[];
 
   @Transform(levelList)
@@ -119,6 +120,7 @@ export class HiringPostQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
+  // @find hiring-posts filters location validation [all] — location: trimmed, text, max 120 characters
   location?: string;
 
   /**

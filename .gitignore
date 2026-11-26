@@ -72,6 +72,8 @@ documentation/
 *.pdf
 *.rtf
 *.txt
+!STRUCTURE.txt
+!scripts/dev/HUONG-DAN-DEV.txt
 
 # Seed files
 **/seed/

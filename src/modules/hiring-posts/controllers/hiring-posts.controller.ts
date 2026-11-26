@@ -32,6 +32,7 @@ export class HiringPostsController {
   constructor(private readonly hiringPostsService: HiringPostsService) {}
 
   // Visitors can browse open posts; signed-in candidates also see which ones they applied to.
+  // @find hiring-posts results list api [all] — GET /api/hiring-posts: the public list (search, filters, sort, page)
   @Get()
   @OptionalAuth()
   findOpen(
@@ -43,6 +44,7 @@ export class HiringPostsController {
 
   // Declared before ':id' so "locations" and "facets" are not read as a post id.
   // Same for everyone, so browsers and proxies may keep it for 5 minutes.
+  // @find hiring-posts filters location api [all] — GET /api/hiring-posts/locations
   @Get('locations')
   @OptionalAuth()
   @Header('Cache-Control', 'public, max-age=300')
@@ -50,12 +52,14 @@ export class HiringPostsController {
     return this.hiringPostsService.findLocations();
   }
 
+  // @find hiring-posts filters counts api [all] — GET /api/hiring-posts/facets: numbers beside each filter choice
   @Get('facets')
   @OptionalAuth()
   findFacets(@Query() query: HiringPostQueryDto) {
     return this.hiringPostsService.findFacets(query);
   }
 
+  // @find my-hiring-posts results list api [recruiter] — GET /api/hiring-posts/mine
   @Get('mine')
   @Roles(Role.EMPLOYER, Role.ADMIN)
   findMine(@Query() query: PaginationDto, @CurrentUser() user: ValidatedUser) {
@@ -86,6 +90,7 @@ export class HiringPostsController {
     return this.hiringPostsService.create(dto, user.id);
   }
 
+  // @find my-hiring-posts form update api [owner] — PATCH /api/hiring-posts/:id
   @Patch(':id')
   @Roles(Role.EMPLOYER, Role.ADMIN)
   update(
@@ -114,6 +119,7 @@ export class HiringPostsController {
     return this.hiringPostsService.predictSeniority(id, user.id, user.role);
   }
 
+  // @find hiring-posts card apply api [candidate] — POST /api/hiring-posts/:id/applications
   @Post(':id/applications')
   @Roles(Role.USER, Role.ADMIN)
   apply(
