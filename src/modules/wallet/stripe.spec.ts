@@ -108,6 +108,7 @@ describe('StripeService', () => {
       'line_items[0][price_data][product_data][name]': 'JobAura top up: 50 credits',
       success_url: 'https://x/s',
       cancel_url: 'https://x/c',
+      'adaptive_pricing[enabled]': 'false',
     });
   });
 

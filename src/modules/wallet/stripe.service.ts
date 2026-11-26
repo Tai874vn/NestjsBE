@@ -112,6 +112,8 @@ export class StripeService {
       'line_items[0][price_data][product_data][name]': `JobAura top up: ${input.credits} credits`,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
+      // Charge exactly the US dollar price we check in the webhook (no automatic local currency).
+      'adaptive_pricing[enabled]': 'false',
     });
     return this.request<CheckoutSession>(
       'POST',
