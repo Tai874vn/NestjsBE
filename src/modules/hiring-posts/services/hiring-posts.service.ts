@@ -37,6 +37,21 @@ import {
   openFilters,
 } from '../utils/hiring-post-search';
 import {
+  assertCanManage,
+  assertClosesInFuture,
+  assertSalaryRange,
+  assertTakesApplications,
+  isUniqueConstraintError,
+  occupationChoice,
+  optionalTrim,
+} from '../utils/hiring-post-checks';
+import {
+  buildPostUpdateData,
+  didLevelInputsChange,
+  didLevelTextChange,
+  validateUpdateInputs,
+} from '../utils/hiring-post-update';
+import {
   emptyPipeline,
   hiringPostInclude,
   HiringPostWithMeta,
@@ -187,24 +202,24 @@ export class HiringPostsService {
    * The recruiter gets an answer at once; the AI level appears on the post when the queue has finished.
    */
   async create(dto: CreateHiringPostDto, recruiterId: number) {
-    this.assertSalaryRange(dto.salaryMin, dto.salaryMax);
-    this.assertClosesInFuture(dto.closesAt);
-    const occupation = this.occupationChoice(dto.occupationCode, dto.specialty);
+    assertSalaryRange(dto.salaryMin, dto.salaryMax);
+    assertClosesInFuture(dto.closesAt);
+    const occupation = occupationChoice(dto.occupationCode, dto.specialty);
 
     const post = await this.prisma.hiringPost.create({
       data: {
         recruiterId,
         title: dto.title.trim(),
         description: dto.description.trim(),
-        requirements: this.optionalTrim(dto.requirements),
-        location: this.optionalTrim(dto.location),
-        employmentType: this.optionalTrim(dto.employmentType),
+        requirements: optionalTrim(dto.requirements),
+        location: optionalTrim(dto.location),
+        employmentType: optionalTrim(dto.employmentType),
         salaryMin: dto.salaryMin,
         salaryMax: dto.salaryMax,
         // Not sent: the column defaults (USD, month).
         salaryCurrency: dto.salaryCurrency,
         salaryPeriod: dto.salaryPeriod,
-        companyName: this.optionalTrim(dto.companyName),
+        companyName: optionalTrim(dto.companyName),
         occupationCode: occupation.code,
         specialty: occupation.specialty,
         yearsRequired: dto.yearsRequired,
@@ -243,10 +258,10 @@ export class HiringPostsService {
     // 1. Load the post and check ownership/admin permission before validating any input fields.
     const post = await this.loadManageablePost(id, userId, userRole);
     // 2. Check salary range, closing date and occupation/specialty before opening a transaction.
-    const occupation = this.validateUpdateInputs(post, dto);
+    const occupation = validateUpdateInputs(post, dto);
     // 3. Decide if the AI level must be cleared or re-queued, and whether this closes an OPEN post.
-    const levelInputsChanged = this.didLevelInputsChange(post, dto, occupation);
-    const requeue = levelInputsChanged || this.didLevelTextChange(post, dto);
+    const levelInputsChanged = didLevelInputsChange(post, dto, occupation);
+    const requeue = levelInputsChanged || didLevelTextChange(post, dto);
     const closing =
       dto.status === HiringPostStatus.CLOSED &&
       post.status === HiringPostStatus.OPEN;
@@ -259,7 +274,7 @@ export class HiringPostsService {
           await this.resolveOpeningsAndCloseInTx(tx, id, dto, userId, closing);
         const updated = await tx.hiringPost.update({
           where: { id },
-          data: this.buildPostUpdateData(
+          data: buildPostUpdateData(
             dto,
             occupation,
             filled,
@@ -299,88 +314,8 @@ export class HiringPostsService {
     userRole: Role,
   ): Promise<HiringPostWithMeta> {
     const post = await this.findPostOrThrow(id);
-    this.assertCanManage(post.recruiterId, userId, userRole);
+    assertCanManage(post.recruiterId, userId, userRole);
     return post;
-  }
-
-  /** Validate salary range, closing date and occupation/specialty in order before writing. */
-  private validateUpdateInputs(
-    post: HiringPostWithMeta,
-    dto: UpdateHiringPostDto,
-  ): { code: string; specialty: string | null } | null {
-    this.assertSalaryRange(
-      dto.salaryMin ?? post.salaryMin ?? undefined,
-      dto.salaryMax ?? post.salaryMax ?? undefined,
-    );
-    this.assertClosesInFuture(dto.closesAt);
-    return this.resolveUpdatedOccupation(post, dto);
-  }
-
-  /**
-   * Resolve the new occupation and specialty when either is sent.
-   * A changed occupation drops the stored specialty unless a new one is sent, and an empty
-   * specialty on an old post with no occupation changes nothing.
-   */
-  private resolveUpdatedOccupation(
-    post: HiringPostWithMeta,
-    dto: UpdateHiringPostDto,
-  ): { code: string; specialty: string | null } | null {
-    const occupationSent =
-      dto.occupationCode !== undefined ||
-      (dto.specialty !== undefined &&
-        (post.occupationCode !== null ||
-          this.optionalTrim(dto.specialty) !== null));
-    if (!occupationSent) return null;
-
-    const nextCode = dto.occupationCode ?? post.occupationCode;
-    const nextSpecialty =
-      dto.specialty !== undefined
-        ? dto.specialty
-        : nextCode === post.occupationCode
-          ? post.specialty
-          : null;
-    return this.occupationChoice(nextCode, nextSpecialty);
-  }
-
-  /** True when occupation, required years or skills changed, so the old AI level is no longer valid. */
-  private didLevelInputsChange(
-    post: HiringPostWithMeta,
-    dto: UpdateHiringPostDto,
-    occupation: { code: string; specialty: string | null } | null,
-  ): boolean {
-    if (occupation !== null && occupation.code !== post.occupationCode) {
-      return true;
-    }
-    if (
-      dto.yearsRequired !== undefined &&
-      dto.yearsRequired !== post.yearsRequired
-    ) {
-      return true;
-    }
-    return (
-      dto.skills !== undefined &&
-      JSON.stringify(dto.skills) !== JSON.stringify(post.skills)
-    );
-  }
-
-  /** True when title, description or requirements changed, so the AI should re-evaluate the post. */
-  private didLevelTextChange(
-    post: HiringPostWithMeta,
-    dto: UpdateHiringPostDto,
-  ): boolean {
-    if (dto.title !== undefined && dto.title.trim() !== post.title) {
-      return true;
-    }
-    if (
-      dto.description !== undefined &&
-      dto.description.trim() !== post.description
-    ) {
-      return true;
-    }
-    return (
-      dto.requirements !== undefined &&
-      this.optionalTrim(dto.requirements) !== (post.requirements ?? null)
-    );
   }
 
   /**
@@ -409,101 +344,6 @@ export class HiringPostsService {
       }
     }
     return { filled: fill.filled, swept, sweepReason };
-  }
-
-  /** Combine all field-group patches into one Prisma update payload. */
-  private buildPostUpdateData(
-    dto: UpdateHiringPostDto,
-    occupation: { code: string; specialty: string | null } | null,
-    filled: boolean,
-    clearLevel: boolean,
-    requeue: boolean,
-  ): Prisma.HiringPostUpdateInput {
-    return {
-      ...this.buildPostTextUpdateData(dto),
-      ...this.buildSalaryUpdateData(dto),
-      ...this.buildQualificationUpdateData(dto, occupation),
-      ...this.buildStatusAndAiUpdateData(dto, filled, clearLevel, requeue),
-    };
-  }
-
-  private buildPostTextUpdateData(
-    dto: UpdateHiringPostDto,
-  ): Prisma.HiringPostUpdateInput {
-    const data: Prisma.HiringPostUpdateInput = {};
-    if (dto.title !== undefined) data.title = dto.title.trim();
-    if (dto.description !== undefined) {
-      data.description = dto.description.trim();
-    }
-    if (dto.requirements !== undefined) {
-      data.requirements = this.optionalTrim(dto.requirements);
-    }
-    if (dto.location !== undefined) {
-      data.location = this.optionalTrim(dto.location);
-    }
-    if (dto.employmentType !== undefined) {
-      data.employmentType = this.optionalTrim(dto.employmentType);
-    }
-    if (dto.companyName !== undefined) {
-      data.companyName = this.optionalTrim(dto.companyName);
-    }
-    return data;
-  }
-
-  private buildSalaryUpdateData(
-    dto: UpdateHiringPostDto,
-  ): Prisma.HiringPostUpdateInput {
-    const data: Prisma.HiringPostUpdateInput = {};
-    if (dto.salaryMin !== undefined) data.salaryMin = dto.salaryMin;
-    if (dto.salaryMax !== undefined) data.salaryMax = dto.salaryMax;
-    if (dto.salaryCurrency !== undefined) {
-      data.salaryCurrency = dto.salaryCurrency;
-    }
-    if (dto.salaryPeriod !== undefined) data.salaryPeriod = dto.salaryPeriod;
-    return data;
-  }
-
-  private buildQualificationUpdateData(
-    dto: UpdateHiringPostDto,
-    occupation: { code: string; specialty: string | null } | null,
-  ): Prisma.HiringPostUpdateInput {
-    const data: Prisma.HiringPostUpdateInput = {};
-    if (occupation !== null) {
-      data.occupationCode = occupation.code;
-      data.specialty = occupation.specialty;
-    }
-    if (dto.yearsRequired !== undefined) {
-      data.yearsRequired = dto.yearsRequired;
-    }
-    if (dto.skills !== undefined) data.skills = dto.skills;
-    if (dto.openings !== undefined) data.openings = dto.openings;
-    if (dto.closesAt !== undefined) data.closesAt = new Date(dto.closesAt);
-    return data;
-  }
-
-  private buildStatusAndAiUpdateData(
-    dto: UpdateHiringPostDto,
-    filled: boolean,
-    clearLevel: boolean,
-    requeue: boolean,
-  ): Prisma.HiringPostUpdateInput {
-    const data: Prisma.HiringPostUpdateInput = {};
-    if (filled) {
-      data.status = HiringPostStatus.CLOSED;
-    } else if (dto.status !== undefined) {
-      data.status = dto.status;
-    }
-    if (clearLevel) {
-      data.predictedSeniority = null;
-      data.predictedSeniorityConfidence = null;
-      data.predictedSeniorityModel = null;
-      data.predictedSeniorityMetadata = Prisma.DbNull;
-      data.predictedSeniorityAt = null;
-    }
-    if (requeue) {
-      Object.assign(data, queuedHiringPostFields());
-    }
-    return data;
   }
 
   /** Run post-commit notifications and AI queue wakeup after an update succeeds. */
@@ -607,7 +447,7 @@ export class HiringPostsService {
 
   async remove(id: number, userId: number, userRole: Role) {
     const post = await this.findPostOrThrow(id);
-    this.assertCanManage(post.recruiterId, userId, userRole);
+    assertCanManage(post.recruiterId, userId, userRole);
 
     await this.prisma.hiringPost.delete({ where: { id } });
 
@@ -618,7 +458,7 @@ export class HiringPostsService {
 
   async predictSeniority(id: number, userId: number, userRole: Role) {
     const post = await this.findPostOrThrow(id);
-    this.assertCanManage(post.recruiterId, userId, userRole);
+    assertCanManage(post.recruiterId, userId, userRole);
 
     // The level is worked out by the queue; this puts the post (back) in it, e.g. after "Try again".
     await this.aiQueue.enqueue(id);
@@ -637,7 +477,7 @@ export class HiringPostsService {
   async apply(id: number, applicantId: number, dto: ApplyHiringPostDto) {
     const post = await this.findPostOrThrow(id);
 
-    this.assertTakesApplications(post);
+    assertTakesApplications(post);
 
     if (post.recruiterId === applicantId) {
       throw new BadRequestException('You cannot apply to your own hiring post');
@@ -668,12 +508,12 @@ export class HiringPostsService {
         if (!current) {
           throw new NotFoundException(`Hiring post with ID ${id} not found`);
         }
-        this.assertTakesApplications(current);
+        assertTakesApplications(current);
         const saved = existing
           ? await tx.hiringApplication.update({
               where: { id: existing.id },
               data: {
-                coverLetter: this.optionalTrim(dto.coverLetter),
+                coverLetter: optionalTrim(dto.coverLetter),
                 status: HiringApplicationStatus.APPLIED,
                 // A fresh start: nothing from the earlier round stays.
                 statusReason: null,
@@ -688,7 +528,7 @@ export class HiringPostsService {
               data: {
                 hiringPostId: id,
                 applicantId,
-                coverLetter: this.optionalTrim(dto.coverLetter),
+                coverLetter: optionalTrim(dto.coverLetter),
               },
               include: this.applicationInclude(),
             });
@@ -700,7 +540,7 @@ export class HiringPostsService {
         return saved;
       });
     } catch (error) {
-      if (this.isUniqueConstraintError(error)) {
+      if (isUniqueConstraintError(error)) {
         throw new ConflictException('You already applied to this hiring post');
       }
       throw error;
@@ -730,19 +570,6 @@ export class HiringPostsService {
     };
   }
 
-  /** A post takes applications only while it is OPEN and its closing date has not passed: else 409. */
-  private assertTakesApplications(post: {
-    status: HiringPostStatus;
-    closesAt: Date | null;
-  }) {
-    if (
-      post.status !== HiringPostStatus.OPEN ||
-      (post.closesAt !== null && post.closesAt.getTime() <= Date.now())
-    ) {
-      throw new ConflictException('This hiring post is closed.');
-    }
-  }
-
   /**
    * The recruiter's applicants page: one page of the post's applications (only `status` ones when given),
    * plus `counts`, how many applications the post has in each of the 8 statuses (for the tabs).
@@ -755,7 +582,7 @@ export class HiringPostsService {
     query: PostApplicationsQueryDto,
   ) {
     const post = await this.findPostOrThrow(id);
-    this.assertCanManage(post.recruiterId, userId, userRole);
+    assertCanManage(post.recruiterId, userId, userRole);
 
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 10;
@@ -1055,69 +882,5 @@ export class HiringPostsService {
       totalRow: total,
       totalPages: Math.ceil(total / pageSize),
     };
-  }
-
-  private assertCanManage(ownerId: number, userId: number, userRole: Role) {
-    if (ownerId !== userId && userRole !== Role.ADMIN) {
-      throw new ForbiddenException('You can only manage your own hiring posts');
-    }
-  }
-
-  private assertClosesInFuture(closesAt?: string) {
-    if (closesAt !== undefined && new Date(closesAt).getTime() <= Date.now()) {
-      throw new BadRequestException('The closing date must be in the future');
-    }
-  }
-
-  private assertSalaryRange(salaryMin?: number, salaryMax?: number) {
-    if (
-      salaryMin !== undefined &&
-      salaryMax !== undefined &&
-      salaryMin > salaryMax
-    ) {
-      throw new BadRequestException(
-        'Minimum salary cannot be greater than maximum salary',
-      );
-    }
-  }
-
-  /**
-   * The occupation and specialty to store, checked against the catalogue (as resumes are): 400 for an unknown
-   * occupation, or a specialty that is not listed under it.
-   */
-  private occupationChoice(
-    code: string | null | undefined,
-    specialty: string | null | undefined,
-  ): { code: string; specialty: string | null } {
-    const occupation = findOccupation(code);
-    const chosenSpecialty = this.optionalTrim(specialty);
-    if (!occupation) {
-      throw new BadRequestException(
-        code
-          ? 'Choose the occupation from the list.'
-          : 'Choose the occupation before its specialty.',
-      );
-    }
-    if (
-      chosenSpecialty !== null &&
-      !occupation.specialties.includes(chosenSpecialty)
-    ) {
-      throw new BadRequestException(
-        'Choose a specialty listed under the occupation.',
-      );
-    }
-    return { code: occupation.code, specialty: chosenSpecialty };
-  }
-
-  private optionalTrim(value?: string | null) {
-    const trimmed = value?.trim();
-    return trimmed || null;
-  }
-
-  private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    );
   }
 }
