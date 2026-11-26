@@ -2,7 +2,11 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';
-import { CandidateDirectoryQueryDto } from '../dto/candidate-directory-query.dto';
+import {
+  CANDIDATE_SEARCH_FIELDS,
+  CandidateDirectoryQueryDto,
+  CandidateSearchField,
+} from '../dto/candidate-directory-query.dto';
 import { UserProfileNormalizerService } from './user-profile-normalizer.service';
 import { profileStrength } from '../utils/profile-strength';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
@@ -193,31 +197,27 @@ export class CandidateDirectoryService {
     const skill = this.profileNormalizer.trimOptional(query.skill);
     const location = this.profileNormalizer.trimOptional(query.location);
 
+    // @find candidates search keyword-fields logic [recruiter] — how each field is searched; the frontend picks with searchIn
     if (keyword) {
-      filters.push({
-        OR: [
-          { name: { contains: keyword, mode: 'insensitive' } },
-          { headline: { contains: keyword, mode: 'insensitive' } },
-          { bio: { contains: keyword, mode: 'insensitive' } },
-          { location: { contains: keyword, mode: 'insensitive' } },
-          { skill: { contains: keyword, mode: 'insensitive' } },
-          {
-            profileSkills: {
-              some: { name: { contains: keyword, mode: 'insensitive' } },
-            },
+      const has = { contains: keyword, mode: 'insensitive' as const };
+      const byField: Record<
+        CandidateSearchField,
+        Prisma.UserWhereInput | Prisma.UserWhereInput[]
+      > = {
+        name: { name: has },
+        headline: { headline: has },
+        bio: { bio: has },
+        location: { location: has },
+        // Old accounts keep skills as one text column; newer ones as rows.
+        skills: [{ skill: has }, { profileSkills: { some: { name: has } } }],
+        portfolio: {
+          portfolioItems: {
+            some: { OR: [{ title: has }, { description: has }] },
           },
-          {
-            portfolioItems: {
-              some: {
-                OR: [
-                  { title: { contains: keyword, mode: 'insensitive' } },
-                  { description: { contains: keyword, mode: 'insensitive' } },
-                ],
-              },
-            },
-          },
-        ],
-      });
+        },
+      };
+      const fields = query.searchIn ?? CANDIDATE_SEARCH_FIELDS;
+      filters.push({ OR: fields.flatMap((field) => byField[field]) });
     }
 
     if (skill) {

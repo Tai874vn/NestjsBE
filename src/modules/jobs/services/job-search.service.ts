@@ -12,7 +12,12 @@ import {
   CACHE_TTL,
 } from '../../redis/services/redis.service';
 import { JobCursorQueryDto } from '../dto/job-cursor-query.dto';
-import { JobSearchQueryDto, JobSearchSort } from '../dto/job-search-query.dto';
+import {
+  JOB_SEARCH_FIELDS,
+  JobSearchField,
+  JobSearchQueryDto,
+  JobSearchSort,
+} from '../dto/job-search-query.dto';
 
 type JobCursor = {
   createdAt: string;
@@ -329,21 +334,19 @@ export class JobSearchService {
     const filters: Prisma.JobWhereInput[] = [];
     const keyword = query.keyword?.trim();
 
+    // @find jobs search keyword-fields logic [all] — how each field is searched; the frontend picks with searchIn
     if (keyword) {
-      filters.push({
-        OR: [
-          { title: { contains: keyword, mode: 'insensitive' } },
-          { shortDescription: { contains: keyword, mode: 'insensitive' } },
-          { description: { contains: keyword, mode: 'insensitive' } },
-          { user: { name: { contains: keyword, mode: 'insensitive' } } },
-          { subcategory: { name: { contains: keyword, mode: 'insensitive' } } },
-          {
-            subcategory: {
-              category: { name: { contains: keyword, mode: 'insensitive' } },
-            },
-          },
-        ],
-      });
+      const has = { contains: keyword, mode: 'insensitive' as const };
+      const byField: Record<JobSearchField, Prisma.JobWhereInput> = {
+        title: { title: has },
+        shortDescription: { shortDescription: has },
+        description: { description: has },
+        sellerName: { user: { name: has } },
+        subcategory: { subcategory: { name: has } },
+        category: { subcategory: { category: { name: has } } },
+      };
+      const fields = query.searchIn ?? JOB_SEARCH_FIELDS;
+      filters.push({ OR: fields.map((field) => byField[field]) });
     }
 
     if (query.subcategoryId) {

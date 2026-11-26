@@ -1,6 +1,7 @@
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsArray, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { commaList } from '../../../common/dto/string.transforms';
 
 export const jobSearchSortOptions = [
   'newest',
@@ -11,7 +12,28 @@ export const jobSearchSortOptions = [
 
 export type JobSearchSort = (typeof jobSearchSortOptions)[number];
 
+// @find jobs search search-in validation [all] — the fields a keyword MAY be searched in (allowlist)
+/** The fields the frontend may ask the keyword to be searched in (?searchIn=title,sellerName). Default: all. */
+export const JOB_SEARCH_FIELDS = [
+  'title',
+  'shortDescription',
+  'description',
+  'sellerName',
+  'subcategory',
+  'category',
+] as const;
+export type JobSearchField = (typeof JOB_SEARCH_FIELDS)[number];
+
 export class JobSearchQueryDto extends PaginationDto {
+  @Transform(commaList)
+  @IsOptional()
+  @IsArray()
+  @IsIn(JOB_SEARCH_FIELDS, {
+    each: true,
+    message: `searchIn must be some of: ${JOB_SEARCH_FIELDS.join(', ')}`,
+  })
+  searchIn?: JobSearchField[];
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

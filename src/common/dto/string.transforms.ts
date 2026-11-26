@@ -22,3 +22,15 @@ export function optionalNormalizeEmail({ value }: TransformParams): unknown {
   const normalized = value.trim().toLowerCase();
   return normalized || undefined;
 }
+
+/** A list from the URL: `?a=x,y` or `?a=x&a=y` -> ['x', 'y'] (trimmed, empty items dropped). Nothing left: not sent. */
+export function commaList({ value }: TransformParams): unknown {
+  if (value === undefined || value === null) return undefined;
+  const raw = Array.isArray(value) ? value : [value];
+  if (raw.some((item) => typeof item !== 'string')) return value;
+  const items = (raw as string[])
+    .flatMap((item) => item.split(','))
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}

@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -10,9 +11,33 @@ import {
   Min,
 } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
-import { optionalTrimString } from '../../../common/dto/string.transforms';
+import {
+  commaList,
+  optionalTrimString,
+} from '../../../common/dto/string.transforms';
+
+// @find candidates search search-in validation [recruiter] — the fields a keyword MAY be searched in (allowlist)
+/** The fields the frontend may ask the keyword to be searched in (?searchIn=name,skills). Default: all. */
+export const CANDIDATE_SEARCH_FIELDS = [
+  'name',
+  'headline',
+  'bio',
+  'location',
+  'skills',
+  'portfolio',
+] as const;
+export type CandidateSearchField = (typeof CANDIDATE_SEARCH_FIELDS)[number];
 
 export class CandidateDirectoryQueryDto extends PaginationDto {
+  @Transform(commaList)
+  @IsOptional()
+  @IsArray()
+  @IsIn(CANDIDATE_SEARCH_FIELDS, {
+    each: true,
+    message: `searchIn must be some of: ${CANDIDATE_SEARCH_FIELDS.join(', ')}`,
+  })
+  searchIn?: CandidateSearchField[];
+
   @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
