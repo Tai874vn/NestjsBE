@@ -2,7 +2,9 @@ import { BadRequestException } from '@nestjs/common';
 import { HiringPostStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import {
+  HIRING_POST_SEARCH_FIELDS,
   HiringPostQueryDto,
+  HiringPostSearchField,
   HiringPostSort,
 } from '../dto/hiring-post-query.dto';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
@@ -31,25 +33,31 @@ export const HIRING_POST_ORDER: Record<
   ],
 };
 
-// @find hiring-posts search keyword-fields logic [all] — the fields the keyword is searched in
+// @find hiring-posts search keyword-fields logic [all] — how each field is searched (contains, ignoring case)
 /**
- * The text fields the keyword is searched in: "contains, ignoring case". One line = one field;
- * delete a line to stop searching that field. Skills are searched separately (see keywordWhere).
- * Used by both lists: the public hiring posts (GET /api/hiring-posts) and My hiring posts (GET /api/hiring-posts/mine).
+ * How the keyword is matched in each text field: "contains, ignoring case". The frontend chooses
+ * which of them to use with `searchIn` (default: all). Skills are matched separately (keywordWhere).
  */
 export function keywordTextFields(
   keyword: string,
+  fields: readonly HiringPostSearchField[] = HIRING_POST_SEARCH_FIELDS,
 ): Prisma.HiringPostWhereInput[] {
   const has = { contains: keyword, mode: 'insensitive' as const };
-  return [
-    { title: has },
-    { description: has },
-    { requirements: has },
-    { location: has },
-    { employmentType: has },
-    { companyName: has },
-    { recruiter: { name: has } },
-  ];
+  const byField: Record<
+    Exclude<HiringPostSearchField, 'skills'>,
+    Prisma.HiringPostWhereInput
+  > = {
+    title: { title: has },
+    description: { description: has },
+    requirements: { requirements: has },
+    location: { location: has },
+    employmentType: { employmentType: has },
+    companyName: { companyName: has },
+    recruiterName: { recruiter: { name: has } },
+  };
+  return fields.flatMap((field) =>
+    field === 'skills' ? [] : [byField[field]],
+  );
 }
 
 // @find hiring-posts search keyword-escape logic [all] — % and _ in the keyword are matched as plain text
@@ -68,15 +76,18 @@ export function containsPattern(keyword: string): string {
 export async function keywordWhere(
   prisma: PrismaService,
   keyword: string,
+  fields: readonly HiringPostSearchField[] = HIRING_POST_SEARCH_FIELDS,
 ): Promise<Prisma.HiringPostWhereInput> {
   const pattern = containsPattern(keyword);
-  const skillMatches = await prisma.$queryRaw<{ id: number }[]>`
-    SELECT "id" FROM "hiring_posts"
-    WHERE EXISTS (SELECT 1 FROM unnest("skills") AS skill WHERE skill ILIKE ${pattern})
-  `;
+  const skillMatches = fields.includes('skills')
+    ? await prisma.$queryRaw<{ id: number }[]>`
+        SELECT "id" FROM "hiring_posts"
+        WHERE EXISTS (SELECT 1 FROM unnest("skills") AS skill WHERE skill ILIKE ${pattern})
+      `
+    : [];
   return {
     OR: [
-      ...keywordTextFields(keyword),
+      ...keywordTextFields(keyword, fields),
       ...(skillMatches.length
         ? [{ id: { in: skillMatches.map((row) => row.id) } }]
         : []),
@@ -113,7 +124,8 @@ export async function openFilters(
     ],
   };
 
-  if (keyword) filters.keyword = await keywordWhere(prisma, keyword);
+  if (keyword)
+    filters.keyword = await keywordWhere(prisma, keyword, query.searchIn);
   if (query.occupation?.length) {
     const unknown = query.occupation.filter((code) => !findOccupation(code));
     if (unknown.length) {

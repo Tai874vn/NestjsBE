@@ -1,3 +1,7 @@
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { HiringPostQueryDto } from '../../dto/hiring-post-query.dto';
 import {
   containsPattern,
   keywordTextFields,
@@ -41,5 +45,33 @@ describe('hiring post keyword search', () => {
     expect(strings.join('?')).toContain('skill ILIKE ?');
     expect(pattern).toBe(String.raw`%sel\%%`);
     expect(where.OR).toContainEqual({ id: { in: [7] } });
+  });
+
+  it('searches only the fields the frontend asks for (searchIn); no skills query without "skills"', async () => {
+    const prisma = { $queryRaw: jest.fn() };
+    const where = await keywordWhere(prisma as never, 'react', [
+      'title',
+      'companyName',
+    ]);
+    expect(where.OR).toEqual([
+      { title: { contains: 'react', mode: 'insensitive' } },
+      { companyName: { contains: 'react', mode: 'insensitive' } },
+    ]);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('searchIn input check', () => {
+  const check = (searchIn: unknown) =>
+    validate(plainToInstance(HiringPostQueryDto, { searchIn }));
+
+  it('accepts listed fields, as a comma list or repeated values', async () => {
+    expect(await check('title,companyName')).toEqual([]);
+    expect(await check(['title', 'skills'])).toEqual([]);
+  });
+
+  it('refuses a field that is not on the list (400)', async () => {
+    const errors = await check('title,password');
+    expect(errors[0].property).toBe('searchIn');
   });
 });

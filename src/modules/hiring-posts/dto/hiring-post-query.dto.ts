@@ -24,6 +24,23 @@ export const HIRING_POST_SORTS = [
 ] as const;
 export type HiringPostSort = (typeof HIRING_POST_SORTS)[number];
 
+// @find hiring-posts search search-in validation [all] — the fields a keyword MAY be searched in (allowlist)
+/**
+ * The fields the frontend may ask the keyword to be searched in (`?searchIn=title,companyName`).
+ * Anything else answers 400. Without searchIn, every field is searched.
+ */
+export const HIRING_POST_SEARCH_FIELDS = [
+  'title',
+  'description',
+  'requirements',
+  'location',
+  'employmentType',
+  'companyName',
+  'recruiterName',
+  'skills',
+] as const;
+export type HiringPostSearchField = (typeof HIRING_POST_SEARCH_FIELDS)[number];
+
 /** At most this many values in one multi-value filter (level, employmentType, occupation). */
 export const MAX_FILTER_VALUES = 10;
 
@@ -116,11 +133,20 @@ export class HiringPostQueryDto extends PaginationDto {
   @MaxLength(80, { each: true })
   employmentType?: string[];
 
+  @Transform(filterList)
+  @IsOptional()
+  @IsArray()
+  @IsIn(HIRING_POST_SEARCH_FIELDS, {
+    each: true,
+    message: `searchIn must be some of: ${HIRING_POST_SEARCH_FIELDS.join(', ')}`,
+  })
+  searchIn?: HiringPostSearchField[];
+
+  // @find hiring-posts filters location validation [all] — location: trimmed, text, max 120 characters
   @Transform(optionalTrimString)
   @IsOptional()
   @IsString()
   @MaxLength(120)
-  // @find hiring-posts filters location validation [all] — location: trimmed, text, max 120 characters
   location?: string;
 
   /**
