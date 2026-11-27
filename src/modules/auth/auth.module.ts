@@ -1,3 +1,14 @@
+/**
+ * Auth feature module for login, registration, email verification, password reset, Google OAuth, sessions, and realtime tickets. It imports ConfigModule, AuthSessionRedisModule, MailModule, PassportModule, and JwtModule, registers its controllers and providers, and exports AuthService, AuthSessionService, EmailVerificationService, and JwtModule.
+ *
+ * Calls: AuthSessionRedisModule; MailModule; jwtVerifyOptions; AuthController; AuthSessionsController; RealtimeTicketController; AuthService; AuthSessionService
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/notifications/notifications.module.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';

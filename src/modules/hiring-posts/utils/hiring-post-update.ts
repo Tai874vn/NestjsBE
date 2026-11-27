@@ -1,3 +1,11 @@
+/**
+ * Update helpers for the hiring-posts module. Validates edit inputs, checks if changes require clearing or re-queuing AI seniority, and builds the Prisma update payload.
+ *
+ * Calls: hiring-post-checks helpers; queuedHiringPostFields
+ * Used by:
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ */
+
 import { HiringPostStatus, Prisma } from '@prisma/client';
 import { UpdateHiringPostDto } from '../dto/update-hiring-post.dto';
 import { queuedHiringPostFields } from '../services/hiring-post-ai-queue.service';

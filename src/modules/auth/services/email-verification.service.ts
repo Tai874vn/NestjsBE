@@ -1,3 +1,15 @@
+/**
+ * Service in the auth module that verifies user email addresses and handles email changes. It sends verification links, resends them in the background, and confirms emailed tokens.
+ *
+ * Calls: prisma.user; EmailTokensService; AccountEmailsService
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ *   - src/modules/auth/services/auth.service.ts
+ *   - src/modules/auth/services/password-reset.service.ts
+ *   - src/modules/users/services/users.service.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

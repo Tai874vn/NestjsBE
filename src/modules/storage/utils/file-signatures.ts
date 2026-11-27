@@ -1,3 +1,11 @@
+/**
+ * File-content validation helpers for the storage module. Checks image magic bytes (JPEG, PNG, WebP) and inspects PDF and DOCX files to block active content, macros, and broken archives.
+ *
+ * Calls: DOCUMENT_MIME_BY_EXT
+ * Used by:
+ *   - src/modules/storage/services/storage.service.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import { inflateSync } from 'node:zlib';
 import { DOCUMENT_MIME_BY_EXT, DocumentExtension } from './storage-paths';

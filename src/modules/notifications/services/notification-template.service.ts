@@ -1,3 +1,17 @@
+/**
+ * Notifications module template service.
+ * It builds notification payloads with titles, bodies, links, and metadata for connections, posts, chat messages, hiring pipeline events, proposals, and contracts.
+ *
+ * Calls: Prisma NotificationType; CreateNotificationInput
+ * Used by:
+ *   - prisma/seed-activity.ts
+ *   - src/modules/contracts/services/contract-events.service.ts
+ *   - src/modules/hiring-pipeline/services/hiring-events.service.ts
+ *   - src/modules/jobs/services/job-mutation.service.ts
+ *   - src/modules/notifications/notifications.module.ts
+ *   - src/modules/notifications/services/notifications.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
 import { CreateNotificationInput } from '../utils/notification.types';

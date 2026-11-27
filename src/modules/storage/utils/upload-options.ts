@@ -1,3 +1,15 @@
+/**
+ * Shared Multer upload settings for the storage module. Defines size limits, memory storage, and file filters for single image and PDF/DOCX document uploads.
+ *
+ * Calls: imageFileFilter; IMAGE_MAX_BYTES; DOCUMENT_MAX_BYTES; multer (memoryStorage)
+ * Used by:
+ *   - src/modules/contracts/controllers/contract-files.controller.ts
+ *   - src/modules/jobs/controllers/jobs.controller.ts
+ *   - src/modules/posts/controllers/posts.controller.ts
+ *   - src/modules/subcategories/controllers/subcategories.controller.ts
+ *   - src/modules/users/controllers/users.controller.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import type { Request } from 'express';

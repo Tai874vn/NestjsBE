@@ -1,3 +1,12 @@
+/**
+ * Direct-message builder for the demo-activity seed tool.
+ * Creates chat rooms and sorted message histories from hiring pipeline applications, accepted candidate peer connections, and proposal or contract system lines.
+ *
+ * Calls: interviewTimesText (hiring-pipeline/utils/interview-times); activity-shared (after, firstName, years, types); ChatLineFact (build-contracts)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import { interviewTimesText } from '../../modules/hiring-pipeline/utils/interview-times';
 import type { ChatLineFact } from './build-contracts';
 import {

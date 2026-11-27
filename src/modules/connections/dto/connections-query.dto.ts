@@ -1,3 +1,13 @@
+/**
+ * Query parameter DTO for listing connections and suggestions in the connections module.
+ * It validates pagination (page, pageSize) and an optional search keyword.
+ *
+ * Calls: optionalTrimString
+ * Used by:
+ *   - src/modules/connections/controllers/connections.controller.ts
+ *   - src/modules/connections/services/connections.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,

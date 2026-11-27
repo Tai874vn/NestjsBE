@@ -1,3 +1,11 @@
+/**
+ * Request DTOs for the skill module. Validates query options for searching skills and the CV text payload for extracting skills.
+ *
+ * Calls: trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/skill/controllers/skill.controller.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,

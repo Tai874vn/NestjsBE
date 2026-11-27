@@ -1,3 +1,13 @@
+/**
+ * Root NestJS module for the JobAura backend API.
+ * Registers Sentry, global config validation, rate limiting, all feature and infrastructure modules, `AppController`, and `AppService`.
+ * Also registers the global exception filter, request observability interceptor, and auth, role, CSRF, and throttling guards.
+ *
+ * Calls: Sentry; envValidationSchema; AllExceptionsFilter; RequestObservabilityInterceptor; JwtAuthGuard; RolesGuard; CsrfGuard; HttpThrottlerGuard
+ * Used by:
+ *   - src/main.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';

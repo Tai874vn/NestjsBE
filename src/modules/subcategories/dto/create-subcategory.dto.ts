@@ -1,3 +1,13 @@
+/**
+ * Request DTO for the subcategories module. Validates the name, optional image path, and parent category ID when creating a subcategory.
+ *
+ * Calls: trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/subcategories/controllers/subcategories.controller.ts
+ *   - src/modules/subcategories/dto/update-subcategory.dto.ts
+ *   - src/modules/subcategories/services/subcategories.service.ts
+ */
+
 import {
   IsNotEmpty,
   IsString,

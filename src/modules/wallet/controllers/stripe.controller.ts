@@ -1,3 +1,13 @@
+/**
+ * Stripe webhook controller for the wallet module.
+ * Verifies signed Stripe webhook requests and forwards top-up events for settlement.
+ * Routes: POST /api/payments/stripe/webhook -> webhook()
+ *
+ * Calls: StripeService; TopUpsService; Sentry
+ * Used by:
+ *   - src/modules/wallet/wallet.module.ts
+ */
+
 import {
   BadRequestException,
   Controller,

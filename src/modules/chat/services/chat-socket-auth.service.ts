@@ -1,3 +1,13 @@
+/**
+ * Socket authentication service for the chat module.
+ * It extracts a JWT from socket handshake auth, headers, or cookies, verifies the session, and attaches the user to the socket.
+ *
+ * Calls: JwtService; AuthSessionService; jwtVerifyOptions; prisma.user
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ */
+
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';

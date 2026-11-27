@@ -1,3 +1,15 @@
+/**
+ * Pure status transition rules for hiring applications in the hiring-pipeline module.
+ * Checks actor permissions, post status, interview progress, and remaining openings to return the next status or throw TransitionError.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/hiring-pipeline/services/application-pipeline.service.ts
+ *   - src/modules/hiring-pipeline/services/applications.service.ts
+ *   - src/modules/hiring-pipeline/services/interviews.service.ts
+ *   - src/modules/hiring-pipeline/services/post-sweep.service.ts
+ */
+
 import { HiringApplicationStatus } from '@prisma/client';
 
 // Pure rules for moving a hiring application from one status to the next.

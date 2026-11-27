@@ -1,3 +1,13 @@
+/**
+ * Request body DTO for posting a contract review in the comments module.
+ * It validates the contract ID, review content, and 1-to-5 rating.
+ *
+ * Calls: trimString
+ * Used by:
+ *   - src/modules/comments/controllers/comments.controller.ts
+ *   - src/modules/comments/services/comments.service.ts
+ */
+
 import {
   IsNotEmpty,
   IsString,

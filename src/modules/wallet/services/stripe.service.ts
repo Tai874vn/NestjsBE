@@ -1,3 +1,15 @@
+/**
+ * Stripe test-mode client and webhook signature verifier for the wallet module.
+ * Creates and fetches Stripe Checkout Sessions over HTTP and checks Stripe-Signature headers.
+ *
+ * Calls: Stripe API
+ * Used by:
+ *   - src/modules/wallet/controllers/stripe.controller.ts
+ *   - src/modules/wallet/services/top-ups.service.ts
+ *   - src/modules/wallet/services/wallet.service.ts
+ *   - src/modules/wallet/wallet.module.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';

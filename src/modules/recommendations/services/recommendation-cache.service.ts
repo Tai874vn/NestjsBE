@@ -1,3 +1,14 @@
+/**
+ * Recommendations module service that stores recommendation results and per-scope run locks in Redis.
+ * It caches job matches, candidate matches, and hiring-post candidate matches for 5 minutes.
+ *
+ * Calls: RedisService
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendation-snapshot.service.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '../../redis/services/redis.service';
 

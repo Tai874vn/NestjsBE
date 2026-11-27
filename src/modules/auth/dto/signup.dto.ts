@@ -1,3 +1,12 @@
+/**
+ * Validation DTO in the auth module for new account registration requests, including optional profile fields and account role.
+ *
+ * Calls: PASSWORD_MIN_LENGTH; Role; normalizeEmail; trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/auth/controllers/auth.controller.ts
+ *   - src/modules/auth/services/auth.service.ts
+ */
+
 import {
   IsEmail,
   IsNotEmpty,

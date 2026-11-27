@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the subcategories module to browse subcategories and let admins manage them and upload images. Routes: POST /api/subcategories -> create(), GET /api/subcategories -> findAll(), GET /api/subcategories/paginated-search -> findAllWithPagination(), GET /api/subcategories/:id -> findOne(), PUT /api/subcategories/:id -> update(), DELETE /api/subcategories/:id -> remove(), POST /api/subcategories/create-group -> createGroup(), POST /api/subcategories/upload-image/:subcategoryId -> uploadImage(), PUT /api/subcategories/update-group/:id -> updateGroup().
+ *
+ * Calls: SubcategoriesService; StorageService; imageUploadOptions; JwtAuthGuard; RolesGuard; Public; Roles; Role
+ * Used by:
+ *   - src/modules/subcategories/subcategories.module.ts
+ */
+
 import {
   Controller,
   Get,

@@ -1,3 +1,15 @@
+/**
+ * User profile service for the users module.
+ * Serves public and own profiles and updates profile details, skills, certifications, avatar, and cover image.
+ *
+ * Calls: prisma.user, prisma.userSkill, prisma.userCertification, prisma.userResume, prisma.comment, prisma.contract; RedisService; SkillService; ResumeAiQueueService; ProfileCompletionService; UserLegacyProfileSyncService; UserProfileNormalizerService; resume-career helpers
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/user-resume.service.ts
+ *   - src/modules/users/services/user-uploads.service.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

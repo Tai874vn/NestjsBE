@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for milestone actions in the contracts module.
+ * Routes: POST /api/milestones/:id/fund -> fund(), POST /api/milestones/:id/submit -> submit(), POST /api/milestones/:id/request-changes -> requestChanges(), POST /api/milestones/:id/approve -> approve().
+ *
+ * Calls: ContractsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   Body,
   Controller,

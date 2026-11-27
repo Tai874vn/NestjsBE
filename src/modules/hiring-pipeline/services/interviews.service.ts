@@ -1,3 +1,13 @@
+/**
+ * Service for interview scheduling, status transitions, and upcoming interview lists in the hiring-pipeline module.
+ * Handles requesting interviews, sending new times, accepting a time, asking to reschedule, cancelling, and completing interviews.
+ *
+ * Calls: ApplicationPipelineService; HiringEventsService; prisma.interview; prisma.hiringApplication; parseProposedTimes; formatVietnamTime; interviewTimesText
+ * Used by:
+ *   - src/modules/hiring-pipeline/controllers/interviews.controller.ts
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

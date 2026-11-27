@@ -1,3 +1,13 @@
+/**
+ * Request body and query DTOs for milestone work submissions, change requests, and contract listing in the contracts module.
+ * Validates submission notes, uploaded image paths, web links, and pagination filters.
+ *
+ * Calls: trimString; IsOurImage; IsWebLink
+ * Used by:
+ *   - src/modules/contracts/controllers/contracts.controller.ts
+ *   - src/modules/contracts/controllers/milestones.controller.ts
+ */
+
 import { ContractStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {

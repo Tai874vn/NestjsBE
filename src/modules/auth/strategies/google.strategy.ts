@@ -1,3 +1,12 @@
+/**
+ * Passport Google OAuth 2.0 strategy for the auth module.
+ * It checks Google profiles after sign-in and links or creates a local user account.
+ *
+ * Calls: Google OAuth (passport-google-oauth20); prisma.user
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';

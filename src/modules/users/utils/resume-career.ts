@@ -1,3 +1,12 @@
+/**
+ * Resume career validation and experience calculation helpers for the users module.
+ * Validates degrees, occupations, and job dates, preserves legacy fields, and counts main and related years in an occupation.
+ *
+ * Calls: occupation-catalogue (findOccupation, occupationRelatedness, RELATED_FROM)
+ * Used by:
+ *   - 8 files, for example src/modules/hiring-pipeline/services/applications-query.service.ts, src/modules/recommendations/services/recommendation-payload-mapper.service.ts, src/modules/users/services/candidate-directory.service.ts
+ */
+
 import {
   findOccupation,
   occupationRelatedness,

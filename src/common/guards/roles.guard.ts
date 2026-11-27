@@ -1,3 +1,12 @@
+/**
+ * Common global role guard that enforces `@Roles(...)` metadata on HTTP routes.
+ * Checks `request.user.role` against the required roles and throws 403 Forbidden when access is not allowed.
+ *
+ * Calls: ROLES_KEY; Role
+ * Used by:
+ *   - 10 files, for example src/app.module.ts, src/modules/admin/controllers/admin.controller.ts, src/modules/categories/controllers/categories.controller.ts
+ */
+
 import {
   Injectable,
   CanActivate,

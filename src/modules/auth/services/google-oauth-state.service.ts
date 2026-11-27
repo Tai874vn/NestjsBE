@@ -1,3 +1,14 @@
+/**
+ * Service in the auth module that creates and verifies signed Google OAuth state values. It stores the state in a short-lived cookie to block CSRF and carry the chosen signup role across the redirect.
+ *
+ * Calls: ConfigService; Role
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/guards/google-auth.guard.ts
+ *   - src/modules/auth/guards/google-callback.guard.ts
+ *   - src/modules/auth/strategies/google.strategy.ts
+ */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';

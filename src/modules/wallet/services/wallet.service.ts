@@ -1,3 +1,12 @@
+/**
+ * Credit wallet and ledger service for the wallet module.
+ * Creates wallets with a starting grant, runs locked hold/release/refund/top-up moves inside transactions, and reads balances and ledger history.
+ *
+ * Calls: prisma.wallet; prisma.ledgerEntry; StripeService; contract-rules (fmtCredits); wallet-pricing
+ * Used by:
+ *   - 10 files, for example src/modules/contracts/services/contract-ending.service.ts, src/modules/contracts/services/contract-step.service.ts, src/modules/contracts/services/contracts-query.service.ts
+ */
+
 import { ConflictException, Injectable } from '@nestjs/common';
 import { LedgerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';

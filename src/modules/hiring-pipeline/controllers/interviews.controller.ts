@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for interview scheduling, status actions, and video call tokens in the hiring-pipeline module.
+ * Routes: POST /api/applications/:id/interviews -> request(), GET /api/interviews/upcoming -> upcoming(), POST /api/interviews/:id/times -> proposeTimes(), POST /api/interviews/:id/accept -> accept(), POST /api/interviews/:id/reschedule -> requestReschedule(), POST /api/interviews/:id/cancel -> cancel(), POST /api/interviews/:id/complete -> complete(), POST /api/interviews/:id/call-token -> callToken().
+ *
+ * Calls: InterviewsService; VideoCallService; JwtAuthGuard; RolesGuard
+ * Used by:
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import {
   Body,
   Controller,

@@ -1,3 +1,15 @@
+/**
+ * Recommendations module service that turns user profiles, resumes, and hiring posts into payloads for the AI service.
+ * It redacts contact info from resumes, merges skills, resolves ESCO occupations, and computes years in occupation.
+ *
+ * Calls: occupationYears; cleanResumeJobs; resumeOccupation; findOccupation
+ * Used by:
+ *   - src/modules/hiring-posts/services/hiring-post-ai-queue.service.ts
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendation-data-loader.service.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import {
   occupationYears,
   cleanResumeJobs,

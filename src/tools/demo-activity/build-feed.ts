@@ -1,3 +1,12 @@
+/**
+ * Social feed builder for the demo-activity seed tool.
+ * Generates candidate posts (projects, milestones, learning, open-to-work) and recruiter hiring announcements with likes, comments, replies, and saves, sorted by time.
+ *
+ * Calls: activity-shared (after, between, firstName, list, occupationFit, years, types)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import {
   after,
   between,

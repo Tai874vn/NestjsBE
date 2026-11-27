@@ -1,3 +1,12 @@
+/**
+ * Service for the subcategories module. Handles CRUD, paginated search, and image updates for subcategories, while deleting replaced images and clearing category caches.
+ *
+ * Calls: prisma.subcategory; RedisService; StorageService; CreateSubcategoryDto; UpdateSubcategoryDto; PaginationDto
+ * Used by:
+ *   - src/modules/subcategories/controllers/subcategories.controller.ts
+ *   - src/modules/subcategories/subcategories.module.ts
+ */
+
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { RedisService } from '../../redis/services/redis.service';

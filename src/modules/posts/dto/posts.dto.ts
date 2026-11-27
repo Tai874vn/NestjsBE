@@ -1,3 +1,12 @@
+/**
+ * Posts module DTOs that validate feed and comment pagination queries and payloads for creating posts, creating comments, and updating comments.
+ *
+ * Calls: optionalTrimString; trimString
+ * Used by:
+ *   - src/modules/posts/controllers/posts.controller.ts
+ *   - src/modules/posts/services/posts.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,

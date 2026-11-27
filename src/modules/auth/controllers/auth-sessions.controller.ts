@@ -1,3 +1,11 @@
+/**
+ * HTTP controller in the auth module for managing login sessions, passwords, and user bans. Routes: GET /api/auth/sessions -> list(); DELETE /api/auth/sessions/:id -> revoke(); GET /api/auth/users/:id/sessions -> listForUser(); POST /api/auth/logout-all -> logoutAll(); PATCH /api/auth/password -> password(); PATCH /api/auth/users/:id/ban -> ban().
+ *
+ * Calls: AuthSessionService; clearAuthCookies; Roles; Role; ChangePasswordDto; BanUserDto
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import {
   Body,
   Controller,

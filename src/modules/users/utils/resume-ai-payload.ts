@@ -1,3 +1,14 @@
+/**
+ * Resume AI payload helpers for the users module.
+ * Reads resume JSON values, merges skill lists, and builds the payload sent to the AI service for seniority prediction.
+ *
+ * Calls: resume-career (cleanResumeJobs, occupationYears, resumeOccupation)
+ * Used by:
+ *   - src/modules/hiring-pipeline/services/applications-query.service.ts
+ *   - src/modules/users/services/resume-ai-queue.service.ts
+ *   - src/modules/users/services/user-resume.service.ts
+ */
+
 import { Prisma } from '@prisma/client';
 import {
   cleanResumeJobs,

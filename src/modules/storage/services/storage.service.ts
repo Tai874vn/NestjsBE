@@ -1,3 +1,11 @@
+/**
+ * Disk storage service for the storage module. Validates, converts images to WebP, writes, deletes, and safely streams public images and private documents.
+ *
+ * Calls: ConfigService; sharp; detectImageSignature; validateAndDetectDocument; resolveUploadsDir; resolveSafeStoragePath; extractStorageKey; documentMetaFromKey
+ * Used by:
+ *   - 13 files, for example src/modules/categories/services/categories.service.ts, src/modules/contracts/controllers/contract-files.controller.ts, src/modules/jobs/controllers/jobs.controller.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

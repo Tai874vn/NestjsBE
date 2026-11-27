@@ -1,3 +1,13 @@
+/**
+ * Service for recruiter and candidate actions on hiring applications in the hiring-pipeline module.
+ * Handles shortlisting, rejecting, sending or withdrawing offers, accepting or declining offers, withdrawing applications, and sweeping filled posts.
+ *
+ * Calls: ApplicationPipelineService; ApplicationsQueryService; HiringEventsService; PostSweepService; prisma.hiringApplication; prisma.hiringPost; prisma.interview
+ * Used by:
+ *   - src/modules/hiring-pipeline/controllers/applications.controller.ts
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import { ConflictException, Injectable } from '@nestjs/common';
 import {
   HiringApplicationStatus,

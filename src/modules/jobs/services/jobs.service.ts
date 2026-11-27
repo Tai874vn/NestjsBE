@@ -1,3 +1,12 @@
+/**
+ * Main facade service for the jobs module. Forwards create, edit, delete, search, detail, and category calls to the specialized job services.
+ *
+ * Calls: JobMutationService; JobSearchService; JobCatalogService
+ * Used by:
+ *   - src/modules/jobs/controllers/jobs.controller.ts
+ *   - src/modules/jobs/jobs.module.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Role } from '../../../common/constants/roles';

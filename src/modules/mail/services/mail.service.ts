@@ -1,3 +1,12 @@
+/**
+ * Email delivery service for the mail module. Sends HTML and plain-text emails through Resend's HTTP API and reports errors to Sentry without throwing.
+ *
+ * Calls: Resend; Sentry
+ * Used by:
+ *   - src/modules/mail/mail.module.ts
+ *   - src/modules/mail/services/account-emails.service.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as Sentry from '@sentry/nestjs';

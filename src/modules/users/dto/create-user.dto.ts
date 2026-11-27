@@ -1,3 +1,12 @@
+/**
+ * Request DTO for the users module. Validates the account and profile fields an admin sends when creating a new user.
+ *
+ * Calls: PASSWORD_MIN_LENGTH; Role; normalizeEmail; trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/users.service.ts
+ */
+
 import {
   IsEmail,
   IsNotEmpty,

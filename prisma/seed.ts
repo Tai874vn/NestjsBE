@@ -1,3 +1,12 @@
+/**
+ * Basic Prisma seed script for local development that clears core tables and inserts sample users, job taxonomy categories, jobs, comments, and a chat room.
+ * Refuses to run in production or without `SEED_CONFIRM=wipe-all-data` and `SEED_PASSWORD` (at least 10 characters).
+ *
+ * Calls: loadJobTaxonomy; prisma.user; prisma.category; prisma.subcategory; prisma.job; prisma.comment; prisma.chatRoom; prisma.chatMessage
+ * Used by:
+ *   - run by hand: npx prisma db seed (package.json "prisma.seed")
+ */
+
 import 'dotenv/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';

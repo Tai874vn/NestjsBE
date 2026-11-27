@@ -1,3 +1,12 @@
+/**
+ * Hiring pipeline builder for the demo-activity seed tool.
+ * Matches candidates to hiring posts, advances applicants through shortlist, interview, offer, and hire stages (including a complete showcase flow for demo accounts), computes post openings, and generates interviews, events, and notifications.
+ *
+ * Calls: formatVietnamTime (hiring-pipeline/utils/interview-times); HiringEventType (hiring-events.service); activity-shared (applicationFit, between, after, firstName, list, years)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import { formatVietnamTime } from '../../modules/hiring-pipeline/utils/interview-times';
 import type { HiringEventType } from '../../modules/hiring-pipeline/services/hiring-events.service';
 import {

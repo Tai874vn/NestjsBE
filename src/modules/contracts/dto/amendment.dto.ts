@@ -1,3 +1,14 @@
+/**
+ * Request body DTOs and parser helper for contract amendments and mutual end requests in the contracts module.
+ * Validates change items, notes, deadlines, and end-request choices before they reach the service.
+ *
+ * Calls: trimString; optionalTrimString; MAX_MILESTONE_CREDITS
+ * Used by:
+ *   - src/modules/contracts/controllers/amendments.controller.ts
+ *   - src/modules/contracts/controllers/contracts.controller.ts
+ *   - src/modules/contracts/services/amendments.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,

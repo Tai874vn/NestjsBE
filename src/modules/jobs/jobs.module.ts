@@ -1,3 +1,11 @@
+/**
+ * NestJS module for the jobs feature. Imports NotificationsModule, registers JobsController, provides JobsService, JobCacheInvalidationService, JobCatalogService, JobMutationService, and JobSearchService, and exports JobsService.
+ *
+ * Calls: NotificationsModule; JobsController; JobsService; JobCacheInvalidationService; JobCatalogService; JobMutationService; JobSearchService
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { JobsService } from './services/jobs.service';
 import { JobCacheInvalidationService } from './services/job-cache-invalidation.service';

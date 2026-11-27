@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for service reviews in the comments module.
+ * Routes: POST /api/comments -> create(); GET /api/comments -> findAll(); GET /api/comments/by-job/:jobId -> findByJob(); PUT /api/comments/:id -> update(); DELETE /api/comments/:id -> remove().
+ *
+ * Calls: CommentsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/comments/comments.module.ts
+ */
+
 import {
   Controller,
   Get,

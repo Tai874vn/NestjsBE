@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for viewing and acting on hiring applications in the hiring-pipeline module.
+ * Routes: GET /api/applications/:id -> findOne(), POST /api/applications/:id/shortlist -> shortlist(), POST /api/applications/:id/reject -> reject(), POST /api/applications/:id/offer -> sendOffer(), POST /api/applications/:id/offer/withdraw -> withdrawOffer(), POST /api/applications/:id/offer/accept -> acceptOffer(), POST /api/applications/:id/offer/decline -> declineOffer(), POST /api/applications/:id/withdraw -> withdraw().
+ *
+ * Calls: ApplicationsService; JwtAuthGuard; RolesGuard
+ * Used by:
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import {
   Body,
   Controller,

@@ -1,3 +1,12 @@
+/**
+ * Business logic for the saved-items module. Saves, removes, and cursor-paginates a user's saved feed posts and service jobs.
+ *
+ * Calls: prisma.post; prisma.savedPost; prisma.job; prisma.savedJob; SavedItemsQueryDto
+ * Used by:
+ *   - src/modules/saved-items/controllers/saved-items.controller.ts
+ *   - src/modules/saved-items/saved-items.module.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

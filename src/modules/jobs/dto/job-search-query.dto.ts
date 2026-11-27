@@ -1,3 +1,14 @@
+/**
+ * Query DTO and filter constants for searching jobs in the jobs module. Extends pagination with search fields, category, subcategory, price range, minimum rating, and sort order.
+ *
+ * Calls: PaginationDto; commaList
+ * Used by:
+ *   - src/modules/jobs/controllers/jobs.controller.ts
+ *   - src/modules/jobs/dto/job-cursor-query.dto.ts
+ *   - src/modules/jobs/services/job-search.service.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';

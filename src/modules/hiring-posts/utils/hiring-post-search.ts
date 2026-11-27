@@ -1,3 +1,11 @@
+/**
+ * Search, filter, sort, and facet helpers for the hiring-posts module. Builds Prisma filters for open posts, matches keywords across text fields and skills, and counts location options.
+ *
+ * Calls: prisma.hiringPost; prisma.$queryRaw; findOccupation
+ * Used by:
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import { HiringPostStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';

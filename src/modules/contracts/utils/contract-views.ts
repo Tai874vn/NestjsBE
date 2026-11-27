@@ -1,3 +1,15 @@
+/**
+ * Prisma include definitions, API response types, and row-to-view mappers for proposals and contracts in the contracts module.
+ * Converts database records into detail and list views with ISO dates, credit summaries, and review eligibility.
+ *
+ * Calls: HELD_STATUSES
+ * Used by:
+ *   - src/modules/contracts/services/amendments.service.ts
+ *   - src/modules/contracts/services/contract-step.service.ts
+ *   - src/modules/contracts/services/contracts-query.service.ts
+ *   - src/modules/contracts/services/proposals.service.ts
+ */
+
 import {
   AmendmentStatus,
   ContractStatus,

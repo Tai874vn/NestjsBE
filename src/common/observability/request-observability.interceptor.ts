@@ -1,3 +1,12 @@
+/**
+ * Global HTTP interceptor for the Observability feature that attaches `X-Request-ID` and times every HTTP request.
+ * Records status codes, durations, user info, and watched route flags through `ObservabilityService` on both success and error.
+ *
+ * Calls: ObservabilityService; resolveHttpError; resolveRequestId
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import {
   CallHandler,
   ExecutionContext,

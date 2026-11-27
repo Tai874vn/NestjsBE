@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for user connections in the connections module.
+ * Routes: GET /api/connections -> getConnections(); GET /api/connections/requests -> getRequests(); GET /api/connections/suggestions -> getSuggestions(); GET /api/connections/status/:userId -> getStatus(); POST /api/connections/requests/:userId -> sendRequest(); PUT /api/connections/requests/:id/accept -> acceptRequest(); DELETE /api/connections/:id -> deleteConnection().
+ *
+ * Calls: ConnectionsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/connections/connections.module.ts
+ */
+
 import {
   Controller,
   Delete,

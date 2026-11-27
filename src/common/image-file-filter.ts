@@ -1,3 +1,12 @@
+/**
+ * Common Multer file filter that restricts image uploads to JPEG, PNG, and WebP MIME types.
+ * Rejects other file types with a 400 Bad Request error.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/storage/utils/upload-options.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import type { Request } from 'express';
 

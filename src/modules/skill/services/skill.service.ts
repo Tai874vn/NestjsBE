@@ -1,3 +1,13 @@
+/**
+ * Service for the skill module. Lists skills used on profiles, searches and resolves skills against the AI skill dictionary, lists fields of study, and extracts suggested skills from CV text.
+ *
+ * Calls: prisma.userSkill; RedisService; AiRecommendationClient (the AI service)
+ * Used by:
+ *   - src/modules/skill/controllers/skill.controller.ts
+ *   - src/modules/skill/skill.module.ts
+ *   - src/modules/users/services/user-profile.service.ts
+ */
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import {

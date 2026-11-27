@@ -1,3 +1,13 @@
+/**
+ * Query DTO for cursor-based job pagination in the jobs module. Extends JobSearchQueryDto with an optional cursor token and page size limit.
+ *
+ * Calls: JobSearchQueryDto; optionalTrimString
+ * Used by:
+ *   - src/modules/jobs/controllers/jobs.controller.ts
+ *   - src/modules/jobs/services/job-search.service.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,

@@ -1,3 +1,12 @@
+/**
+ * Base timeline builder for the demo-activity seed tool.
+ * Assigns join dates for seeded users and creates subsequent timestamps for their portfolio services and hiring posts.
+ *
+ * Calls: activity-shared (between, ActivityContext)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import { between, type ActivityContext } from './activity-shared';
 
 export type ActivityTimeline = {

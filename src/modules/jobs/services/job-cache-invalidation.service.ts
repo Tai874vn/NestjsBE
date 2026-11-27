@@ -1,3 +1,12 @@
+/**
+ * Cache invalidation helper for the jobs module. Clears cached job and user data in Redis after a job changes.
+ *
+ * Calls: RedisService
+ * Used by:
+ *   - src/modules/jobs/jobs.module.ts
+ *   - src/modules/jobs/services/job-mutation.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '../../redis/services/redis.service';
 

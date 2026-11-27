@@ -1,3 +1,12 @@
+/**
+ * Recommendations module controller for AI quota checks and job or candidate matching.
+ * Routes: GET /api/recommendations/quota -> getQuota(), GET /api/recommendations/jobs -> getRecommendedJobs(), POST /api/recommendations/jobs -> runRecommendedJobs(), GET /api/recommendations/hiring-posts/:hiringPostId/candidates -> getRecommendedCandidatesForHiringPost(), POST /api/recommendations/hiring-posts/:hiringPostId/candidates -> runRecommendedCandidatesForHiringPost().
+ *
+ * Calls: RecommendationsService; RecommendationQueryDto; JwtAuthGuard; RolesGuard; Roles; CurrentUser; Role
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ */
+
 import {
   Controller,
   Get,

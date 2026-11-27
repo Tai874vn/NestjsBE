@@ -1,3 +1,12 @@
+/**
+ * HTTP routes for the jobs module (freelance services and portfolio posts). Handles browsing, searching, category menus, CRUD actions, and image uploads.
+ * Routes: POST /api/jobs -> create(); GET /api/jobs -> findAll(); GET /api/jobs/cursor -> findAllWithCursor(); GET /api/jobs/paginated-search -> findAllWithPagination(); GET /api/jobs/by-creator/:creatorId -> findByCreator(); GET /api/jobs/category-menu -> getCategoryMenu(); GET /api/jobs/subcategories/by-category/:categoryId -> getSubcategoriesByCategory(); GET /api/jobs/by-subcategory/:subcategoryId -> getJobsBySubcategory(); GET /api/jobs/details/:jobId -> getJobDetails(); GET /api/jobs/search/:name -> searchByName(); GET /api/jobs/:id -> findOne(); PUT /api/jobs/:id -> update(); DELETE /api/jobs/:id -> remove(); POST /api/jobs/upload-image/:jobId -> uploadImage().
+ *
+ * Calls: JobsService; StorageService; JwtAuthGuard; imageUploadOptions
+ * Used by:
+ *   - src/modules/jobs/jobs.module.ts
+ */
+
 import {
   Controller,
   Get,

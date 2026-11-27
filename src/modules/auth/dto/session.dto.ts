@@ -1,3 +1,11 @@
+/**
+ * Validation DTOs in the auth module for changing a user's password (ChangePasswordDto) and banning or unbanning a user (BanUserDto).
+ *
+ * Calls: PASSWORD_MIN_LENGTH
+ * Used by:
+ *   - src/modules/auth/controllers/auth-sessions.controller.ts
+ */
+
 import { IsBoolean, IsByteLength, IsString, MinLength } from 'class-validator';
 import { PASSWORD_MIN_LENGTH } from '../../../common/constants/password';
 

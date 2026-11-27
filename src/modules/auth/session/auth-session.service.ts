@@ -1,3 +1,11 @@
+/**
+ * Service in the auth module that manages login sessions, refresh token rotation, reuse detection, password changes and resets, account deletion, and user bans. It stores sessions in PostgreSQL and caches revocations and tokens in Redis.
+ *
+ * Calls: prisma.authSession; prisma.authRefreshToken; prisma.user; prisma.contract; AuthRedisService; JwtService; jwtVerifyOptions; bcrypt
+ * Used by:
+ *   - 9 files, for example src/modules/auth/auth.module.ts, src/modules/auth/controllers/auth-sessions.controller.ts, src/modules/auth/services/auth.service.ts
+ */
+
 import {
   ConflictException,
   ForbiddenException,

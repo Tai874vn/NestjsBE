@@ -1,3 +1,12 @@
+/**
+ * Posts module controller for the social feed, post image uploads, likes, comments, and replies.
+ * Routes: GET /api/posts/feed -> getFeed(), GET /api/posts/me/stats -> getMyStats(), POST /api/posts -> createPost(), DELETE /api/posts/:id -> deletePost(), PUT /api/posts/:id/like -> likePost(), DELETE /api/posts/:id/like -> unlikePost(), GET /api/posts/:id/comments -> getComments(), POST /api/posts/:id/comments -> createComment(), DELETE /api/posts/:postId/comments/:commentId -> deleteComment(), GET /api/posts/:postId/comments/:commentId/replies -> getReplies(), POST /api/posts/:postId/comments/:commentId/replies -> createReply(), PUT /api/posts/:postId/comments/:commentId -> updateComment().
+ *
+ * Calls: PostsService; StorageService; imageUploadOptions; JwtAuthGuard; CurrentUser; posts.dto
+ * Used by:
+ *   - src/modules/posts/posts.module.ts
+ */
+
 import {
   BadRequestException,
   Body,

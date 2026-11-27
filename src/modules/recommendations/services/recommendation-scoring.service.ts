@@ -1,3 +1,13 @@
+/**
+ * Recommendations module service that turns raw AI scores into final match scores, match labels, skill gaps, and improvement tips.
+ * It supports blended job/candidate scoring, AI-only scores, and recruiter classifier decisions.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 
 export type RecommendationLabel = 'high_match' | 'medium_match' | 'low_match';

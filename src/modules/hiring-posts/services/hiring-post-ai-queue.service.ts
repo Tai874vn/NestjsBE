@@ -1,3 +1,13 @@
+/**
+ * Background AI queue worker for the hiring-posts module. Polls queued hiring posts in batches, calls the AI service to predict each post's seniority level, and saves the result or error status.
+ *
+ * Calls: prisma.hiringPost; prisma.$queryRaw; AiRecommendationClient (the AI service); RecommendationPayloadMapperService; Sentry
+ * Used by:
+ *   - src/modules/hiring-posts/hiring-posts.module.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ *   - src/modules/hiring-posts/utils/hiring-post-update.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

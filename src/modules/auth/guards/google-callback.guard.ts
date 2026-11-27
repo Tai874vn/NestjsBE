@@ -1,3 +1,12 @@
+/**
+ * Passport guard in the auth module that handles Google's OAuth callback. It verifies the OAuth state, logs failures safely, and redirects the browser back to the frontend on error.
+ *
+ * Calls: GoogleOAuthStateService; Google OAuth (Passport)
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import { ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';

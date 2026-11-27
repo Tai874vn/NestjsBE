@@ -1,3 +1,12 @@
+/**
+ * Input and permission checks for the hiring-posts module. Validates post ownership, closing dates, salary ranges, open status, and ESCO occupation/specialty choices without querying the database.
+ *
+ * Calls: findOccupation
+ * Used by:
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ *   - src/modules/hiring-posts/utils/hiring-post-update.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

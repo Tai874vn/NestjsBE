@@ -1,3 +1,13 @@
+/**
+ * Signs short-lived LiveKit room access tokens for scheduled online interviews in the hiring-pipeline module.
+ * Verifies that the caller is the interview's candidate or recruiter before issuing a join token.
+ *
+ * Calls: prisma.interview; LiveKit
+ * Used by:
+ *   - src/modules/hiring-pipeline/controllers/interviews.controller.ts
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import {
   ConflictException,
   ForbiddenException,

@@ -1,3 +1,12 @@
+/**
+ * Pure validation and transition rules for proposals, milestones, reviews, and amendments in the contracts module.
+ * Evaluates inputs and statuses without database access and throws RuleError when an action is not allowed.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - 13 files, for example src/modules/comments/services/comments.service.ts, src/modules/contracts/dto/amendment.dto.ts, src/modules/contracts/services/amendments.service.ts
+ */
+
 import {
   ContractStatus,
   MilestoneStatus,

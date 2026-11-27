@@ -1,3 +1,13 @@
+/**
+ * NestJS module for the hiring-pipeline feature covering applications, interviews, offers, and video calls.
+ * Imports NotificationsModule and ChatModule, registers ApplicationsController, InterviewsController, and seven pipeline services, and exports HiringEventsService and PostSweepService.
+ *
+ * Calls: NotificationsModule; ChatModule; ApplicationsController; InterviewsController; ApplicationsService; InterviewsService; HiringEventsService; PostSweepService
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/hiring-posts/hiring-posts.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';

@@ -1,3 +1,14 @@
+/**
+ * Handles mid-contract change requests (amendments) and mutual end requests in the contracts module.
+ * Lets either side propose, accept, decline, or withdraw an amendment or an end request inside a locked contract step.
+ *
+ * Calls: ContractStepService; ContractEventsService; ContractEndingService; checkAmendment; prisma.amendment; prisma.milestone; prisma.contract; prisma.submission
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/controllers/amendments.controller.ts
+ *   - src/modules/contracts/controllers/contracts.controller.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

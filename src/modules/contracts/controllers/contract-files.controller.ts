@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for uploading proposal and submission images in the contracts module.
+ * Routes: POST /api/contracts/attachments -> upload().
+ *
+ * Calls: StorageService; imageUploadOptions; JwtAuthGuard
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   BadRequestException,
   Controller,

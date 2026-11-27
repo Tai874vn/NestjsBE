@@ -1,3 +1,15 @@
+/**
+ * Shared service for approving milestones and ending contracts early in the contracts module.
+ * Releases or refunds held credits, updates milestone and contract statuses, cancels open amendments, and records history events.
+ *
+ * Calls: WalletService; ContractEventsService; HELD_STATUSES; prisma.milestone; prisma.amendment; prisma.contract
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/services/amendments.service.ts
+ *   - src/modules/contracts/services/contract-sweeper.service.ts
+ *   - src/modules/contracts/services/contracts.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import {
   AmendmentStatus,

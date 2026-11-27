@@ -1,3 +1,12 @@
+/**
+ * Service in the auth module for forgot-password and password-reset flows. It mails reset links in the background and validates one-time tokens before updating the password and revoking sessions.
+ *
+ * Calls: prisma.user; EmailTokensService; AccountEmailsService; AuthSessionService; invalidLink
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { EmailTokenPurpose } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';

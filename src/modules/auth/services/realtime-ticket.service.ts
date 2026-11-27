@@ -1,3 +1,12 @@
+/**
+ * Service in the auth module that signs short-lived JWT tickets (60 seconds) for opening chat and notification WebSocket connections.
+ *
+ * Calls: JwtService
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/realtime-ticket.controller.ts
+ */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';

@@ -1,3 +1,13 @@
+/**
+ * Core user management service for the users module.
+ * Handles admin user CRUD, paginated and name searches, email-change requests, and user deletion with file cleanup.
+ *
+ * Calls: prisma.user; RedisService; AuthSessionService; EmailVerificationService; StorageService; bcrypt
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   Injectable,
   NotFoundException,

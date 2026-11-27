@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for job categories in the categories module.
+ * Routes: POST /api/categories -> create(); GET /api/categories -> findAll(); GET /api/categories/paginated-search -> findAllWithPagination(); GET /api/categories/:id -> findOne(); PUT /api/categories/:id -> update(); DELETE /api/categories/:id -> remove().
+ *
+ * Calls: CategoriesService; JwtAuthGuard; RolesGuard; PUBLIC_TAXONOMY_CACHE_CONTROL
+ * Used by:
+ *   - src/modules/categories/categories.module.ts
+ */
+
 import {
   Controller,
   Get,

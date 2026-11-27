@@ -1,3 +1,13 @@
+/**
+ * Request body DTO for editing a review in the comments module.
+ * It validates optional review content and rating fields.
+ *
+ * Calls: optionalTrimString
+ * Used by:
+ *   - src/modules/comments/controllers/comments.controller.ts
+ *   - src/modules/comments/services/comments.service.ts
+ */
+
 import {
   IsInt,
   IsOptional,

@@ -1,3 +1,14 @@
+/**
+ * Resume service for the users module.
+ * Reads and saves the user's resume data and file metadata, syncs shared skills, and queues AI evaluation.
+ *
+ * Calls: prisma.userResume; prisma.userSkill; prisma.user; ResumeAiQueueService; UserProfileService; UserProfileNormalizerService; RedisService; resume-career, resume-ai-payload, and storage-paths helpers
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/user-uploads.service.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

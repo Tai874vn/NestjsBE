@@ -1,3 +1,12 @@
+/**
+ * Notifications module DTO that validates cursor and limit query parameters for listing notifications.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/notifications/controllers/notifications.controller.ts
+ *   - src/modules/notifications/services/notifications.service.ts
+ */
+
 import { Type } from 'class-transformer';
 import {
   IsInt,

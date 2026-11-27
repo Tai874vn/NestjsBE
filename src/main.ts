@@ -1,3 +1,11 @@
+/**
+ * Entry point that starts the NestJS HTTP and WebSocket server. It loads Sentry first, sets up security headers, JSON and cookie parsing (keeping the raw body for Stripe webhooks), CORS, global validation, and the Redis Socket.IO adapter.
+ *
+ * Calls: src/instrument; AppModule; buildCorsOptions; devPublicImages; applyApiCacheControl; RedisIoAdapter; REDIS_CLIENT; Redis
+ * Used by:
+ *   - Node: the app entry point (npm start runs dist/src/main.js)
+ */
+
 import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';

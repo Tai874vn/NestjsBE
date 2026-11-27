@@ -1,3 +1,13 @@
+/**
+ * Wallet HTTP controller for the wallet module.
+ * Serves the signed-in user's wallet summary, ledger history, and top-up endpoints.
+ * Routes: GET /api/wallet -> summary(); GET /api/wallet/ledger -> ledger(); POST /api/wallet/top-ups -> startTopUp(); GET /api/wallet/top-ups/:id -> topUpStatus()
+ *
+ * Calls: WalletService; TopUpsService; JwtAuthGuard; TopUpDto; WalletLedgerQueryDto
+ * Used by:
+ *   - src/modules/wallet/wallet.module.ts
+ */
+
 import {
   Body,
   Controller,

@@ -1,3 +1,12 @@
+/**
+ * HTTP routes for the hiring-posts module. Handles browsing open posts, managing a recruiter's posts, queuing AI seniority checks, and applying to posts.
+ * Routes: GET /api/hiring-posts -> findOpen(); GET /api/hiring-posts/locations -> findLocations(); GET /api/hiring-posts/facets -> findFacets(); GET /api/hiring-posts/mine -> findMine(); GET /api/hiring-posts/applications/me -> findMyApplications(); GET /api/hiring-posts/:id -> findOne(); POST /api/hiring-posts -> create(); PATCH /api/hiring-posts/:id -> update(); DELETE /api/hiring-posts/:id -> remove(); POST /api/hiring-posts/:id/seniority -> predictSeniority(); POST /api/hiring-posts/:id/applications -> apply(); GET /api/hiring-posts/:id/applications -> findApplicationsForPost().
+ *
+ * Calls: HiringPostsService; JwtAuthGuard; RolesGuard
+ * Used by:
+ *   - src/modules/hiring-posts/hiring-posts.module.ts
+ */
+
 import {
   Body,
   Controller,

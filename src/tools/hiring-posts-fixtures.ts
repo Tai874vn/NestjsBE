@@ -1,3 +1,12 @@
+/**
+ * Standalone fixture seed script for the hiring posts feature.
+ * Defines 20 demo vacancies and inserts open hiring posts for existing @jobaura.test employer accounts inside a transaction, skipping duplicates.
+ *
+ * Calls: Role (common/constants/roles); prisma.user; prisma.hiringPost; PostgreSQL via PrismaClient, PrismaPg, and pg Pool
+ * Used by:
+ *   - run by hand: npm run db:seed:hiring
+ */
+
 import 'dotenv/config';
 import { HiringPostStatus, Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';

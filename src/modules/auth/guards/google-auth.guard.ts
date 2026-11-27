@@ -1,3 +1,12 @@
+/**
+ * Passport guard in the auth module that starts Google OAuth login. It reads an optional role query parameter and creates a signed state value for the redirect to Google.
+ *
+ * Calls: GoogleOAuthStateService; Role; Google OAuth (Passport)
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';

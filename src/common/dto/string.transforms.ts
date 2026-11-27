@@ -1,3 +1,12 @@
+/**
+ * Common DTO string transform helpers for trimming text, normalizing emails, and parsing comma-separated query lists.
+ * Exports `trimString`, `optionalTrimString`, `normalizeEmail`, `optionalNormalizeEmail`, and `commaList`.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - 29 files, for example src/common/dto/pagination.dto.ts, src/modules/auth/dto/email-flows.dto.ts, src/modules/auth/dto/signin.dto.ts
+ */
+
 type TransformParams = {
   value: unknown;
 };

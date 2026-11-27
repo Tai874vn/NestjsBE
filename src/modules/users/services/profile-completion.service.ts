@@ -1,3 +1,14 @@
+/**
+ * Profile completion service for the users module.
+ * Checks if a user has a name, avatar, headline, bio, and at least one skill, then saves the profileCompleted flag.
+ *
+ * Calls: prisma.user
+ * Used by:
+ *   - src/modules/users/services/user-portfolio.service.ts
+ *   - src/modules/users/services/user-profile.service.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 

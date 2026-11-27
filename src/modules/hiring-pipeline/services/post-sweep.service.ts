@@ -1,3 +1,16 @@
+/**
+ * Sweeps remaining active applications and unfinished interviews when a hiring post closes or fills in the hiring-pipeline module.
+ * Rejects active applicants, cancels open interviews, writes history rows in bulk, and sends post-commit notifications.
+ *
+ * Calls: HiringEventsService; isActive; prisma.hiringApplication; prisma.interview; Sentry
+ * Used by:
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ *   - src/modules/hiring-pipeline/services/application-pipeline.service.ts
+ *   - src/modules/hiring-pipeline/services/applications.service.ts
+ *   - src/modules/hiring-pipeline/services/interviews.service.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import {
   HiringApplicationStatus,

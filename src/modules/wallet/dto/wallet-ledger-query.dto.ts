@@ -1,3 +1,12 @@
+/**
+ * Query DTO for paginating the wallet ledger in the wallet module.
+ * Validates optional page and pageSize query parameters up to the ledger page limit.
+ *
+ * Calls: wallet.service (LEDGER_MAX_PAGE_SIZE)
+ * Used by:
+ *   - src/modules/wallet/controllers/wallet.controller.ts
+ */
+
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { LEDGER_MAX_PAGE_SIZE } from '../services/wallet.service';

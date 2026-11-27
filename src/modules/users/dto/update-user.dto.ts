@@ -1,3 +1,12 @@
+/**
+ * Request DTO for the users module. Validates optional user account and profile fields when updating a user.
+ *
+ * Calls: optionalNormalizeEmail; optionalTrimString
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/users.service.ts
+ */
+
 import {
   IsDateString,
   IsEmail,

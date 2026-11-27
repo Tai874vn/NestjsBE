@@ -17,6 +17,11 @@
  *
  * It is a pure function (same input -> same output, no database): prisma/seed-activity.ts reads the
  * database, calls buildActivity, and writes the result.
+ *
+ * Calls: activity-shared (randomGenerator, DAY, types); buildTimeline; buildHiringActivity; buildConnections; buildFeedPosts; buildServicesAndContracts; buildChats
+ * Used by:
+ *   - prisma/seed-activity.ts
+ *   - src/tools/demo-activity/build-contracts.ts
  */
 
 import {

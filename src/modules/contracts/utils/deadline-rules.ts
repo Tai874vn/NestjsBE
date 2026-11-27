@@ -1,3 +1,14 @@
+/**
+ * Pure deadline rules for active contracts in the contracts module.
+ * Calculates warning and cutoff times for silent clients, late freelancers, and unfunded milestones and picks the next sweeper action.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/contracts/services/contract-events.service.ts
+ *   - src/modules/contracts/services/contract-sweeper.service.ts
+ *   - src/tools/demo-activity/build-contracts.ts
+ */
+
 import { ContractStatus, Milestone, MilestoneStatus } from '@prisma/client';
 
 // Pure rules for the 3-day deadlines. "Pure" means: no database, no Nest, no clock

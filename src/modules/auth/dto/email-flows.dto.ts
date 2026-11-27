@@ -1,3 +1,11 @@
+/**
+ * Validation DTOs in the auth module for email flows: requesting verification or reset links (EmailOnlyDto), submitting a mailed token (EmailTokenDto), and setting a new password (ResetPasswordDto).
+ *
+ * Calls: PASSWORD_MIN_LENGTH; normalizeEmail
+ * Used by:
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import {
   IsEmail,
   IsNotEmpty,

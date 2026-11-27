@@ -1,3 +1,16 @@
+/**
+ * Shared transaction runner for state-changing contract actions in the contracts module.
+ * Locks the contract row, checks which side is acting, saves updates, sends post-commit notices, and returns the fresh contract detail.
+ *
+ * Calls: prisma.contract; prisma.milestone; ContractEventsService; ContractsQueryService; InsufficientCreditsError; RuleError
+ * Used by:
+ *   - src/modules/comments/services/comments.service.ts
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/services/amendments.service.ts
+ *   - src/modules/contracts/services/contract-sweeper.service.ts
+ *   - src/modules/contracts/services/contracts.service.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

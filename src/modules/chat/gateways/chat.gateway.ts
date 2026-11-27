@@ -1,3 +1,14 @@
+/**
+ * Socket.IO WebSocket gateway on /chat for the chat module.
+ * It authenticates sockets, tracks online presence, handles real-time room and message events, and broadcasts server messages to room members.
+ *
+ * Calls: ChatService; ChatSocketAuthService; ChatPresenceService; AuthSessionService; ChatMessageFanoutService; ChatSocketRateLimitService; ObservabilityService; trustedOrigins
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/contracts/services/contract-events.service.ts
+ *   - src/modules/hiring-pipeline/services/hiring-events.service.ts
+ */
+
 import { trustedOrigins } from '../../../config/trusted-origins';
 import {
   WebSocketGateway,

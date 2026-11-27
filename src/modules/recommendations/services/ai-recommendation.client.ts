@@ -1,3 +1,16 @@
+/**
+ * Recommendations module HTTP client for the external AI service.
+ * It calls endpoints for job and candidate matching, resume and job seniority prediction, skill search/extract/resolve, fields of study, and health checks.
+ *
+ * Calls: ConfigService; the AI service
+ * Used by:
+ *   - src/modules/hiring-posts/services/hiring-post-ai-queue.service.ts
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ *   - src/modules/skill/services/skill.service.ts
+ *   - src/modules/users/services/resume-ai-queue.service.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

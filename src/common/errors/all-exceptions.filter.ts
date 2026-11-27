@@ -1,3 +1,14 @@
+/**
+ * Common global HTTP exception filter and shared error/request-ID helpers (`resolveHttpError`, `resolveRequestId`, `normalizeRequestId`).
+ * Formats every HTTP failure into one JSON response shape with `X-Request-ID`, maps known Prisma errors to 404/409, hides internal details on 5xx errors, and logs and reports 5xx failures to Sentry.
+ *
+ * Calls: Sentry; Prisma.PrismaClientKnownRequestError
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/common/observability/request-observability.interceptor.ts
+ *   - src/modules/storage/controllers/files.controller.ts
+ */
+
 import {
   ArgumentsHost,
   Catch,

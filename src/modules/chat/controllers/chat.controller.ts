@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for chat rooms and message history in the chat module.
+ * Routes: POST /api/chat/rooms -> createRoom(); GET /api/chat/rooms -> getUserRooms(); GET /api/chat/rooms/:id -> getRoom(); GET /api/chat/rooms/:id/messages -> getRoomMessages(); POST /api/chat/rooms/:id/leave -> leaveRoom(); GET /api/chat/start/:userId -> startPrivateChat().
+ *
+ * Calls: ChatService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ */
+
 import {
   Controller,
   Get,

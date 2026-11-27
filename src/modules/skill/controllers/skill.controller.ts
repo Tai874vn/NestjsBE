@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the skill module. Routes: GET /api/skill -> findAll(), GET /api/skill/search -> search(), GET /api/skill/fields-of-study -> fieldsOfStudy(), POST /api/skill/extract -> extract().
+ *
+ * Calls: SkillService; JwtAuthGuard; Public; PUBLIC_TAXONOMY_CACHE_CONTROL; SearchSkillsDto; ExtractSkillsDto
+ * Used by:
+ *   - src/modules/skill/skill.module.ts
+ */
+
 import {
   Body,
   Controller,

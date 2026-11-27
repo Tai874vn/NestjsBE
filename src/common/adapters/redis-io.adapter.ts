@@ -1,3 +1,12 @@
+/**
+ * Common Socket.IO adapter that backs WebSocket rooms with Redis pub/sub for multi-instance real-time chat.
+ * Falls back to the default in-memory adapter if Redis cannot be reached, and closes its Redis clients on shutdown.
+ *
+ * Calls: Redis; watchRedisErrors
+ * Used by:
+ *   - src/main.ts
+ */
+
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplication, Logger } from '@nestjs/common';
 import { createClient } from 'redis';

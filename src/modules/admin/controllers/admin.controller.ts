@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the admin feature, restricted to ADMIN users. Routes: GET /api/admin/stats -> getStats().
+ *
+ * Calls: AdminService; JwtAuthGuard; RolesGuard; Roles; Role
+ * Used by:
+ *   - src/modules/admin/admin.module.ts
+ */
+
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
 import { Roles } from '../../../common/decorators/roles.decorator';

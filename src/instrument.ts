@@ -1,3 +1,11 @@
+/**
+ * App startup instrumentation for Sentry error tracking and performance tracing. It starts Sentry when SENTRY_DSN is set, scrubs sensitive headers, query strings, cookies, and data fields, and drops noisy health check and Socket.IO polling traces.
+ *
+ * Calls: Sentry
+ * Used by:
+ *   - src/main.ts
+ */
+
 import * as Sentry from '@sentry/nestjs';
 import type {
   Breadcrumb,

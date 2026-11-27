@@ -1,6 +1,9 @@
 /**
- * The mails JobAura sends. Each has an HTML part and a plain-text part: mail with both, a plain
- * layout, no tracking and no link shorteners is less likely to land in spam.
+ * Email templates for the mail module. Renders HTML and plain-text bodies for email verification and password reset messages using a simple layout without tracking or link shorteners so they are less likely to land in spam.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/mail/services/account-emails.service.ts
  */
 
 export type RenderedMail = { subject: string; html: string; text: string };

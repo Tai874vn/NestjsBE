@@ -1,3 +1,12 @@
+/**
+ * NestJS module for the users feature.
+ * Registers UsersController and the user, profile, portfolio, resume, upload, and candidate directory services, and exports UsersService.
+ *
+ * Calls: RecommendationsModule; AuthModule; SkillModule; UsersController; UsersService; UserProfileService; UserResumeService; CandidateDirectoryService
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { UsersService } from './services/users.service';
 import { CandidateDirectoryService } from './services/candidate-directory.service';

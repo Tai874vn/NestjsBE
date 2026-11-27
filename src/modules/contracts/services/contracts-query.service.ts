@@ -1,3 +1,15 @@
+/**
+ * Read-only query service for listing contracts and fetching contract detail pages in the contracts module.
+ * Checks viewer access and turns contract, milestone, amendment, and event rows into API response views.
+ *
+ * Calls: prisma.contract; prisma.contractEvent; contractListItemView; contractDetailView
+ * Used by:
+ *   - prisma/seed-activity.ts
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/controllers/contracts.controller.ts
+ *   - src/modules/contracts/services/contract-step.service.ts
+ */
+
 import {
   ForbiddenException,
   Injectable,

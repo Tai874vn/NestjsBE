@@ -1,3 +1,12 @@
+/**
+ * Category catalog service for the jobs module. Loads the category menu, subcategories for a category, and jobs in a subcategory with Redis caching.
+ *
+ * Calls: prisma.category; prisma.subcategory; prisma.job; RedisService
+ * Used by:
+ *   - src/modules/jobs/jobs.module.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import {

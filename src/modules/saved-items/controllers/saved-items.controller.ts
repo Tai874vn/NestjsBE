@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the saved-items module so signed-in users can list, save, and unsave posts and jobs. Routes: GET /api/saved/posts -> getSavedPosts(), PUT /api/saved/posts/:postId -> savePost(), DELETE /api/saved/posts/:postId -> unsavePost(), GET /api/saved/jobs -> getSavedJobs(), PUT /api/saved/jobs/:jobId -> saveJob(), DELETE /api/saved/jobs/:jobId -> unsaveJob().
+ *
+ * Calls: SavedItemsService; JwtAuthGuard; CurrentUser; SavedItemsQueryDto
+ * Used by:
+ *   - src/modules/saved-items/saved-items.module.ts
+ */
+
 import {
   Controller,
   Delete,

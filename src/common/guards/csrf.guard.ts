@@ -1,3 +1,12 @@
+/**
+ * Common global CSRF guard that protects state-changing HTTP requests authenticated with cookies.
+ * Checks that the `Origin` header is in the trusted origins list and that `x-csrf-token` matches the `csrf_token` cookie.
+ *
+ * Calls: ConfigService; trustedOrigins
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import {
   CanActivate,
   ExecutionContext,

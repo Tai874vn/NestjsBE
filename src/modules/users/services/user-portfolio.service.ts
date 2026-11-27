@@ -1,3 +1,13 @@
+/**
+ * Portfolio service for the users module.
+ * Creates, updates, and deletes portfolio items for the signed-in user, removing replaced images and refreshing caches.
+ *
+ * Calls: prisma.userPortfolioItem; prisma.user; ProfileCompletionService; RedisService; StorageService
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   ForbiddenException,
   Injectable,

@@ -1,3 +1,12 @@
+/**
+ * HTTP routes for the notifications module. Lists the signed-in user's notifications, returns their unread count, and marks one or all notifications as read.
+ * Routes: GET /api/notifications -> list(); GET /api/notifications/unread-count -> unreadCount(); PATCH /api/notifications/read-all -> markAllAsRead(); PATCH /api/notifications/:id/read -> markAsRead().
+ *
+ * Calls: NotificationsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/notifications/notifications.module.ts
+ */
+
 import {
   Controller,
   Get,

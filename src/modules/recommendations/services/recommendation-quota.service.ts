@@ -1,3 +1,13 @@
+/**
+ * Recommendations module service that enforces each user's daily AI recommendation limit (5 per day, or 100 for admins).
+ * It reads, checks, reserves, consumes, and refunds daily usage in UTC day windows.
+ *
+ * Calls: prisma.recommendationQuotaUsage; Role
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Role } from '../../../common/constants/roles';
 import { PrismaService } from '../../../prisma.service';

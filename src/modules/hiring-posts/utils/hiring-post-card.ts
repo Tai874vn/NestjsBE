@@ -1,3 +1,13 @@
+/**
+ * Card-formatting helpers for the hiring-posts module. Shapes hiring posts for API responses, looks up occupation titles, counts applications per pipeline step, and attaches the viewer's application state.
+ *
+ * Calls: prisma.hiringApplication; findOccupation
+ * Used by:
+ *   - src/modules/hiring-pipeline/services/applications-query.service.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ *   - src/modules/hiring-posts/utils/hiring-post-update.ts
+ */
+
 import { HiringApplicationStatus, Prisma, PrismaClient } from '@prisma/client';
 import { findOccupation } from '../../occupations/utils/occupation-catalogue';
 

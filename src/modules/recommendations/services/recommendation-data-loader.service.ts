@@ -1,3 +1,12 @@
+/**
+ * Recommendations module service that loads users, open hiring posts, single hiring posts, and discoverable candidates from the database for AI matching.
+ *
+ * Calls: prisma.user; prisma.hiringPost; Role; recommendation-payload-mapper.service types
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { HiringPostStatus } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';

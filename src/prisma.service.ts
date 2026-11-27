@@ -1,3 +1,12 @@
+/**
+ * Database service for the shared database layer.
+ * Wraps PrismaClient with a PostgreSQL connection pool and handles opening and closing connections with the NestJS lifecycle.
+ *
+ * Calls: PostgreSQL via PrismaClient, PrismaPg, and pg Pool
+ * Used by:
+ *   - 51 files, for example src/app.service.ts, src/database/database.module.ts, src/modules/admin/services/admin.service.ts
+ */
+
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';

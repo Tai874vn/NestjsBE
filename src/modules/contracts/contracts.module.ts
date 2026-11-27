@@ -1,3 +1,13 @@
+/**
+ * NestJS module for the contracts feature.
+ * It imports NotificationsModule, ChatModule, and WalletModule, registers 5 contract controllers and 8 contract services, and exports ContractEventsService, ContractStepService, and ContractEndingService.
+ *
+ * Calls: NotificationsModule; ChatModule; WalletModule; ContractsService; ProposalsService; AmendmentsService; ContractEventsService; ContractSweeperService
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/comments/comments.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';

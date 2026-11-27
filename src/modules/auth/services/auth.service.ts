@@ -1,3 +1,12 @@
+/**
+ * Core business logic for the auth module. It handles account sign-up, password sign-in, Google login session creation, loading the current user profile, token refresh, and logout.
+ *
+ * Calls: prisma.user; AuthSessionService; EmailVerificationService; Role; bcrypt
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import {
   Injectable,
   ConflictException,

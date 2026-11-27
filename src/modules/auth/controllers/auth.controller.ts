@@ -1,3 +1,11 @@
+/**
+ * HTTP controller in the auth module for sign-up, login, Google OAuth, email confirmation, password reset, token refresh, and logout. Routes: POST /api/auth/signup -> signUp(); POST /api/auth/verify-email -> verifyEmail(); POST /api/auth/verify-email/resend -> resendVerification(); POST /api/auth/forgot-password -> forgotPassword(); POST /api/auth/reset-password -> resetPassword(); POST /api/auth/signin -> signIn(); GET /api/auth/google -> googleAuth(); GET /api/auth/google/callback -> googleAuthRedirect(); GET /api/auth/me -> getCurrentUser(); POST /api/auth/refresh -> refresh(); POST /api/auth/logout and POST /api/auth/refresh/logout -> logout().
+ *
+ * Calls: AuthService; EmailVerificationService; PasswordResetService; GoogleAuthGuard; GoogleCallbackGuard; AuthRateLimitGuard; setAuthCookies; clearAuthCookies
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import {
   Body,
   Controller,

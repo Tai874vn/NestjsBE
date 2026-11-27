@@ -1,3 +1,13 @@
+/**
+ * Recommendations module service that builds short SHA-256 fingerprints for job and candidate recommendation caches.
+ * It hashes the model version, exact target timestamps, and 1-hour bucketed pool timestamps so target edits bust cache right away.
+ *
+ * Calls: prisma.user; prisma.userSkill; prisma.hiringPost; prisma.userResume; Role; ConfigService
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';

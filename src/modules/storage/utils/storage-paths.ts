@@ -1,3 +1,11 @@
+/**
+ * Path, URL, and size-limit helpers for the storage module. Resolves upload folders, checks folder names and storage keys, builds public and private file URLs, and blocks path traversal.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - 7 files, for example src/common/middleware/dev-public-images.ts, src/modules/contracts/dto/proposal.dto.ts, src/modules/storage/services/storage.service.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 

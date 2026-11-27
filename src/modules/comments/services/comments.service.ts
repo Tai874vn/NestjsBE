@@ -1,3 +1,13 @@
+/**
+ * Service for the comments (reviews) module.
+ * It creates one review per finished contract, reads reviews, edits and deletes reviews with ownership checks, notifies freelancers, and clears Redis caches.
+ *
+ * Calls: prisma.comment; RedisService; ContractStepService; ruleToHttp; checkReview; ContractEventsService
+ * Used by:
+ *   - src/modules/comments/comments.module.ts
+ *   - src/modules/comments/controllers/comments.controller.ts
+ */
+
 import {
   Injectable,
   NotFoundException,

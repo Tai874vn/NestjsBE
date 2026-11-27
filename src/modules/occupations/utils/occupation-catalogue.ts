@@ -1,3 +1,12 @@
+/**
+ * Occupations module helper that loads and caches the ESCO occupation catalogue from src/common/data/occupations.json.
+ * It provides findOccupation, occupationRelatedness, RELATED_FROM, and the CatalogueOccupation type.
+ *
+ * Calls: src/common/data/occupations.json
+ * Used by:
+ *   - 9 files, for example src/modules/hiring-posts/services/hiring-posts.service.ts, src/modules/hiring-posts/utils/hiring-post-card.ts, src/modules/hiring-posts/utils/hiring-post-checks.ts
+ */
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

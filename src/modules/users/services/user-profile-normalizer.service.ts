@@ -1,3 +1,17 @@
+/**
+ * Profile data normalizer for the users module.
+ * Deduplicates skills and certifications, parses legacy JSON string lists, and trims or lowercases profile text.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/users/services/candidate-directory.service.ts
+ *   - src/modules/users/services/resume-ai-queue.service.ts
+ *   - src/modules/users/services/user-profile.service.ts
+ *   - src/modules/users/services/user-resume.service.ts
+ *   - src/modules/users/users.module.ts
+ *   - src/tools/benchmark-candidates.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 
 @Injectable()

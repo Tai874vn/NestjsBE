@@ -1,3 +1,13 @@
+/**
+ * Notifications module WebSocket gateway on the /notifications namespace.
+ * It checks login tokens on connect, disconnects revoked sessions, puts each user in their room, and pushes new notifications and unread counts live.
+ *
+ * Calls: trustedOrigins; AuthSessionService; jwtVerifyOptions; prisma.user; JwtService; Socket.IO
+ * Used by:
+ *   - src/modules/notifications/notifications.module.ts
+ *   - src/modules/notifications/services/notifications.service.ts
+ */
+
 import { trustedOrigins } from '../../../config/trusted-origins';
 import {
   OnGatewayConnection,

@@ -1,3 +1,13 @@
+/**
+ * Request body DTO and salary period constants for creating a hiring post in the hiring-posts module. Validates post details, salary range, occupation, skills, openings, and closing date.
+ *
+ * Calls: trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/hiring-posts/controllers/hiring-posts.controller.ts
+ *   - src/modules/hiring-posts/dto/update-hiring-post.dto.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ */
+
 import {
   ArrayMaxSize,
   IsArray,

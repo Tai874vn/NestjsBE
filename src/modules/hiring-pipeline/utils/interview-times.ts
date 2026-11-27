@@ -1,3 +1,14 @@
+/**
+ * Helper functions for validating proposed interview times and formatting dates in Vietnam time for the hiring-pipeline module.
+ * Used when checking time slots and building readable interview messages for notifications and chat.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/hiring-pipeline/services/interviews.service.ts
+ *   - src/tools/demo-activity/build-chats.ts
+ *   - src/tools/demo-activity/build-hiring.ts
+ */
+
 import { BadRequestException } from '@nestjs/common';
 import { Interview, InterviewMode } from '@prisma/client';
 

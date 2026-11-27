@@ -1,3 +1,15 @@
+/**
+ * Message fanout service for the chat module.
+ * It saves a chat message, computes unread counts for the other room members, and triggers chat notifications.
+ *
+ * Calls: ChatService; NotificationsService
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ *   - src/modules/contracts/services/contract-events.service.ts
+ *   - src/modules/hiring-pipeline/services/hiring-events.service.ts
+ */
+
 import { Injectable, Optional } from '@nestjs/common';
 import { OperationTimer } from '../../../common/observability/observability.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';

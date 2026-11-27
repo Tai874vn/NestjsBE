@@ -1,3 +1,13 @@
+/**
+ * Occupations module service that indexes the ESCO occupation catalogue in memory for search and lookup.
+ * It checks occupation codes, fetches occupation details, ranks text search hits, and computes occupation relatedness.
+ *
+ * Calls: occupationCatalogue; occupationRelatedness
+ * Used by:
+ *   - src/modules/occupations/controllers/occupations.controller.ts
+ *   - src/modules/occupations/occupations.module.ts
+ */
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CatalogueOccupation,

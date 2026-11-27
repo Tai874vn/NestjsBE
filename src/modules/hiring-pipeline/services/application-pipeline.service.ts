@@ -1,3 +1,14 @@
+/**
+ * Shared transaction runner for application and interview state changes in the hiring-pipeline module.
+ * Locks the application row (and hiring post when needed), checks permissions and transition rules, runs the update, sends notifications, and returns the fresh detail.
+ *
+ * Calls: prisma.hiringApplication; prisma.hiringPost; HiringEventsService; PostSweepService; ApplicationsQueryService; nextStatus
+ * Used by:
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ *   - src/modules/hiring-pipeline/services/applications.service.ts
+ *   - src/modules/hiring-pipeline/services/interviews.service.ts
+ */
+
 import {
   ConflictException,
   ForbiddenException,

@@ -1,3 +1,14 @@
+/**
+ * Candidate search service for recruiters in the users module. Filters discoverable worker accounts, builds candidate cards with career data and profile strength, and scores and sorts each page.
+ *
+ * Calls: prisma.user; UserProfileNormalizerService; profileStrength; findOccupation; resumeOccupation; Role; CandidateDirectoryQueryDto
+ * Used by:
+ *   - src/modules/hiring-pipeline/services/applications-query.service.ts
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/users.module.ts
+ *   - src/tools/benchmark-candidates.ts
+ */
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Role } from '../../../common/constants/roles';

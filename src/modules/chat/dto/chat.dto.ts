@@ -1,3 +1,15 @@
+/**
+ * Request DTOs and response types for the chat module.
+ * It validates room creation, message sending, room joining, message history queries, typing updates, and read receipts.
+ *
+ * Calls: trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/chat/controllers/chat.controller.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ *   - src/modules/chat/services/chat-message-fanout.service.ts
+ *   - src/modules/chat/services/chat.service.ts
+ */
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {

@@ -1,3 +1,13 @@
+/**
+ * Notifications module presenter service.
+ * It shapes a notification record with its actor into the plain object returned to clients.
+ *
+ * Calls: NotificationWithActor
+ * Used by:
+ *   - src/modules/notifications/notifications.module.ts
+ *   - src/modules/notifications/services/notifications.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { NotificationWithActor } from '../utils/notification.types';
 

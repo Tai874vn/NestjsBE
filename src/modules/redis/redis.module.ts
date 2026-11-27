@@ -1,3 +1,14 @@
+/**
+ * Global NestJS module for the Redis feature. It registers RedisController, opens and closes the shared Redis client (falling back to null when Redis is missing or fails), and exports RedisService and REDIS_CLIENT.
+ *
+ * Calls: Redis (createClient); ConfigService; REDIS_CLIENT_OPTIONS; watchRedisErrors; REDIS_CLIENT; RedisService; RedisController
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/chat/services/chat-presence.service.ts
+ *   - src/modules/chat/services/chat-socket-rate-limit.service.ts
+ *   - src/modules/redis/index.ts
+ */
+
 import {
   Global,
   Inject,

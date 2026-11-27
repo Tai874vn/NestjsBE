@@ -1,3 +1,12 @@
+/**
+ * Cookie helpers for the auth module. They set and clear the access_token, refresh_token, logout_session, and csrf_token cookies with the right paths and expiration times.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/auth/controllers/auth-sessions.controller.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ */
+
 import { randomBytes } from 'crypto';
 import { Response } from 'express';
 import ms, { StringValue } from 'ms';

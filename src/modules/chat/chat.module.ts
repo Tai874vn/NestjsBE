@@ -1,3 +1,14 @@
+/**
+ * NestJS module for the chat feature.
+ * It imports ObservabilityModule, NotificationsModule, and AuthModule, registers ChatController, ChatGateway, ChatService, ChatMessageFanoutService, ChatPresenceService, ChatSocketAuthService, and ChatSocketRateLimitService, and exports ChatService, ChatGateway, and ChatMessageFanoutService.
+ *
+ * Calls: ObservabilityModule; NotificationsModule; AuthModule; ChatController; ChatGateway; ChatService; ChatMessageFanoutService; ChatPresenceService
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { ChatGateway } from './gateways/chat.gateway';

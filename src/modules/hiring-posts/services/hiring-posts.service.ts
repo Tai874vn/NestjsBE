@@ -1,3 +1,12 @@
+/**
+ * Core service for the hiring-posts module. Handles listing open posts, locations, and facets, creating/editing/deleting posts, queuing AI seniority checks, and submitting or viewing applications.
+ *
+ * Calls: prisma.hiringPost; prisma.hiringApplication; HiringPostAiQueueService; HiringEventsService; PostSweepService; findOccupation; hiring-post utils (search, checks, update, card); applications-query helpers
+ * Used by:
+ *   - src/modules/hiring-posts/controllers/hiring-posts.controller.ts
+ *   - src/modules/hiring-posts/hiring-posts.module.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

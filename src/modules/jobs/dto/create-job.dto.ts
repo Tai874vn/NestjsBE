@@ -1,3 +1,14 @@
+/**
+ * Request body DTOs and work mode constants for creating a job post in the jobs module. Validates title, price, descriptions, subcategory, work mode, service area, and optional milestone template items.
+ *
+ * Calls: trimString; optionalTrimString
+ * Used by:
+ *   - src/modules/jobs/controllers/jobs.controller.ts
+ *   - src/modules/jobs/dto/update-job.dto.ts
+ *   - src/modules/jobs/services/job-mutation.service.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import {
   ArrayMaxSize,
   ArrayMinSize,

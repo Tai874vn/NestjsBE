@@ -1,3 +1,13 @@
+/**
+ * Query DTO and allowed search-field list for the candidate directory in the users module. Validates recruiter filters such as searchIn, skill, location, occupation, level, and minimum years on top of pagination.
+ *
+ * Calls: PaginationDto; commaList; optionalTrimString
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/candidate-directory.service.ts
+ *   - src/tools/benchmark-candidates.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,

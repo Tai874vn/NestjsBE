@@ -1,3 +1,11 @@
+/**
+ * HTTP controller in the auth module that issues short-lived tickets for WebSocket connections. Routes: GET /api/auth/realtime-ticket -> issue().
+ *
+ * Calls: RealtimeTicketService; AuthGuard('jwt')
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import {
   Controller,
   Get,

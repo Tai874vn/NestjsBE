@@ -1,3 +1,17 @@
+/**
+ * Core service for the chat module.
+ * It manages chat rooms, room memberships, messages, cursor pagination, read receipts, and unread counts.
+ *
+ * Calls: prisma.chatRoom; prisma.chatRoomMember; prisma.chatMessage; prisma.user; prisma.$queryRaw
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/chat/controllers/chat.controller.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ *   - src/modules/chat/services/chat-message-fanout.service.ts
+ *   - src/modules/contracts/services/contract-events.service.ts
+ *   - src/modules/hiring-pipeline/services/hiring-events.service.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

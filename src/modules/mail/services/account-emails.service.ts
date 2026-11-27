@@ -1,3 +1,13 @@
+/**
+ * Account email service for the mail module. Creates one-time token links, enforces resend cooldowns, and sends verification and password-reset emails.
+ *
+ * Calls: EmailTokensService; MailService; verifyEmailMail; resetPasswordMail
+ * Used by:
+ *   - src/modules/auth/services/email-verification.service.ts
+ *   - src/modules/auth/services/password-reset.service.ts
+ *   - src/modules/mail/mail.module.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailTokenPurpose } from '@prisma/client';

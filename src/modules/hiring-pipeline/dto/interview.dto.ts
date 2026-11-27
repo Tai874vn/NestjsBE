@@ -1,3 +1,12 @@
+/**
+ * Request body DTOs for requesting interviews, sending new time slots, and accepting a time in the hiring-pipeline module.
+ * Validates interview mode, duration, onsite location, optional note, and ISO 8601 dates.
+ *
+ * Calls: optionalTrimString
+ * Used by:
+ *   - src/modules/hiring-pipeline/controllers/interviews.controller.ts
+ */
+
 import { InterviewMode } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {

@@ -1,3 +1,12 @@
+/**
+ * Redis module admin controller for clearing cache groups and viewing cache key prefixes.
+ * Routes: DELETE /api/cache/all -> clearAllCaches(), DELETE /api/cache/jobs -> clearJobCaches(), DELETE /api/cache/users -> clearUserCaches(), DELETE /api/cache/categories -> clearCategoryCaches(), DELETE /api/cache/jobs/:id -> clearJobCache(), DELETE /api/cache/users/:id -> clearUserCache(), GET /api/cache/keys -> getCacheKeys().
+ *
+ * Calls: RedisService; CACHE_KEYS; JwtAuthGuard; RolesGuard; Roles; Role
+ * Used by:
+ *   - src/modules/redis/redis.module.ts
+ */
+
 import { Controller, Delete, Param, UseGuards, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';

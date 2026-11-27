@@ -1,3 +1,13 @@
+/**
+ * Service for the connections module.
+ * It sends, accepts, and removes connection requests, checks connection status, lists connections, and ranks people suggestions by shared skills and location.
+ *
+ * Calls: prisma.connection; prisma.user; NotificationsService
+ * Used by:
+ *   - src/modules/connections/connections.module.ts
+ *   - src/modules/connections/controllers/connections.controller.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

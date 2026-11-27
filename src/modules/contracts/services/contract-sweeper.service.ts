@@ -1,3 +1,12 @@
+/**
+ * Background timer service in the contracts module that expires old proposals and applies contract deadline rules.
+ * Sends day-2 warnings, auto-approves unreviewed work when a client stays silent, and ends overdue or unfunded contracts.
+ *
+ * Calls: ContractStepService; ContractEndingService; ContractEventsService; evaluateDeadlines; prisma.proposal; prisma.contract; RedisService; Sentry
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   Injectable,
   Logger,

@@ -1,3 +1,13 @@
+/**
+ * WebSocket rate limit service for the chat module.
+ * It enforces per-user, per-event limits in Redis and falls back to in-memory counters if Redis is unavailable.
+ *
+ * Calls: Redis (REDIS_CLIENT)
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ */
+
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createClient } from 'redis';
 import { REDIS_CLIENT } from '../../redis/redis.module';

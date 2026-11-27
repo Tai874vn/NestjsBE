@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for service proposals in the contracts module.
+ * Routes: POST /api/proposals -> create(), GET /api/proposals -> list(), GET /api/proposals/:id -> findOne(), POST /api/proposals/:id/counter -> counter(), POST /api/proposals/:id/accept -> accept(), POST /api/proposals/:id/decline -> decline(), POST /api/proposals/:id/withdraw -> withdraw().
+ *
+ * Calls: ProposalsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   Body,
   Controller,

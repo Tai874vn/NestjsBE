@@ -1,3 +1,12 @@
+/**
+ * Search and read service for the jobs module. Runs paginated, cursor-based, creator, title, and detail queries for jobs, caching common unfiltered views and details in Redis.
+ *
+ * Calls: prisma.job; RedisService
+ * Used by:
+ *   - src/modules/jobs/jobs.module.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

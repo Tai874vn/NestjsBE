@@ -1,3 +1,12 @@
+/**
+ * Connection builder for the demo-activity seed tool.
+ * Generates peer connections by occupation overlap and recruiter-applicant connections for shortlisted candidates, plus an accepted-friends lookup map.
+ *
+ * Calls: activity-shared (occupationFit, between, after, RELATED_FROM, types)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import {
   RELATED_FROM,
   after,

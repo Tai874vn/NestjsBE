@@ -1,3 +1,12 @@
+/**
+ * Seed helper for the social feed feature.
+ * Exports sample feed data and seedFeed(), which creates demo posts, comments, likes, connections, saved posts, and saved jobs for existing users.
+ *
+ * Calls: prisma.user; prisma.post; prisma.postComment; prisma.postLike; prisma.connection; prisma.savedPost; prisma.job; prisma.savedJob
+ * Used by:
+ *   - no file imports it (only tests, or not used)
+ */
+
 type SeedUser = { id: number };
 type SeedPost = { id: number; authorId: number };
 

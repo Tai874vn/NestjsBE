@@ -1,3 +1,12 @@
+/**
+ * Write operations service for the jobs module. Creates, updates, deletes, and attaches images to jobs, checking ownership, milestone shares, and existing contracts before clearing caches and notifying open proposals.
+ *
+ * Calls: prisma.job; prisma.contract; prisma.proposal; prisma.$queryRaw; JobCacheInvalidationService; NotificationsService; NotificationTemplateService; StorageService
+ * Used by:
+ *   - src/modules/jobs/jobs.module.ts
+ *   - src/modules/jobs/services/jobs.service.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

@@ -1,3 +1,12 @@
+/**
+ * Shared types, constants, and pure helpers for the demo-activity seed tool.
+ * Provides the seeded random generator, occupation and application fit scores, and date and wording helpers used by all activity builders.
+ *
+ * Calls: HiringEventType (hiring-events.service); contract types (build-contracts)
+ * Used by:
+ *   - 7 files, for example src/tools/demo-activity/build-activity.ts, src/tools/demo-activity/build-chats.ts, src/tools/demo-activity/build-connections.ts
+ */
+
 import type { HiringEventType } from '../../modules/hiring-pipeline/services/hiring-events.service';
 import type {
   ContractFact,

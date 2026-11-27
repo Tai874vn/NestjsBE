@@ -1,3 +1,17 @@
+/**
+ * Observability service and `OperationTimer` helper for structured timing and HTTP request logging.
+ * Tracks step durations, flags slow or failed operations, and writes JSON telemetry lines without duplicating 5xx error logs.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/common/observability/observability.module.ts
+ *   - src/common/observability/request-observability.interceptor.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ *   - src/modules/chat/services/chat-message-fanout.service.ts
+ *   - src/modules/notifications/services/notifications.service.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { performance } from 'node:perf_hooks';
 

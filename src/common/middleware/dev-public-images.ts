@@ -1,3 +1,12 @@
+/**
+ * Common local-development middleware helper that serves public uploaded images from `<UPLOADS_DIR>/public/images`.
+ * Returns `null` in production so nginx stays the only static file server; private files are never served here.
+ *
+ * Calls: resolveUploadsDir
+ * Used by:
+ *   - src/main.ts
+ */
+
 import { join } from 'node:path';
 import express from 'express';
 import { resolveUploadsDir } from '../../modules/storage/utils/storage-paths';

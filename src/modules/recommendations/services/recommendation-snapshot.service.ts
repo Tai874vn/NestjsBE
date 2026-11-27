@@ -1,3 +1,13 @@
+/**
+ * Recommendations module service that saves and reads recent recommendation results in the database as a fallback to Redis.
+ * It upserts the latest snapshot by scope key and deletes older snapshots for the same query.
+ *
+ * Calls: prisma.recommendationSnapshot; ConfigService; CachedRecommendationResult
+ * Used by:
+ *   - src/modules/recommendations/recommendations.module.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, RecommendationSnapshotKind } from '@prisma/client';

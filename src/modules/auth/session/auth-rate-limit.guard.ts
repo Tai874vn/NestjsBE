@@ -1,3 +1,13 @@
+/**
+ * Rate-limit guard in the auth module for POST signin, signup, and refresh requests by client IP. It checks AuthRedisService first and falls back to an in-memory map if Redis is unavailable.
+ *
+ * Calls: AuthRedisService
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ *   - src/modules/auth/controllers/auth.controller.ts
+ *   - src/modules/auth/session/auth-session-redis.module.ts
+ */
+
 import {
   CanActivate,
   ExecutionContext,

@@ -1,3 +1,12 @@
+/**
+ * Profile strength scoring helper for the users module.
+ * Computes a 0-100 profile completeness score using weighted checks for candidates and employers.
+ *
+ * Calls: resume-career (cleanResumeJobs, resumeOccupation)
+ * Used by:
+ *   - src/modules/users/services/candidate-directory.service.ts
+ */
+
 import { cleanResumeJobs, resumeOccupation } from './resume-career';
 
 /**

@@ -1,3 +1,12 @@
+/**
+ * Root App module controller for basic API greeting and health checks.
+ * Routes: GET /api -> getHello(); GET /api/health/live -> getLiveness(); GET /api/health/ready -> getReadiness().
+ *
+ * Calls: AppService; Public
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Public } from './common/decorators/public.decorator';

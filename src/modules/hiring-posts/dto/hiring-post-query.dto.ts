@@ -1,3 +1,13 @@
+/**
+ * Query DTO and filter constants for browsing open hiring posts in the hiring-posts module. Validates page limits, multi-value filters (occupation, level, employment type), search fields, location, and sort order.
+ *
+ * Calls: PaginationDto; optionalTrimString
+ * Used by:
+ *   - src/modules/hiring-posts/controllers/hiring-posts.controller.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ *   - src/modules/hiring-posts/utils/hiring-post-search.ts
+ */
+
 import {
   ArrayMaxSize,
   IsArray,

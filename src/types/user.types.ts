@@ -1,3 +1,12 @@
+/**
+ * Shared user and authentication type definitions for the auth feature.
+ * Declares JwtPayload, GoogleProfile, and ValidatedUser used across auth services and Passport strategies.
+ *
+ * Calls: Role (common/constants/roles)
+ * Used by:
+ *   - src/types/index.ts
+ */
+
 import { Role } from '../common/constants/roles';
 
 export interface JwtPayload {

@@ -1,3 +1,13 @@
+/**
+ * Posts module service that handles the cursor-paged social feed, user post stats, creating and deleting posts, likes, comments, and one-level replies.
+ * It deletes post images from storage and notifies authors on likes, comments, and replies.
+ *
+ * Calls: prisma.post; prisma.connection; prisma.postLike; prisma.postComment; StorageService; NotificationsService; Role
+ * Used by:
+ *   - src/modules/posts/controllers/posts.controller.ts
+ *   - src/modules/posts/posts.module.ts
+ */
+
 import {
   BadRequestException,
   ForbiddenException,

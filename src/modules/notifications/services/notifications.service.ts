@@ -1,3 +1,12 @@
+/**
+ * Notifications module service that lists notifications by cursor, counts unread items, marks items as read, and saves new notifications.
+ * It pushes live updates over the gateway and exposes helpers for connections, posts, and chat message fanout.
+ *
+ * Calls: prisma.notification; NotificationTemplateService; NotificationPresenterService; NotificationsGateway; ObservabilityService; Sentry; notificationActorSelect
+ * Used by:
+ *   - 8 files, for example src/modules/chat/services/chat-message-fanout.service.ts, src/modules/connections/services/connections.service.ts, src/modules/contracts/services/contract-events.service.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

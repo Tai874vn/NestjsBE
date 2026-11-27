@@ -1,3 +1,12 @@
+/**
+ * Prisma CLI script that previews or applies JobAura's career-field taxonomy to the database categories.
+ * Runs a dry run by default and applies the changes in one database transaction when `--apply` is passed.
+ *
+ * Calls: loadJobTaxonomy; syncJobTaxonomy
+ * Used by:
+ *   - run by hand: npm run db:taxonomy
+ */
+
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';

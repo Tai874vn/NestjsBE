@@ -1,3 +1,12 @@
+/**
+ * Occupations module controller for public ESCO occupation lookups with cache headers.
+ * Routes: GET /api/occupations -> search(), GET /api/occupations/:code -> findOne().
+ *
+ * Calls: OccupationsService; SearchOccupationsDto; JwtAuthGuard; Public; PUBLIC_TAXONOMY_CACHE_CONTROL
+ * Used by:
+ *   - src/modules/occupations/occupations.module.ts
+ */
+
 import {
   Controller,
   Get,

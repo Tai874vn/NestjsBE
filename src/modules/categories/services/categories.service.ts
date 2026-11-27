@@ -1,3 +1,13 @@
+/**
+ * Service for the categories module.
+ * It creates, reads, paginates, updates, and deletes job categories, keeping category caches in Redis and removing deleted subcategory images.
+ *
+ * Calls: prisma.category; RedisService; StorageService
+ * Used by:
+ *   - src/modules/categories/categories.module.ts
+ *   - src/modules/categories/controllers/categories.controller.ts
+ */
+
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import {

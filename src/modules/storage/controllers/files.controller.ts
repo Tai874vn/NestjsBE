@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the storage module that streams private uploaded documents (such as CVs) after checking ownership or an active employer application. Routes: GET /api/files/documents/*path -> downloadDocument().
+ *
+ * Calls: StorageService; prisma.userResume; prisma.hiringApplication; JwtAuthGuard; CurrentUser; Role; resolveRequestId
+ * Used by:
+ *   - src/modules/storage/storage.module.ts
+ */
+
 import {
   Controller,
   Get,

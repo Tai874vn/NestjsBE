@@ -1,3 +1,14 @@
+/**
+ * One-time email token service for the mail module. Issues hashed tokens, invalidates older unused tokens of the same purpose, consumes tokens atomically, and checks last-sent times.
+ *
+ * Calls: prisma.emailToken
+ * Used by:
+ *   - src/modules/auth/services/email-verification.service.ts
+ *   - src/modules/auth/services/password-reset.service.ts
+ *   - src/modules/mail/mail.module.ts
+ *   - src/modules/mail/services/account-emails.service.ts
+ */
+
 import { Injectable } from '@nestjs/common';
 import { EmailToken, EmailTokenPurpose, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';

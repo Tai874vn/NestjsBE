@@ -1,3 +1,12 @@
+/**
+ * Service activity builder for the demo-activity seed tool.
+ * Pairs buyers with matching portfolio services, selects saved services, assigns pricing terms and review templates, and delegates proposal, contract, and wallet generation to buildContracts.
+ *
+ * Calls: buildContracts (build-contracts); serviceTermsFor (build-contracts); activity-shared (between, firstName, occupationFit, randomGenerator, types)
+ * Used by:
+ *   - src/tools/demo-activity/build-activity.ts
+ */
+
 import {
   buildContracts,
   serviceTermsFor,

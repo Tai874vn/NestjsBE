@@ -1,3 +1,13 @@
+/**
+ * File upload service for the users module.
+ * Uploads resume PDFs, avatars, and cover images via storage, saves the new references, and deletes replaced files.
+ *
+ * Calls: StorageService; UserProfileService; UserResumeService
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { StorageService } from '../../storage/services/storage.service';
 import { UserProfileService } from './user-profile.service';

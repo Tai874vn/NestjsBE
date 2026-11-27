@@ -1,3 +1,13 @@
+/**
+ * Online presence service for the chat module.
+ * It tracks each user's active socket IDs in Redis with an in-memory fallback.
+ *
+ * Calls: Redis (REDIS_CLIENT)
+ * Used by:
+ *   - src/modules/chat/chat.module.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ */
+
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createClient } from 'redis';
 import { REDIS_CLIENT } from '../../redis/redis.module';

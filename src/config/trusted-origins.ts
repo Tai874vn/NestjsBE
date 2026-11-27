@@ -1,3 +1,14 @@
+/**
+ * Config helper that lists browser origins allowed to call the API with cookies for CORS, CSRF checks, and WebSockets. It reads FRONTEND_URL, adds localhost:3000 in development, and includes any DEV_FRONTEND_ORIGINS entries.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/common/guards/csrf.guard.ts
+ *   - src/config/cors-options.ts
+ *   - src/modules/chat/gateways/chat.gateway.ts
+ *   - src/modules/notifications/gateways/notifications.gateway.ts
+ */
+
 /** The frontend's local dev server, trusted automatically when NODE_ENV=development. */
 export const LOCAL_FRONTEND_ORIGIN = 'http://localhost:3000';
 

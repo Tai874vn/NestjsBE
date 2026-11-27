@@ -1,3 +1,11 @@
+/**
+ * Occupations module DTO that validates the optional search query and limit for occupation searches.
+ *
+ * Calls: optionalTrimString
+ * Used by:
+ *   - src/modules/occupations/controllers/occupations.controller.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,

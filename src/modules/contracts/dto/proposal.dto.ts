@@ -1,3 +1,15 @@
+/**
+ * Request body and query DTOs, credit limits, and custom link/image validators for proposals in the contracts module.
+ * Defines the input shapes for creating, countering, accepting, declining, and listing proposals.
+ *
+ * Calls: trimString; optionalTrimString; isLocalImageUrl
+ * Used by:
+ *   - src/modules/contracts/controllers/proposals.controller.ts
+ *   - src/modules/contracts/dto/amendment.dto.ts
+ *   - src/modules/contracts/dto/milestone.dto.ts
+ *   - src/modules/contracts/services/contracts.service.ts
+ */
+
 import { ProposalStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {

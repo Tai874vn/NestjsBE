@@ -1,3 +1,13 @@
+/**
+ * Recommendations module main service that runs AI job recommendations for candidates and AI candidate recommendations for hiring posts.
+ * It coordinates Redis cache and database snapshot lookups, run locks, daily quota reservation and refunds, AI calls, and match scoring.
+ *
+ * Calls: AiRecommendationClient; RecommendationDataLoaderService; RecommendationPayloadMapperService; RecommendationScoringService; RecommendationCacheService & RecommendationSnapshotService; RecommendationQuotaService & RecommendationFingerprintService; ObservabilityService; findOccupation
+ * Used by:
+ *   - src/modules/recommendations/controllers/recommendations.controller.ts
+ *   - src/modules/recommendations/recommendations.module.ts
+ */
+
 import {
   ConflictException,
   ForbiddenException,

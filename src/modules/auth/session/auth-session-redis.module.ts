@@ -1,3 +1,11 @@
+/**
+ * Sub-module for auth Redis session support. It imports ConfigModule and registers and exports AuthRedisService and AuthRateLimitGuard.
+ *
+ * Calls: AuthRedisService; AuthRateLimitGuard
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';

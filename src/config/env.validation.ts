@@ -1,3 +1,11 @@
+/**
+ * Config schema that validates required and optional environment variables at startup. It covers database, JWT, Redis, Google OAuth, AI service, LiveKit, Stripe, Resend, and Sentry settings.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/app.module.ts
+ */
+
 import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({

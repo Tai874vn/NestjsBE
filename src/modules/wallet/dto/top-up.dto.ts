@@ -1,3 +1,12 @@
+/**
+ * Request DTO for starting a wallet top-up in the wallet module.
+ * Validates that the requested credit amount is a whole number between the minimum and maximum limits.
+ *
+ * Calls: wallet.service (TOP_UP_MIN_CREDITS, TOP_UP_MAX_CREDITS)
+ * Used by:
+ *   - src/modules/wallet/controllers/wallet.controller.ts
+ */
+
 import { IsInt, Max, Min } from 'class-validator';
 import {
   TOP_UP_MAX_CREDITS,

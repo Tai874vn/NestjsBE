@@ -1,3 +1,12 @@
+/**
+ * Passport JWT strategy for the auth module.
+ * It reads the access token from cookies or the Authorization header, checks its claims, and verifies the active session.
+ *
+ * Calls: AuthSessionService; jwtVerifyOptions; passport-jwt
+ * Used by:
+ *   - src/modules/auth/auth.module.ts
+ */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';

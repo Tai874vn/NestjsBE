@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for reading and ending contracts in the contracts module.
+ * Routes: GET /api/contracts -> list(); GET /api/contracts/:id -> findOne(); POST /api/contracts/:id/end -> end(); POST /api/contracts/:id/end-requests -> requestEnd(); POST /api/contracts/:id/end-requests/accept -> acceptEnd(); POST /api/contracts/:id/end-requests/decline -> declineEnd(); POST /api/contracts/:id/end-requests/withdraw -> withdrawEnd().
+ *
+ * Calls: ContractsService; ContractsQueryService; AmendmentsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   Body,
   Controller,

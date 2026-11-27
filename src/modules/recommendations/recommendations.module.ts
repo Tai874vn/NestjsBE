@@ -1,3 +1,15 @@
+/**
+ * NestJS module for the recommendations feature.
+ * It imports ConfigModule and ObservabilityModule, registers RecommendationsController and all recommendation services, and exports AiRecommendationClient, RecommendationPayloadMapperService, and RecommendationsService.
+ *
+ * Calls: ConfigModule; ObservabilityModule; RecommendationsController; RecommendationsService; AiRecommendationClient; RecommendationPayloadMapperService; recommendation helper services (cache, loader, fingerprint, quota, scoring, snapshot)
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/hiring-posts/hiring-posts.module.ts
+ *   - src/modules/skill/skill.module.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ObservabilityModule } from '../../common/observability/observability.module';

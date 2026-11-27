@@ -1,3 +1,14 @@
+/**
+ * Background AI queue worker for resumes in the users module.
+ * Claims queued resumes in batches, asks the AI service to check skills and predict seniority, and saves the results.
+ *
+ * Calls: prisma.userResume; prisma.user; AiRecommendationClient (AI service); RedisService; UserProfileNormalizerService; resume-career helpers; resume-ai-payload helpers; Sentry
+ * Used by:
+ *   - src/modules/users/services/user-profile.service.ts
+ *   - src/modules/users/services/user-resume.service.ts
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   BadRequestException,
   Injectable,

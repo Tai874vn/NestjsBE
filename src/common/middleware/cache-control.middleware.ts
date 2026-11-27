@@ -1,3 +1,15 @@
+/**
+ * Common HTTP middleware and cache-header constants for API responses.
+ * Applies `Cache-Control: private, no-store` to `/api/*` responses by default unless a route already sets its own header.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/main.ts
+ *   - src/modules/categories/controllers/categories.controller.ts
+ *   - src/modules/occupations/controllers/occupations.controller.ts
+ *   - src/modules/skill/controllers/skill.controller.ts
+ */
+
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 

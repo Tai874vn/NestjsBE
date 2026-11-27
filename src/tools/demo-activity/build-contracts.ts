@@ -18,6 +18,13 @@
  *
  * It is pure (same input -> same output, no database, no clock of its own) and fixed templates fill every
  * text; nothing is written by an AI model.
+ *
+ * Calls: fmtCredits (contracts/utils/contract-rules); contract-events.service types; deadline-rules types; build-activity types
+ * Used by:
+ *   - prisma/seed-activity.ts
+ *   - src/tools/demo-activity/activity-shared.ts
+ *   - src/tools/demo-activity/build-chats.ts
+ *   - src/tools/demo-activity/build-service-activity.ts
  */
 
 import type {

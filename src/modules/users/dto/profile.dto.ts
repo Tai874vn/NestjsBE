@@ -1,3 +1,13 @@
+/**
+ * Profile DTOs and image-URL validator for the users module. Validates editable profile fields, skills, certifications, and portfolio items.
+ *
+ * Calls: trimString; optionalTrimString; isLocalImageUrl
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/user-portfolio.service.ts
+ *   - src/modules/users/services/user-profile.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,

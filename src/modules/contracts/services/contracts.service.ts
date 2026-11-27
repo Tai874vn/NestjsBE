@@ -1,3 +1,14 @@
+/**
+ * Core service for contract and milestone actions in the contracts module.
+ * Handles funding milestones, submitting work, requesting changes, approving work, and client-only early contract endings.
+ *
+ * Calls: ContractStepService; WalletService; ContractEventsService; ContractEndingService; nextMilestoneStatus; prisma.milestone; prisma.submission; RedisService
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/controllers/contracts.controller.ts
+ *   - src/modules/contracts/controllers/milestones.controller.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

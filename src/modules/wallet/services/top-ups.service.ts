@@ -1,3 +1,14 @@
+/**
+ * Top-up service for the wallet module.
+ * Starts Stripe Checkout top-ups, handles Stripe webhook events, checks top-up status, and credits paid top-ups once.
+ *
+ * Calls: prisma.topUp; prisma.wallet; WalletService; StripeService; wallet-pricing
+ * Used by:
+ *   - src/modules/wallet/controllers/stripe.controller.ts
+ *   - src/modules/wallet/controllers/wallet.controller.ts
+ *   - src/modules/wallet/wallet.module.ts
+ */
+
 import {
   Injectable,
   Logger,

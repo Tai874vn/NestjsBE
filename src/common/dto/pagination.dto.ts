@@ -1,3 +1,12 @@
+/**
+ * Common query DTO (`PaginationDto`) used by paginated search and list endpoints.
+ * Validates optional `page` (default 1), `pageSize` (1 to 100, default 10), and a trimmed `keyword` up to 80 characters.
+ *
+ * Calls: optionalTrimString
+ * Used by:
+ *   - 15 files, for example src/modules/categories/controllers/categories.controller.ts, src/modules/categories/services/categories.service.ts, src/modules/hiring-posts/controllers/hiring-posts.controller.ts
+ */
+
 import {
   IsOptional,
   IsInt,

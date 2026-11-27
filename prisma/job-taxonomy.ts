@@ -1,3 +1,13 @@
+/**
+ * Prisma taxonomy helpers for loading JobAura's 37 career fields and ISCO-08 subcategories.
+ * Exports `loadJobTaxonomy()`, `LEGACY_SUBCATEGORIES`, and `syncJobTaxonomy()` to plan or apply category updates and move jobs out of old subcategories.
+ *
+ * Calls: prisma/taxonomy/job-taxonomy.json; prisma.category; prisma.subcategory; prisma.job
+ * Used by:
+ *   - prisma/seed.ts
+ *   - prisma/sync-job-taxonomy.ts
+ */
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PrismaClient } from '@prisma/client';

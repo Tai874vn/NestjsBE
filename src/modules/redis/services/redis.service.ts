@@ -1,3 +1,11 @@
+/**
+ * Cache, counter, and lock service for the Redis module. It wraps the shared Redis client with an in-memory fallback, single-flight reads, and helpers to clear job, user, category, and comment caches.
+ *
+ * Calls: Redis (via REDIS_CLIENT)
+ * Used by:
+ *   - 19 files, for example src/modules/categories/services/categories.service.ts, src/modules/comments/services/comments.service.ts, src/modules/contracts/services/contract-events.service.ts
+ */
+
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { REDIS_CLIENT } from '../utils/redis.constants';

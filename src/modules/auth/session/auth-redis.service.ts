@@ -1,3 +1,13 @@
+/**
+ * Dedicated Redis client service for the auth module. It caches sessions and refresh tokens, tracks revoked access tokens, broadcasts session revocations over pub/sub, and enforces auth rate limits.
+ *
+ * Calls: ConfigService; Redis
+ * Used by:
+ *   - src/modules/auth/session/auth-rate-limit.guard.ts
+ *   - src/modules/auth/session/auth-session-redis.module.ts
+ *   - src/modules/auth/session/auth-session.service.ts
+ */
+
 import {
   Injectable,
   Logger,

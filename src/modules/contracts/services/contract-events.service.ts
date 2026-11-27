@@ -1,3 +1,12 @@
+/**
+ * Records timeline history rows and sends post-commit notifications and chat messages for the contracts module.
+ * Also clears cached user profile data when a contract completes and reports delivery failures to Sentry.
+ *
+ * Calls: prisma.contractEvent; NotificationsService; NotificationTemplateService; ChatService; ChatMessageFanoutService; ChatGateway; RedisService; Sentry
+ * Used by:
+ *   - 10 files, for example src/modules/comments/services/comments.service.ts, src/modules/contracts/contracts.module.ts, src/modules/contracts/services/amendments.service.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';

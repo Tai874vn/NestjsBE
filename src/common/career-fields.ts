@@ -1,8 +1,12 @@
 /**
- * JobAura career fields. Keep identical to `careerFields` in the frontend (src/features/users/resume-career.ts)
- * and FIELDS in AIService app/career_fields.py: the seniority model is trained on this list,
- * and the job categories use the same names.
+ * Common constants defining JobAura's 37 career fields, the `CareerField` type, and the `isCareerField()` type guard.
+ * Keep this list identical to `careerFields` in the frontend (`src/features/users/resume-career.ts`) and `FIELDS` in AIService (`app/career_fields.py`), since the seniority model and job categories rely on the same names.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - no file imports it (only tests, or not used)
  */
+
 export const CAREER_FIELDS = [
   'QA',
   'Data',

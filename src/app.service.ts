@@ -1,3 +1,13 @@
+/**
+ * Root App module service that handles the API greeting and database readiness check.
+ * Runs a lightweight `SELECT 1` query to verify Postgres connectivity and throws 503 if unavailable.
+ *
+ * Calls: PrismaService
+ * Used by:
+ *   - src/app.controller.ts
+ *   - src/app.module.ts
+ */
+
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 

@@ -1,3 +1,12 @@
+/**
+ * Records timeline history rows and sends post-commit notifications and chat messages for the hiring-pipeline module.
+ * Keeps notification and chat delivery separate and reports delivery failures to Sentry without failing the user action.
+ *
+ * Calls: prisma.hiringApplicationEvent; NotificationsService; NotificationTemplateService; ChatService; ChatMessageFanoutService; ChatGateway; Sentry
+ * Used by:
+ *   - 8 files, for example src/modules/hiring-pipeline/hiring-pipeline.module.ts, src/modules/hiring-pipeline/services/application-pipeline.service.ts, src/modules/hiring-pipeline/services/applications.service.ts
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
 import { InterviewMode, Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';

@@ -1,3 +1,12 @@
+/**
+ * Recommendations module DTO that validates topK, poolSize, cacheOnly, and forceRefresh query parameters.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/recommendations/controllers/recommendations.controller.ts
+ *   - src/modules/recommendations/services/recommendations.service.ts
+ */
+
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
 

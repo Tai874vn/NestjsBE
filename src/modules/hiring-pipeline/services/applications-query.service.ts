@@ -1,3 +1,17 @@
+/**
+ * Read-only query service for fetching a single hiring application detail page and building applicant resume summaries in the hiring-pipeline module.
+ * Checks viewer access and combines post card data, pipeline counts, interviews, history events, and career info.
+ *
+ * Calls: prisma.hiringApplication; pipelineCounts; toHiringPostCard; toViewerApplications; candidateCareer; cleanResumeJobs; resumeEducation; yearsInOccupation
+ * Used by:
+ *   - src/modules/hiring-pipeline/hiring-pipeline.module.ts
+ *   - src/modules/hiring-pipeline/services/application-pipeline.service.ts
+ *   - src/modules/hiring-pipeline/services/applications.service.ts
+ *   - src/modules/hiring-pipeline/services/interviews.service.ts
+ *   - src/modules/hiring-pipeline/services/video-call.service.ts
+ *   - src/modules/hiring-posts/services/hiring-posts.service.ts
+ */
+
 import {
   ForbiddenException,
   Injectable,

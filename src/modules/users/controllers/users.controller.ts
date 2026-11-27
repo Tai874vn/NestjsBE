@@ -1,3 +1,11 @@
+/**
+ * HTTP controller for the users module covering admin user management, candidate browsing, user profiles, resumes, skills, certifications, portfolios, and uploads. Routes: GET /api/users/profile/:id -> getPublicProfile(), POST /api/users -> create(), GET /api/users -> findAll(), GET /api/users/paginated-search -> findAllWithPagination(), GET /api/users/search/:name -> searchByName(), GET /api/users/candidates -> findCandidates(), GET /api/users/me/profile -> getMyProfile(), PATCH /api/users/me/profile -> updateMyProfile(), PUT /api/users/me/resume -> importResume(), POST /api/users/me/resume/file -> uploadResumeFile(), GET /api/users/me/resume -> getMyResume(), POST /api/users/me/resume/seniority -> predictMyResumeSeniority(), PUT /api/users/me/profile/skills -> replaceProfileSkills(), PUT /api/users/me/profile/certifications -> replaceProfileCertifications(), POST /api/users/me/profile/portfolio -> createPortfolioItem(), PUT /api/users/me/profile/portfolio/:id -> updatePortfolioItem(), DELETE /api/users/me/profile/portfolio/:id -> deletePortfolioItem(), GET /api/users/:id -> findOne(), PUT /api/users/:id -> update(), DELETE /api/users/:id -> remove(), POST /api/users/upload-avatar -> uploadAvatar(), POST /api/users/upload-cover -> uploadCover().
+ *
+ * Calls: UsersService; CandidateDirectoryService; UserProfileService; UserResumeService; UserPortfolioService; UserUploadsService; JwtAuthGuard; RolesGuard
+ * Used by:
+ *   - src/modules/users/users.module.ts
+ */
+
 import {
   Controller,
   Get,

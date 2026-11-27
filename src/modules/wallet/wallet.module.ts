@@ -1,3 +1,13 @@
+/**
+ * NestJS module for the wallet feature.
+ * Registers WalletController, StripeController, WalletService, StripeService, and TopUpsService, and exports WalletService.
+ *
+ * Calls: WalletController; StripeController; WalletService; StripeService; TopUpsService
+ * Used by:
+ *   - src/app.module.ts
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import { Module } from '@nestjs/common';
 import { StripeController } from './controllers/stripe.controller';
 import { WalletController } from './controllers/wallet.controller';

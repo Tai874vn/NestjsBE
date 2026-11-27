@@ -1,3 +1,13 @@
+/**
+ * Service for creating, listing, viewing, countering, accepting, declining, and withdrawing service proposals in the contracts module.
+ * Locks proposal rows during state changes and creates the contract with its milestones when a proposal is accepted.
+ *
+ * Calls: prisma.job; prisma.proposal; prisma.proposalVersion; prisma.contract; ContractEventsService; checkProposalAction; checkVersion; proposalDetailView
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ *   - src/modules/contracts/controllers/proposals.controller.ts
+ */
+
 import {
   BadRequestException,
   ConflictException,

@@ -1,3 +1,12 @@
+/**
+ * Standalone benchmark script for the users feature (candidate directory).
+ * Measures query latency and result stability for candidate search scenarios against a read-only PostgreSQL session and outputs JSON metrics.
+ *
+ * Calls: CandidateDirectoryService; UserProfileNormalizerService; CandidateDirectoryQueryDto; PostgreSQL via PrismaClient, PrismaPg, and pg Pool
+ * Used by:
+ *   - run by hand: npm run benchmark:candidates
+ */
+
 import 'dotenv/config';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';

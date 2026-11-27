@@ -1,3 +1,12 @@
+/**
+ * HTTP controller for mid-contract amendments in the contracts module.
+ * Routes: POST /api/contracts/:id/amendments -> propose(); POST /api/amendments/:id/accept -> accept(); POST /api/amendments/:id/decline -> decline(); POST /api/amendments/:id/withdraw -> withdraw().
+ *
+ * Calls: AmendmentsService; JwtAuthGuard
+ * Used by:
+ *   - src/modules/contracts/contracts.module.ts
+ */
+
 import {
   Body,
   Controller,

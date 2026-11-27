@@ -1,3 +1,12 @@
+/**
+ * Request DTO and file metadata types for resume imports in the users module. Validates parsed CV JSON data along with optional source file name and schema version.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/modules/users/controllers/users.controller.ts
+ *   - src/modules/users/services/user-resume.service.ts
+ */
+
 import {
   IsNotEmptyObject,
   IsObject,

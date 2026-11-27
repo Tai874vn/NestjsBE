@@ -1,3 +1,12 @@
+/**
+ * Error-handling helper and client options for the Redis module. It logs Redis outages once per disconnect so the API keeps running, and disables the offline command queue so requests fall back right away.
+ *
+ * Calls: nothing from this project
+ * Used by:
+ *   - src/common/adapters/redis-io.adapter.ts
+ *   - src/modules/redis/redis.module.ts
+ */
+
 type ErrorSource = {
   on(event: 'error', listener: (error: unknown) => void): unknown;
   on(event: 'ready', listener: () => void): unknown;
