@@ -53,6 +53,7 @@ export function buildHiringActivity(
     hiringPostCreatedAt,
   );
   advanceShortlistedApplications(ctx.random, applications, meta);
+  showcaseDemoStory(ctx, applications, meta, hiringPostCreatedAt);
   const openings = computePostOpenings(ctx.input.hiringPosts, applications);
   populateApplicationsHistory(ctx, applications, meta);
   return { applications, openings };
@@ -159,6 +160,82 @@ function advanceShortlistedApplications(
     } else if (random.chance(0.4)) {
       application.status = 'INTERVIEWING';
     }
+  }
+}
+
+/**
+ * Give the demo candidate one application in every main step, so the demo can show the whole pipeline:
+ * an online interview that is booked, an offer to answer, a shortlist, a past hire, a new application and a
+ * rejection. Posts of the demo recruiter come first, so the recruiter's applicant board shows the same story
+ * from the other side. Posts must fit the candidate (same rule as everyone: applicationFit >= 0.25); an offer or
+ * a hire needs a post older than a week, and any other offer or hire on that post goes back to the shortlist.
+ */
+function showcaseDemoStory(
+  ctx: ActivityContext,
+  applications: ApplicationFact[],
+  meta: ApplicationMeta[],
+  hiringPostCreatedAt: Map<number, Date>,
+): void {
+  const { input, random, now, related, title } = ctx;
+  const candidate = ctx.candidates.find((person) => person.demo);
+  const recruiter = ctx.recruiters.find((person) => person.demo);
+  if (!candidate || !recruiter) return;
+  const ageOf = (postId: number) =>
+    (now.getTime() - hiringPostCreatedAt.get(postId)!.getTime()) / DAY;
+  const fits = input.hiringPosts
+    .map((post) => ({ post, fit: applicationFit(candidate, post, related) }))
+    .filter((entry) => entry.fit >= 0.25)
+    .sort(
+      (a, b) =>
+        Number(b.post.recruiterId === recruiter.id) -
+          Number(a.post.recruiterId === recruiter.id) ||
+        b.fit - a.fit ||
+        a.post.id - b.post.id,
+    );
+  const used = new Set<number>();
+  const steps: ApplicationStatus[] = ['INTERVIEWING', 'OFFERED', 'REVIEWING', 'HIRED', 'APPLIED', 'REJECTED'];
+  for (const status of steps) {
+    const needsOld = status === 'OFFERED' || status === 'HIRED';
+    const choice = fits.find(
+      ({ post }) => !used.has(post.id) && (!needsOld || ageOf(post.id) > 7),
+    );
+    if (!choice) continue;
+    const { post } = choice;
+    used.add(post.id);
+    if (needsOld) {
+      // One offer or hire per post: others on the post go back to the shortlist.
+      for (const other of applications) {
+        if (other.hiringPostId === post.id && other.applicantId !== candidate.id &&
+            (other.status === 'OFFERED' || other.status === 'HIRED')) other.status = 'REVIEWING';
+      }
+    }
+    let index = applications.findIndex(
+      (item) => item.hiringPostId === post.id && item.applicantId === candidate.id,
+    );
+    if (index < 0) {
+      const posted = hiringPostCreatedAt.get(post.id)!;
+      const createdAt = between(random, posted, new Date(Math.min(now.getTime(), posted.getTime() + 3 * DAY)));
+      applications.push({
+        hiringPostId: post.id,
+        applicantId: candidate.id,
+        status,
+        coverLetter: buildCoverLetter(random, candidate, post, title),
+        offerNote: null,
+        offeredAt: null,
+        decidedAt: null,
+        createdAt,
+        updatedAt: createdAt,
+        interviews: [],
+        events: [],
+        notices: [],
+      });
+      meta.push({ posted, ageDays: ageOf(post.id) });
+      index = applications.length - 1;
+    }
+    const application = applications[index];
+    application.status = status;
+    application.updatedAt =
+      status === 'APPLIED' ? application.createdAt : after(random, application.createdAt, 12, 96, now);
   }
 }
 
@@ -321,7 +398,8 @@ function fillInterviewing(story: ApplicationStoryContext): void {
   const proposedTimes = days.map((day) =>
     vietnamAt(random, new Date(now.getTime() + day * DAY)),
   );
-  const scheduled = random.chance(0.6);
+  // The demo candidate's interview is always booked, so the video call can be shown during the demo.
+  const scheduled = candidate.demo ? true : random.chance(0.6);
   const picked = random.pick(proposedTimes);
   const open = createInterview(post.recruiterId, {
     proposedTimes,

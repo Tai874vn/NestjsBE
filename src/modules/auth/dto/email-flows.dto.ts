@@ -6,6 +6,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { PASSWORD_MIN_LENGTH } from '../../../common/constants/password';
 import { normalizeEmail } from '../../../common/dto/string.transforms';
 
 /** "Send the confirm link again" and "forgot password": only the address. */
@@ -26,10 +27,10 @@ export class EmailTokenDto {
 }
 
 export class ResetPasswordDto extends EmailTokenDto {
-  /** Same rule as sign-up. */
+  /** Same shared minimum length as sign-up. */
   @IsNotEmpty()
   @IsString()
-  @MinLength(10)
+  @MinLength(PASSWORD_MIN_LENGTH)
   @MaxLength(128)
   password: string;
 }

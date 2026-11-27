@@ -2,6 +2,9 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { SignUpDto } from '../signup.dto';
 import { SignInDto } from '../signin.dto';
+import { ResetPasswordDto } from '../email-flows.dto';
+import { ChangePasswordDto } from '../session.dto';
+import { PASSWORD_MIN_LENGTH } from '../../../../common/constants/password';
 import { Role } from '../../../../common/constants/roles';
 
 describe('Auth DTOs', () => {
@@ -177,6 +180,36 @@ describe('Auth DTOs', () => {
       const errors = await validate(dto);
       expect(errors.length).toBe(0);
       expect(dto.email).toBe('test@example.com');
+    });
+  });
+
+  describe('ResetPasswordDto and ChangePasswordDto', () => {
+    it('enforces the same minimum password length as SignUpDto', async () => {
+      const resetShort = plainToInstance(ResetPasswordDto, {
+        token: 'valid-token',
+        password: 'a'.repeat(PASSWORD_MIN_LENGTH - 1),
+      });
+      const resetOk = plainToInstance(ResetPasswordDto, {
+        token: 'valid-token',
+        password: 'a'.repeat(PASSWORD_MIN_LENGTH),
+      });
+      expect(
+        (await validate(resetShort)).some((e) => e.property === 'password'),
+      ).toBe(true);
+      expect(await validate(resetOk)).toHaveLength(0);
+
+      const changeShort = plainToInstance(ChangePasswordDto, {
+        currentPassword: 'old-password',
+        newPassword: 'a'.repeat(PASSWORD_MIN_LENGTH - 1),
+      });
+      const changeOk = plainToInstance(ChangePasswordDto, {
+        currentPassword: 'old-password',
+        newPassword: 'a'.repeat(PASSWORD_MIN_LENGTH),
+      });
+      expect(
+        (await validate(changeShort)).some((e) => e.property === 'newPassword'),
+      ).toBe(true);
+      expect(await validate(changeOk)).toHaveLength(0);
     });
   });
 });

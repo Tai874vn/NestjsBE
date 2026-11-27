@@ -9,11 +9,11 @@ import { TopUpStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../../prisma.service';
 import { CheckoutSession, StripeEvent, StripeService } from './stripe.service';
+import { CENTS_PER_CREDIT, TOP_UP_CURRENCY } from '../wallet-pricing';
 import { VND_PER_CREDIT, WalletService } from './wallet.service';
 
-/** Stripe charges US dollars: 1 credit = 5 cents, so the 10-credit minimum is Stripe's 0.50 USD minimum. */
-export const TOP_UP_CURRENCY = 'usd';
-export const CENTS_PER_CREDIT = 5;
+// Re-exported for older imports; the values live in wallet-pricing.ts.
+export { CENTS_PER_CREDIT, TOP_UP_CURRENCY };
 
 /** What happened to one payment answer (webhook or session lookup). */
 export type SettleOutcome =

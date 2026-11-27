@@ -12,6 +12,13 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  // This basic seed deletes EVERY table first, so it only runs on purpose and never in production.
+  if (process.env.NODE_ENV === 'production' || process.env.SEED_CONFIRM !== 'wipe-all-data') {
+    throw new Error('Refusing to run: this deletes all data. Not in production; set SEED_CONFIRM=wipe-all-data to confirm.');
+  }
+  // The password comes from the environment (never written in the code or printed).
+  const seedPassword = process.env.SEED_PASSWORD ?? '';
+  if (seedPassword.length < 10) throw new Error('Set SEED_PASSWORD (at least 10 characters).');
   await prisma.chatMessage.deleteMany();
   await prisma.chatRoomMember.deleteMany();
   await prisma.chatRoom.deleteMany();
@@ -26,7 +33,7 @@ async function main() {
   await prisma.category.deleteMany();
   await prisma.user.deleteMany();
 
-  const password = await bcrypt.hash('password123', 10);
+  const password = await bcrypt.hash(seedPassword, 10);
 
   const admin = await prisma.user.create({
     data: {
@@ -291,7 +298,7 @@ async function main() {
   console.log(
     `Seeded ${4} users, ${taxonomy.categories.length} categories, ${subcategories.length} subcategories, ${jobs.length} jobs, ${4} comments, and ${1} chat room.`,
   );
-  console.log('Demo login: admin@example.com / password123');
+  console.log('Demo login: admin@example.com with the SEED_PASSWORD you set');
 }
 
 main()

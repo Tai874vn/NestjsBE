@@ -4,7 +4,7 @@ import {
   TOP_UP_MIN_CREDITS,
 } from '../services/wallet.service';
 
-/** POST /wallet/top-ups — whole credits, 10 to 10,000 (1 credit = 1,000 VND test money). */
+/** POST /wallet/top-ups — whole credits, 10 to 10,000 (Stripe test mode; price per credit is set in top-ups.service.ts). */
 export class TopUpDto {
   @IsInt({ message: 'credits must be a whole number.' })
   @Min(TOP_UP_MIN_CREDITS, {

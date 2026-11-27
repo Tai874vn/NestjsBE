@@ -3,10 +3,11 @@ import { LedgerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma.service';
 import { fmtCredits } from '../../contracts/utils/contract-rules';
 import { StripeService } from './stripe.service';
+import { CENTS_PER_CREDIT, TOP_UP_CURRENCY } from '../wallet-pricing';
 
 /** Credits every user gets when their wallet is first made (the SEED row). */
 export const STARTING_GRANT = 5000;
-/** One top-up is 10 to 10,000 credits; 1 credit = 1,000 VND test money. */
+/** One top-up is 10 to 10,000 credits (Stripe test mode; price per credit is set in top-ups.service.ts). */
 export const TOP_UP_MIN_CREDITS = 10;
 export const TOP_UP_MAX_CREDITS = 10000;
 export const VND_PER_CREDIT = 1000;
@@ -255,9 +256,9 @@ export class WalletService {
         minCredits: TOP_UP_MIN_CREDITS,
         maxCredits: TOP_UP_MAX_CREDITS,
         vndPerCredit: VND_PER_CREDIT,
-        // What Stripe charges per credit (US cents).
-        currency: 'usd',
-        centsPerCredit: 5,
+        // Reused from top-ups.service.ts so the wallet summary and Stripe Checkout stay in sync.
+        currency: TOP_UP_CURRENCY,
+        centsPerCredit: CENTS_PER_CREDIT,
       },
     };
   }

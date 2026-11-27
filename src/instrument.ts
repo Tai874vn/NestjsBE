@@ -22,11 +22,11 @@ const SENSITIVE_HEADERS = new Set([
   'set-cookie',
 ]);
 
-// Paths whose query strings may carry OAuth codes, auth tokens, or signed VNPay params.
+// Paths whose query strings may carry OAuth codes, auth tokens, or legacy payment callback params (Stripe uses signed webhooks).
 const SENSITIVE_QUERY_PATH_PATTERN =
   /(?:^|\/)(?:api\/)?auth(?:\/|$)|\/vnpay(?:\/|-|$)|vnpay-return/i;
 
-// Individual query parameter names that may carry tokens, secrets, or VNPay signatures.
+// Individual query parameter names that may carry tokens, secrets, or payment signatures (Stripe sends stripe-signature as a header).
 const SENSITIVE_QUERY_PARAM_PATTERN =
   /^(?:vnp_.*|token|access_?token|refresh_?token|id_?token|code|state|ticket|secret|signature|hash|auth)$/i;
 
@@ -79,7 +79,7 @@ export function resolveTracesSampleRate(
 }
 
 /**
- * Removes sensitive query strings (auth routes, VNPay return/IPN, and token params) from a URL.
+ * Removes sensitive query strings (auth routes, payment return/webhook routes, and token params) from a URL.
  */
 export function scrubUrl(rawUrl: string): string {
   const hashIndex = rawUrl.indexOf('#');

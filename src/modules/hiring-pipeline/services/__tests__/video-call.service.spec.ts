@@ -24,6 +24,8 @@ function decode(token: string) {
   return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
     sub: string;
     name?: string;
+    iat?: number;
+    exp?: number;
     video: {
       room: string;
       roomJoin: boolean;
@@ -86,6 +88,7 @@ describe('VideoCallService', () => {
     expect(claims.video.roomJoin).toBe(true);
     expect(claims.video.canPublish).toBe(true);
     expect(claims.video.canSubscribe).toBe(true);
+    expect(claims.exp).toBe(Math.floor(Date.parse(result.expiresAt) / 1000));
   });
 
   it('gives the recruiter a token with their own identity', async () => {

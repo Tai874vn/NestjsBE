@@ -1,13 +1,15 @@
 import { IsBoolean, IsByteLength, IsString, MinLength } from 'class-validator';
+import { PASSWORD_MIN_LENGTH } from '../../../common/constants/password';
 
 export class ChangePasswordDto {
   @IsString()
   @IsByteLength(1, 72)
   currentPassword: string;
 
+  // Uses the same shared minimum password length as sign-up and reset-password.
   @IsString()
-  @MinLength(8)
-  @IsByteLength(8, 72)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @IsByteLength(PASSWORD_MIN_LENGTH, 72)
   newPassword: string;
 }
 

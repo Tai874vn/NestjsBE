@@ -102,7 +102,8 @@ export class VideoCallService {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: `user-${viewer.id}`,
       name,
-      ttl: '2h',
+      // Derive the LiveKit TTL in seconds from TOKEN_TTL_MS so the token expiry and expiresAt stay in sync.
+      ttl: Math.floor(TOKEN_TTL_MS / 1000),
     });
     at.addGrant({
       roomJoin: true,

@@ -24,6 +24,8 @@ export type Person = {
   location: string;
   discoverable: boolean;
   company: string | null;
+  /** True for the two accounts the owner signs in with during the demo (demo.candidate / demo.recruiter). */
+  demo?: boolean;
 };
 
 export type HiringPostFact = {

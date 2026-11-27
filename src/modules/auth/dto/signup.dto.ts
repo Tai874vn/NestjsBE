@@ -8,6 +8,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { PASSWORD_MIN_LENGTH } from '../../../common/constants/password';
 import { Role } from '../../../common/constants/roles';
 import {
   normalizeEmail,
@@ -29,7 +30,7 @@ export class SignUpDto {
 
   @IsNotEmpty()
   @IsString()
-  @MinLength(10)
+  @MinLength(PASSWORD_MIN_LENGTH)
   @MaxLength(128)
   password: string;
 

@@ -180,6 +180,51 @@ function bigInput(): ActivityInput {
   };
 }
 
+describe('buildActivity demo accounts', () => {
+  // Candidate 2 and recruiter 100 are the two demo accounts; recruiter 100 owns three posts.
+  const base = bigInput();
+  const demoInput: ActivityInput = {
+    ...base,
+    people: base.people.map((item) => (item.id === 2 || item.id === 100 ? { ...item, demo: true } : item)),
+    hiringPosts: base.hiringPosts.map((post, index) => (index < 3 ? { ...post, recruiterId: 100 } : post)),
+  };
+  const activity = buildActivity(demoInput);
+  const mine = activity.applications.filter((item) => item.applicantId === 2);
+
+  it('gives the demo candidate one application in every main hiring step', () => {
+    const steps = new Set(mine.map((item) => item.status));
+    for (const status of ['INTERVIEWING', 'OFFERED', 'REVIEWING', 'HIRED', 'APPLIED', 'REJECTED']) {
+      expect(steps.has(status as never)).toBe(true);
+    }
+  });
+
+  it('books the demo interview online, on a demo recruiter post, in the future', () => {
+    const interviewing = mine.find((item) => item.status === 'INTERVIEWING')!;
+    expect([10, 11, 12]).toContain(interviewing.hiringPostId);
+    const open = interviewing.interviews[0];
+    expect(open.status).toBe('SCHEDULED');
+    expect(open.mode).toBe('ONLINE');
+    expect(open.scheduledAt!.getTime()).toBeGreaterThan(now.getTime());
+  });
+
+  it('keeps at most one hire and one offer per post, and the demo offer or hire alone on its post', () => {
+    for (const post of demoInput.hiringPosts) {
+      const on = (status: string) =>
+        activity.applications.filter((item) => item.hiringPostId === post.id && item.status === status);
+      expect(on('HIRED').length).toBeLessThanOrEqual(1);
+      expect(on('OFFERED').length).toBeLessThanOrEqual(1);
+    }
+    for (const status of ['OFFERED', 'HIRED']) {
+      const demo = mine.find((item) => item.status === status)!;
+      const others = activity.applications.filter(
+        (item) => item.hiringPostId === demo.hiringPostId && item.applicantId !== 2 &&
+          (item.status === 'OFFERED' || item.status === 'HIRED'),
+      );
+      expect(others).toHaveLength(0);
+    }
+  });
+});
+
 describe('buildActivity hiring pipeline', () => {
   const big = buildActivity(bigInput());
   const DAYS = 86_400_000;
