@@ -70,11 +70,8 @@ export function profileStrength(input: StrengthInput): number {
     add(10, filled(input.avatar));
     add(10, filled(input.bio));
     add(10, input.portfolio > 0);
-    add(
-      5,
-      filled(data.Degree) &&
-        (data.Degree === 'Not stated' || filled(data.FieldOfStudy)),
-    );
+    // The highest degree is enough (the field of study is no longer asked); "Not stated" counts too.
+    add(5, filled(data.Degree));
     add(5, filled(input.location));
   }
   return Math.round(

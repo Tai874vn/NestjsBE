@@ -37,6 +37,8 @@ describe('profileStrength', () => {
     const withoutYears: Record<string, unknown> = { ...fullResume };
     delete withoutYears.YearsExperience;
     expect(profileStrength({ ...fullCandidate, resumeData: { ...withoutYears, Degree: 'Not stated', FieldOfStudy: '' } })).toBe(100);
+    // A degree without a field of study is complete education: the field is no longer asked.
+    expect(profileStrength({ ...fullCandidate, resumeData: { ...fullResume, Degree: 'Bachelor', FieldOfStudy: '' } })).toBe(100);
     expect(profileStrength({ ...fullCandidate, resumeData: { ...fullResume, Occupation: '9999.9' } })).toBe(75);
     // A resume saved before occupations (old 37-field Industry) scores without crashing; it lacks the occupation (25) and education (5).
     const legacy = { LegacyField: 'Software development', Occupation: '', Jobs: [{ title: 'Developer', legacyField: 'Software development', start: '2021-01', end: '', current: true }] };
